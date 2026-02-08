@@ -20,9 +20,9 @@
     "prettier": "office-addin-lint prettier",
     "signin": "office-addin-dev-settings m365-account login",
     "signout": "office-addin-dev-settings m365-account logout",
-    "start": "office-addin-debugging start manifest.xml",
+    "start": "concurrently \"node server.js\" \"webpack serve --mode development\"",
+    "start:excel": "office-addin-debugging start manifest.xml",
     "server": "node server.js",
-    "start:all": "concurrently \"npm run server\" \"npm run dev\"",
     "stop": "office-addin-debugging stop manifest.xml",
     "validate": "office-addin-manifest validate manifest.xml",
     "watch": "webpack --mode development --watch"

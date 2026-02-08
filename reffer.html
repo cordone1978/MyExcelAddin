@@ -1,0 +1,1256 @@
+
+Option Explicit
+
+Private Type HtmlConfig
+    canvasWidth As Long
+    canvasHeight As Long
+    initialSelected As Collection
+    autoHighlight As Boolean
+    OutlineMode As String
+End Type
+
+
+Public Function BuildHTMLContent(allComponents As Collection, _
+                                  base64Data As Dictionary, _
+                                  canvasWidth As Long, _
+                                  canvasHeight As Long, _
+                                  Optional initialSelected As Collection = Nothing, _
+                                  Optional autoHighlight As Boolean = False) As String
+    
+    ' 1. 创建StringBuilder（你已经有这个类了）
+    Dim sb As New clsStringBuilder
+    
+    ' 2. HTML头部和CSS - 调用你现有的函数，用Append替代 &
+    sb.Append GetHTMLHeaderAndCSS()
+    
+    ' 3. HTML主体结构
+    sb.Append GetHTMLBodyStructure()
+    
+    ' 4. JavaScript开始
+    sb.Append GetJavaScriptStart()
+    
+    ' 5. 动态生成组件声明 - 保持原函数调用
+    sb.Append GetDynamicComponentsDeclaration(allComponents)
+    
+    ' 6. 初始选中组件数组
+    sb.Append GetInitialSelectedDeclaration(initialSelected)
+    
+    ' 7. 配置代码 - 调用新函数
+    sb.Append GenerateConfigCode(initialSelected, autoHighlight)
+    
+    ' 8. 初始化显示函数
+    sb.Append GetInitializeDisplayFunction()
+    
+    ' 9. 右键菜单处理函数
+    sb.Append GetRightClickHandlers()
+    
+    ' 10. 核心JavaScript函数
+    sb.Append GetDynamicJavaScriptFunctions(canvasWidth, canvasHeight)
+    
+    ' 11. 初始化代码
+    sb.Append GetDynamicInitializationCode(base64Data)
+    
+    ' 12. JavaScript结束
+    sb.Append GetJavaScriptEnd()
+    
+    ' 13. HTML结束
+    sb.Append GetHTMLEnd()
+    
+    ' 14. 返回结果
+    BuildHTMLContent = sb.ToString
+End Function
+
+
+' 模块1: HTML头部和CSS
+Private Function GetHTMLHeaderAndCSS() As String
+    Dim sb As New clsStringBuilder
+    
+    sb.AppendLine "<!DOCTYPE html>"
+    sb.AppendLine "<html>"
+    sb.AppendLine "<head>"
+    sb.AppendLine "<meta charset='UTF-8'>"
+    sb.AppendLine "<meta http-equiv='X-UA-Compatible' content='IE=edge'>"
+    sb.AppendLine "<style>"
+    
+    ' CSS样式部分
+    sb.AppendLine "body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#f0f0f0; }"
+    sb.AppendLine "#mainCanvas { display:block; cursor: crosshair; }"
+    sb.AppendLine "#tooltip {"
+    sb.AppendLine "  position: absolute;"
+    sb.AppendLine "  display: none;"
+    sb.AppendLine "  background: rgba(0, 0, 0, 0.85);"
+    sb.AppendLine "  color: white;"
+    sb.AppendLine "  padding: 8px 12px;"
+    sb.AppendLine "  border-radius: 6px;"
+    sb.AppendLine "  font-size: 12px;"
+    sb.AppendLine "  pointer-events: none;"
+    sb.AppendLine "  z-index: 1000;"
+    sb.AppendLine "  box-shadow: 0 2px 10px rgba(0,0,0,0.3);"
+    sb.AppendLine "  white-space: nowrap;"
+    sb.AppendLine "  line-height: 1.4;"
+    sb.AppendLine "}"
+    sb.AppendLine "#tooltip::after {"
+    sb.AppendLine "  content: '';"
+    sb.AppendLine "  position: absolute;"
+    sb.AppendLine "  top: 100%;"
+    sb.AppendLine "  left: 50%;"
+    sb.AppendLine "  margin-left: -5px;"
+    sb.AppendLine "  border-width: 5px;"
+    sb.AppendLine "  border-style: solid;"
+    sb.AppendLine "  border-color: rgba(0, 0, 0, 0.85) transparent transparent transparent;"
+    sb.AppendLine "}"
+    
+    ' 自定义右键菜单样式
+    sb.AppendLine "/* 自定义右键菜单样式 */"
+    sb.AppendLine "#customContextMenu {"
+    sb.AppendLine "  display: none;"
+    sb.AppendLine "  position: absolute;"
+    sb.AppendLine "  z-index: 10000;"
+    sb.AppendLine "  background: #ffffff;"
+    sb.AppendLine "  border: 1px solid #d0d0d0;"
+    sb.AppendLine "  box-shadow: 2px 2px 8px rgba(0,0,0,0.2);"
+    sb.AppendLine "  border-radius: 4px;"
+    sb.AppendLine "  padding: 4px 0;"
+    sb.AppendLine "  min-width: 140px;"
+    sb.AppendLine "  font-family: 'Segoe UI', sans-serif;"
+    sb.AppendLine "  font-size: 12px;"
+    sb.AppendLine "}"
+    sb.AppendLine ".ctx-item {"
+    sb.AppendLine "  padding: 8px 16px;"
+    sb.AppendLine "  cursor: pointer;"
+    sb.AppendLine "  color: #333;"
+    sb.AppendLine "  transition: background 0.1s;"
+    sb.AppendLine "}"
+    sb.AppendLine ".ctx-item:hover { background-color: #f2f2f2; color: #000; }"
+    sb.AppendLine ".ctx-divider { height: 1px; background: #e0e0e0; margin: 4px 0; }"
+    sb.AppendLine ".ctx-header { color: #999; padding: 4px 16px; font-size: 11px; cursor: default; }"
+    
+    ' 添加闭合标签
+    sb.AppendLine "</style>"
+    sb.AppendLine "</head>"
+    
+    GetHTMLHeaderAndCSS = sb.ToString
+End Function
+
+
+' 模块2: HTML主体结构
+Private Function GetHTMLBodyStructure() As String
+    Dim sb As New clsStringBuilder
+    
+    sb.AppendLine "<canvas id='mainCanvas'></canvas>"
+    sb.AppendLine "<div id='tooltip'></div>"
+    sb.AppendLine "<div id='customContextMenu'></div>"
+    
+    GetHTMLBodyStructure = sb.ToString
+End Function
+
+
+' 模块3: JavaScript开始标签
+Private Function GetJavaScriptStart() As String
+    GetJavaScriptStart = "<script>" & vbCrLf
+End Function
+
+
+' 模块8: JavaScript结束标签
+Private Function GetJavaScriptEnd() As String
+    GetJavaScriptEnd = "</script>" & vbCrLf
+End Function
+
+
+' 模块9: HTML结束标签
+Private Function GetHTMLEnd() As String
+    GetHTMLEnd = "</body>" & vbCrLf & "</html>"
+End Function
+
+
+' 模块4: 动态生成组件声明（基于实际数据）- 优化版
+Public Function GetDynamicComponentsDeclaration(selectedComponents As Collection) As String
+    Dim sb As New clsStringBuilder
+    
+    ' 添加全局配置对象
+    sb.AppendLine "var vbaConfig = {"
+    sb.AppendLine "  autoSetHighlight: false,"
+    sb.AppendLine "  highlightComponents: [],"
+    sb.AppendLine "  initialOutlineMode: 'hover'"
+    sb.AppendLine "};"
+    sb.AppendLine
+    
+    ' --- 屏蔽状态栏和调试栏 ---
+    sb.AppendLine "var canvas = document.getElementById('mainCanvas');"
+    sb.AppendLine "var ctx = canvas.getContext('2d');"
+    sb.AppendLine "var tooltip = document.getElementById('tooltip');"
+    sb.AppendLine
+    
+    ' 动态生成components对象
+    sb.AppendLine "var components = {"
+    
+    Dim firstItem As Boolean
+    firstItem = True
+    
+    Dim compId As Variant
+    For Each compId In selectedComponents
+        ' 获取组件数据
+        Dim compData As Dictionary
+        Set compData = GetComponentDataById(CStr(compId))
+        
+        If Not compData Is Nothing Then
+            If Not firstItem Then
+                sb.AppendLine ","
+            End If
+            
+            ' 完全保持你原来的逻辑，只把 & 换成 .Append
+            sb.Append "  '" & compData("id") & "': {"
+            sb.AppendLine
+            sb.Append "    name: '" & compData("name") & "',"
+            sb.AppendLine
+            sb.Append "    layer: " & compData("layer") & ","
+            sb.AppendLine
+            sb.Append "    visible: true,"
+            sb.AppendLine
+            sb.Append "    toggleable: " & IIf(compData("is_active") = 1, "false", "true") & ","
+            sb.AppendLine
+            sb.Append "    opacity: 1.0,"
+            sb.AppendLine
+            sb.Append "    img: null"
+            sb.AppendLine
+            sb.Append "  }"
+            
+            firstItem = False
+        End If
+    Next compId
+    
+    sb.AppendLine
+    sb.AppendLine "};"
+    sb.AppendLine
+    
+    ' 分析画布
+    sb.AppendLine "var analysisCanvases = {};"
+    sb.AppendLine "var analysisCtxs = {};"
+    sb.AppendLine
+    
+    GetDynamicComponentsDeclaration = sb.ToString
+End Function
+
+
+' 生成初始选中组件数组声明
+Private Function GetInitialSelectedDeclaration(initialSelected As Collection) As String
+    Dim sb As New clsStringBuilder
+    
+    sb.AppendLine
+    sb.AppendLine "// 初始选中的组件数组"
+    sb.Append "var initialSelectedComponents = ["
+    
+    If Not initialSelected Is Nothing And initialSelected.count > 0 Then
+        Dim comp As Variant
+        Dim first As Boolean
+        first = True
+        
+        For Each comp In initialSelected
+            If Not first Then
+                sb.Append ", "
+            End If
+            sb.Append "'" & EscapeJSString(CStr(comp)) & "'"
+            first = False
+        Next comp
+    End If
+    
+    sb.AppendLine "];"
+    sb.AppendLine
+    
+    GetInitialSelectedDeclaration = sb.ToString
+End Function
+
+
+' 生成初始化显示函数
+Private Function GetInitializeDisplayFunction() As String
+    Dim sb As New clsStringBuilder
+    
+    sb.AppendLine "// 初始化显示函数 - 根据初始选中状态显示组件"
+    sb.AppendLine "function initializeDisplay() {"
+    sb.AppendLine "  console.log('开始初始化显示，选中的组件数量:', initialSelectedComponents.length);"
+    sb.AppendLine
+    
+    sb.AppendLine "  // 隐藏所有可切换的组件"
+    sb.AppendLine "  for (var id in components) {"
+    sb.AppendLine "    if (components[id].toggleable !== false) {"
+    sb.AppendLine "      // 可切换的组件都隐藏"
+    sb.AppendLine "      components[id].visible = false;"
+    sb.AppendLine "      console.log('隐藏组件:', id, '(可选)');"
+    sb.AppendLine "    } else {"
+    sb.AppendLine "      // 不可切换的组件（必选组件）保持显示"
+    sb.AppendLine "      components[id].visible = true;"
+    sb.AppendLine "      console.log('显示组件:', id, '(必选)');"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    sb.AppendLine
+    
+    sb.AppendLine "  // 显示初始选中的组件"
+    sb.AppendLine "  if (initialSelectedComponents.length > 0) {"
+    sb.AppendLine "    initialSelectedComponents.forEach(function(id) {"
+    sb.AppendLine "      if (components[id]) {"
+    sb.AppendLine "        components[id].visible = true;"
+    sb.AppendLine "        console.log('显示组件:', id);"
+    sb.AppendLine "      } else {"
+    sb.AppendLine "        console.log('警告: 组件不存在:', id);"
+    sb.AppendLine "      }"
+    sb.AppendLine "    });"
+    sb.AppendLine "  } else {"
+    sb.AppendLine "    console.log('没有初始选中的组件');"
+    sb.AppendLine "  }"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    GetInitializeDisplayFunction = sb.ToString
+End Function
+
+
+' 替换原来的 GetRightClickHandlers 函数
+Private Function GetRightClickHandlers() As String
+    Dim sb As New clsStringBuilder
+    
+    sb.AppendLine
+    sb.AppendLine "// ========== 网页版右键菜单逻辑 =========="
+    
+    ' 1. 通讯函数：专门负责利用 Title 机制通知 VBA
+    sb.AppendLine "function notifyVBA(action, id, name) {"
+    sb.AppendLine "    // 构造通讯字符串: 动作|ID|名称|随机数"
+    sb.AppendLine "    var msg = 'VBA_CMD|' + action + '|' + id + '|' + name + '|' + Math.random();"
+    sb.AppendLine "    document.title = msg;"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' 2. 菜单初始化与事件处理
+    sb.AppendLine "function setupHTMLContextMenu() {"
+    sb.AppendLine "    var menu = document.getElementById('customContextMenu');"
+    sb.AppendLine "    var canvas = document.getElementById('mainCanvas');"
+    sb.AppendLine "    "
+    sb.AppendLine "    // 监听右键"
+    sb.AppendLine "    canvas.oncontextmenu = function(e) {"
+    sb.AppendLine "        e.preventDefault();"
+    sb.AppendLine "        // 【新增】加上这一行，代码运行到这就停止了"
+    sb.AppendLine "        // 这样既屏蔽了默认菜单，也不会弹出自定义菜单"
+    sb.AppendLine "        return false;"
+    sb.AppendLine "        "
+    sb.AppendLine "        // 计算点击位置"
+    sb.AppendLine "        var rect = canvas.getBoundingClientRect();"
+    sb.AppendLine "        var scaleX = canvas.width / rect.width;"
+    sb.AppendLine "        var scaleY = canvas.height / rect.height;"
+    sb.AppendLine "        var x = Math.floor((e.clientX - rect.left) * scaleX);"
+    sb.AppendLine "        var y = Math.floor((e.clientY - rect.top) * scaleY);"
+    sb.AppendLine "        "
+    sb.AppendLine "        // 获取组件"
+    sb.AppendLine "        var comp = getComponentAtPosition(x, y);"
+    sb.AppendLine "        var html = '';"
+    sb.AppendLine "        "
+    sb.AppendLine "        if (comp) {"
+    sb.AppendLine "            // === 场景A：点击了组件 ==="
+    sb.AppendLine "            html += '<div class=""ctx-header"">当前选中: ' + comp.name + '</div>';"
+    sb.AppendLine "            html += '<div class=""ctx-divider""></div>';"
+    sb.AppendLine "            "
+    sb.AppendLine "            // 动作1: 隐藏 (直接 JS 处理，不麻烦 VBA)"
+    sb.AppendLine "            // 注意：toggleComponent 是您现有的 JS 函数"
+    sb.AppendLine "            html += '<div class=""ctx-item"" onclick=""toggleComponent(\'' + comp.id + '\', false); hideCtxMenu();"">隐藏此组件</div>';"
+    sb.AppendLine "            "
+    sb.AppendLine "            // 动作2: 标记常亮 (直接 JS 处理)"
+    sb.AppendLine "            html += '<div class=""ctx-item"" onclick=""vbaAddAlwaysHighlightedComponent(\'' + comp.id + '\'); hideCtxMenu();"">标记为常亮</div>';"
+    sb.AppendLine "            "
+    sb.AppendLine "            html += '<div class=""ctx-divider""></div>';"
+    sb.AppendLine "            "
+    sb.AppendLine "            // 动作3: 查看详情 (需要 VBA 处理)"
+    sb.AppendLine "            // 这里调用上面的 notifyVBA 函数，触发 TitleChange"
+    sb.AppendLine "            html += '<div class=""ctx-item"" onclick=""notifyVBA(\'DETAIL\', \'' + comp.id + '\', \'' + comp.name + '\'); hideCtxMenu();"">查看详细参数</div>';"
+    sb.AppendLine "            "
+    sb.AppendLine "        } else {"
+    sb.AppendLine "            // === 场景B：点击了背景 ==="
+    sb.AppendLine "            html += '<div class=""ctx-header"">全局操作</div>';"
+    sb.AppendLine "            html += '<div class=""ctx-divider""></div>';"
+    sb.AppendLine "            "
+    sb.AppendLine "            // 动作: 重置视图 (JS 处理)"
+    sb.AppendLine "            html += '<div class=""ctx-item"" onclick=""initializeDisplay(); requestAnimationFrame(drawImages); hideCtxMenu();"">重置所有视图</div>';"
+    sb.AppendLine "            "
+    sb.AppendLine "            // 动作: 通知 VBA 做点别的事"
+    sb.AppendLine "            html += '<div class=""ctx-item"" onclick=""notifyVBA(\'GLOBAL_SETTING\', \'\', \'\'); hideCtxMenu();"">系统设置</div>';"
+    sb.AppendLine "        }"
+    sb.AppendLine "        "
+    sb.AppendLine "        // 填充并显示菜单"
+    sb.AppendLine "        menu.innerHTML = html;"
+    sb.AppendLine "        menu.style.display = 'block';"
+    sb.AppendLine "        "
+    sb.AppendLine "        // 智能定位 (防止超出屏幕)"
+    sb.AppendLine "        var menuWidth = 140;"
+    sb.AppendLine "        var menuHeight = menu.offsetHeight || 150;"
+    sb.AppendLine "        var left = e.clientX;"
+    sb.AppendLine "        var top = e.clientY;"
+    sb.AppendLine "        "
+    sb.AppendLine "        if (left + menuWidth > window.innerWidth) left = left - menuWidth;"
+    sb.AppendLine "        if (top + menuHeight > window.innerHeight) top = top - menuHeight;"
+    sb.AppendLine "        "
+    sb.AppendLine "        menu.style.left = left + 'px';"
+    sb.AppendLine "        menu.style.top = top + 'px';"
+    sb.AppendLine "    };"
+    sb.AppendLine "    "
+    sb.AppendLine "    // 点击页面任何其他地方关闭菜单"
+    sb.AppendLine "    document.addEventListener('click', function(e) {"
+    sb.AppendLine "        hideCtxMenu();"
+    sb.AppendLine "    });"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function hideCtxMenu() {"
+    sb.AppendLine "    var menu = document.getElementById('customContextMenu');"
+    sb.AppendLine "    if(menu) menu.style.display = 'none';"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' 对外暴露的启动函数
+    sb.AppendLine "function setupRightClickAfterLoad() {"
+    sb.AppendLine "    setupHTMLContextMenu();"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    GetRightClickHandlers = sb.ToString
+End Function
+
+
+' 模块6：动态核心JavaScript函数 - 双缓冲版本 + 描边高亮 + 模式切换
+Private Function GetDynamicJavaScriptFunctions(wbWidth As Long, wbHeight As Long) As String
+    Dim sb As New clsStringBuilder
+    
+    ' 1. 添加全局变量
+    sb.Append GetGlobalVariables()
+    
+    ' 2. 添加核心功能函数
+    sb.Append GetCoreFunctions(wbWidth, wbHeight)
+    
+    ' 3. 添加描边相关函数
+    sb.Append GetOutlineFunctions()
+    
+    ' 3.5 常亮组件控制函数
+    sb.Append GetAlwaysHighlightControlFunctions()
+    
+    ' 4. 添加分析和交互函数
+    sb.Append GetAnalysisFunctions()
+    
+    ' 5. 添加VBA接口函数
+    sb.Append GetVBAInterfaceFunctions()
+    
+    GetDynamicJavaScriptFunctions = sb.ToString
+End Function
+
+
+' ============================================================
+' 子模块1：全局变量
+' ============================================================
+Private Function GetGlobalVariables() As String
+    Dim sb As New clsStringBuilder
+    
+    sb.AppendLine "var currentHighlightedComponentId = null;"
+    sb.AppendLine "var outlineCache = {};"
+    sb.AppendLine "var outlineEnabled = true;"
+    sb.AppendLine "var outlineMode = 'hover';"
+    sb.AppendLine "var alwaysHighlightedComponents = [];"
+    sb.AppendLine "var bufferCanvas = document.createElement('canvas');"
+    sb.AppendLine "var bufferCtx = bufferCanvas.getContext('2d');"
+    sb.AppendLine "var hasNotifiedVBA = false"
+    sb.AppendLine
+    
+    GetGlobalVariables = sb.ToString
+End Function
+
+
+' ============================================================
+' 子模块2：核心功能函数
+' ============================================================
+Private Function GetCoreFunctions(wbWidth As Long, wbHeight As Long) As String
+    Dim sb As New clsStringBuilder
+    
+    ' setupCanvasSize函数
+    sb.AppendLine "function setupCanvasSize() {"
+    sb.AppendLine "  var containerWidth = " & wbWidth & ";"
+    sb.AppendLine "  var containerHeight = " & wbHeight & ";"
+    sb.AppendLine
+    sb.AppendLine "  // 查找所有可见组件的最大尺寸"
+    sb.AppendLine "  var maxWidth = 0;"
+    sb.AppendLine "  var maxHeight = 0;"
+    sb.AppendLine
+    sb.AppendLine "  for (var id in components) {"
+    sb.AppendLine "    if (components[id].visible && components[id].img) {"
+    sb.AppendLine "      maxWidth = Math.max(maxWidth, components[id].img.width);"
+    sb.AppendLine "      maxHeight = Math.max(maxHeight, components[id].img.height);"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    sb.AppendLine
+    sb.AppendLine "  // 如果没有找到，使用第一个可见组件的尺寸"
+    sb.AppendLine "  if (maxWidth === 0 || maxHeight === 0) {"
+    sb.AppendLine "    for (var id in components) {"
+    sb.AppendLine "      if (components[id].visible && components[id].img) {"
+    sb.AppendLine "        maxWidth = components[id].img.width;"
+    sb.AppendLine "        maxHeight = components[id].img.height;"
+    sb.AppendLine "        break;"
+    sb.AppendLine "      }"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    sb.AppendLine
+    sb.AppendLine "  if (maxWidth === 0 || maxHeight === 0) {"
+    sb.AppendLine "    maxWidth = 800;"
+    sb.AppendLine "    maxHeight = 600;"
+    sb.AppendLine "  }"
+    sb.AppendLine
+    sb.AppendLine "  var scale = Math.min(containerWidth / maxWidth, containerHeight / maxHeight);"
+    sb.AppendLine "  scale = Math.min(scale, 1);"
+    sb.AppendLine "  canvas.width = maxWidth;"
+    sb.AppendLine "  canvas.height = maxHeight;"
+    sb.AppendLine "  canvas.style.width = (maxWidth * scale) + 'px';"
+    sb.AppendLine "  canvas.style.height = (maxHeight * scale) + 'px';"
+    sb.AppendLine "  canvas.style.marginLeft = Math.floor((containerWidth - (maxWidth * scale)) / 2) + 'px';"
+    sb.AppendLine "  canvas.style.marginTop = Math.floor((containerHeight - (maxHeight * scale)) / 2) + 'px';"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' drawImages函数
+    sb.AppendLine "function drawImages(highlightId) {"
+    sb.AppendLine "  if (highlightId === undefined) {"
+    sb.AppendLine "    highlightId = null;"
+    sb.AppendLine "  }"
+    sb.AppendLine
+    sb.AppendLine "  setupCanvasSize();"
+    sb.AppendLine
+    sb.AppendLine "  bufferCanvas.width = canvas.width;"
+    sb.AppendLine "  bufferCanvas.height = canvas.height;"
+    sb.AppendLine
+    sb.AppendLine "  bufferCtx.clearRect(0, 0, bufferCanvas.width, bufferCanvas.height);"
+    sb.AppendLine
+    sb.AppendLine "  var visibleComponents = Object.keys(components)"
+    sb.AppendLine "    .filter(function(id) { return components[id].visible && components[id].img; })"
+    sb.AppendLine "    .sort(function(a, b) { return components[a].layer - components[b].layer; });"
+    sb.AppendLine
+    sb.AppendLine "  for (var i = 0; i < visibleComponents.length; i++) {"
+    sb.AppendLine "    var id = visibleComponents[i];"
+    sb.AppendLine "    var comp = components[id];"
+    sb.AppendLine "    var posX = (bufferCanvas.width - comp.img.width) / 2;"
+    sb.AppendLine "    var posY = (bufferCanvas.height - comp.img.height) / 2;"
+    sb.AppendLine "    "
+    sb.AppendLine "    // 判断是否需要绘制描边"
+    sb.AppendLine "    var shouldOutline = false;"
+    sb.AppendLine "    if (outlineEnabled) {"
+    sb.AppendLine "      if (outlineMode === 'always') {"
+    sb.AppendLine "        // 常亮模式：指定的组件绘制描边（兼容IE）"
+    sb.AppendLine "        var isInAlwaysHighlighted = false;"
+    sb.AppendLine "        for (var k = 0; k < alwaysHighlightedComponents.length; k++) {"
+    sb.AppendLine "          if (alwaysHighlightedComponents[k] === id) {"
+    sb.AppendLine "            isInAlwaysHighlighted = true;"
+    sb.AppendLine "            break;"
+    sb.AppendLine "          }"
+    sb.AppendLine "        }"
+    sb.AppendLine "        shouldOutline = isInAlwaysHighlighted;"
+    sb.AppendLine "      } else if (outlineMode === 'hover') {"
+    sb.AppendLine "        // 悬停模式：只有当前悬停的组件绘制描边"
+    sb.AppendLine "        shouldOutline = (id === highlightId);"
+    sb.AppendLine "      }"
+    sb.AppendLine "    }"
+    sb.AppendLine "    "
+    sb.AppendLine "    if (shouldOutline) {"
+    sb.AppendLine "      // 使用描边版本"
+    sb.AppendLine "      var outlinedImage = getOutlinedImage(id);"
+    sb.AppendLine "      if (outlinedImage) {"
+    sb.AppendLine "        bufferCtx.globalAlpha = comp.opacity;"
+    sb.AppendLine "        bufferCtx.drawImage(outlinedImage, posX, posY);"
+    sb.AppendLine "      } else {"
+    sb.AppendLine "        bufferCtx.globalAlpha = comp.opacity;"
+    sb.AppendLine "        bufferCtx.drawImage(comp.img, posX, posY);"
+    sb.AppendLine "      }"
+    sb.AppendLine "    } else {"
+    sb.AppendLine "      bufferCtx.globalAlpha = comp.opacity;"
+    sb.AppendLine "      bufferCtx.drawImage(comp.img, posX, posY);"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    sb.AppendLine "  bufferCtx.globalAlpha = 1.0;"
+    sb.AppendLine
+    sb.AppendLine "  ctx.clearRect(0, 0, canvas.width, canvas.height);"
+    sb.AppendLine "  ctx.drawImage(bufferCanvas, 0, 0);"
+    sb.AppendLine
+    sb.AppendLine "  initAnalysisCanvases();"
+    sb.AppendLine "  setupMouseEvents();"
+    sb.AppendLine
+    
+    ' ==================== 核心修改部分开始 ====================
+    ' [新增] 渲染完成后通知 VBA 移除遮罩 (只在第一次渲染完成时通知)
+    ' 使用 requestAnimationFrame 确保只有在这一帧真正绘制结束后才触发
+    sb.AppendLine "  if (typeof hasNotifiedVBA !== 'undefined' && !hasNotifiedVBA) {"
+    sb.AppendLine "    if (window.requestAnimationFrame) {"
+    sb.AppendLine "      requestAnimationFrame(function() {"
+    sb.AppendLine "        document.title = 'VBA_CMD|RENDER_COMPLETE|||' + Math.random();"
+    sb.AppendLine "        hasNotifiedVBA = true;"
+    sb.AppendLine "      });"
+    sb.AppendLine "    } else {"
+    sb.AppendLine "      /* 兼容旧版本 IE */"
+    sb.AppendLine "      setTimeout(function() {"
+    sb.AppendLine "        document.title = 'VBA_CMD|RENDER_COMPLETE|||' + Math.random();"
+    sb.AppendLine "        hasNotifiedVBA = true;"
+    sb.AppendLine "      }, 50);"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    ' ==================== 核心修改部分结束 ====================
+
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' toggleComponent函数
+    sb.AppendLine "function toggleComponent(id, show) {"
+    sb.AppendLine "  if (!components[id]) {"
+    sb.AppendLine "    return false;"
+    sb.AppendLine "  }"
+    sb.AppendLine "  if (components[id].toggleable === false) {"
+    sb.AppendLine "    return false;"
+    sb.AppendLine "  }"
+    sb.AppendLine "  components[id].visible = show;"
+    sb.AppendLine
+    sb.AppendLine "  if (!show) {"
+    sb.AppendLine "    clearOutlineCache(id);"
+    sb.AppendLine "  }"
+    sb.AppendLine
+    sb.AppendLine "  if (window.requestAnimationFrame) {"
+    sb.AppendLine "    requestAnimationFrame(function() {"
+    sb.AppendLine "      drawImages(currentHighlightedComponentId);"
+    sb.AppendLine "    });"
+    sb.AppendLine "  } else {"
+    sb.AppendLine "    setTimeout(function() {"
+    sb.AppendLine "      drawImages(currentHighlightedComponentId);"
+    sb.AppendLine "    }, 16);"
+    sb.AppendLine "  }"
+    sb.AppendLine
+    sb.AppendLine "  return true;"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    GetCoreFunctions = sb.ToString
+End Function
+
+
+' ============================================================
+' 子模块3：描边相关函数
+' ============================================================
+Private Function GetOutlineFunctions() As String
+    Dim sb As New clsStringBuilder
+    
+    ' 创建描边图像函数
+    sb.AppendLine "// 创建带描边的图像"
+    sb.AppendLine "function createOutlinedImage(originalImage) {"
+    sb.AppendLine "  var offscreen = document.createElement('canvas');"
+    sb.AppendLine "  offscreen.width = originalImage.width;"
+    sb.AppendLine "  offscreen.height = originalImage.height;"
+    sb.AppendLine "  var ctx = offscreen.getContext('2d');"
+    sb.AppendLine
+    sb.AppendLine "  // 1. 先绘制原始图像"
+    sb.AppendLine "  ctx.drawImage(originalImage, 0, 0);"
+    sb.AppendLine
+    sb.AppendLine "  // 2. 使用红色描边"
+    sb.AppendLine "  ctx.save();"
+    sb.AppendLine "  ctx.strokeStyle = '#FF5000';"
+    sb.AppendLine "  ctx.lineWidth = 3;"
+    sb.AppendLine "  ctx.lineJoin = 'miter';"
+    sb.AppendLine "  ctx.lineCap = 'butt';"
+    sb.AppendLine
+    sb.AppendLine "  // 获取图像数据来检测非透明区域"
+    sb.AppendLine "  var imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);"
+    sb.AppendLine "  var data = imageData.data;"
+    sb.AppendLine
+    sb.AppendLine "  // 为每个非透明像素绘制边框"
+    sb.AppendLine "  ctx.beginPath();"
+    sb.AppendLine "  for (var y = 0; y < offscreen.height; y++) {"
+    sb.AppendLine "    for (var x = 0; x < offscreen.width; x++) {"
+    sb.AppendLine "      var index = (y * offscreen.width + x) * 4;"
+    sb.AppendLine "      var alpha = data[index + 3];"
+    sb.AppendLine
+    sb.AppendLine "      if (alpha > 10) {"
+    sb.AppendLine "        // 检查是否是边缘像素"
+    sb.AppendLine "        var isEdge = false;"
+    sb.AppendLine "        "
+    sb.AppendLine "        // 检查4个方向的邻居"
+    sb.AppendLine "        if (x === 0 || y === 0 || x === offscreen.width - 1 || y === offscreen.height - 1) {"
+    sb.AppendLine "          isEdge = true;"
+    sb.AppendLine "        } else {"
+    sb.AppendLine "          // 检查上下左右四个方向"
+    sb.AppendLine "          var neighbors = ["
+    sb.AppendLine "            (y - 1) * offscreen.width + x,"
+    sb.AppendLine "            (y + 1) * offscreen.width + x,"
+    sb.AppendLine "            y * offscreen.width + (x - 1),"
+    sb.AppendLine "            y * offscreen.width + (x + 1)"
+    sb.AppendLine "          ];"
+    sb.AppendLine "          "
+    sb.AppendLine "          for (var n = 0; n < neighbors.length; n++) {"
+    sb.AppendLine "            var nIndex = neighbors[n] * 4;"
+    sb.AppendLine "            if (data[nIndex + 3] <= 10) {"
+    sb.AppendLine "              isEdge = true;"
+    sb.AppendLine "              break;"
+    sb.AppendLine "            }"
+    sb.AppendLine "          }"
+    sb.AppendLine "        }"
+    sb.AppendLine "        "
+    sb.AppendLine "        if (isEdge) {"
+    sb.AppendLine "          ctx.rect(x, y, 1, 1);"
+    sb.AppendLine "        }"
+    sb.AppendLine "      }"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    sb.AppendLine "  "
+    sb.AppendLine "  ctx.stroke();"
+    sb.AppendLine "  ctx.restore();"
+    sb.AppendLine "  "
+    sb.AppendLine "  return offscreen;"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' 获取描边图像
+    sb.AppendLine "function getOutlinedImage(componentId) {"
+    sb.AppendLine "  if (!outlineCache[componentId]) {"
+    sb.AppendLine "    var originalImg = components[componentId].img;"
+    sb.AppendLine "    if (originalImg && originalImg.complete && originalImg.naturalWidth > 0) {"
+    sb.AppendLine "      outlineCache[componentId] = createOutlinedImage(originalImg);"
+    sb.AppendLine "    } else {"
+    sb.AppendLine "      return null;"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    sb.AppendLine "  return outlineCache[componentId];"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' 清理缓存
+    sb.AppendLine "function clearOutlineCache(componentId) {"
+    sb.AppendLine "  if (outlineCache[componentId]) {"
+    sb.AppendLine "    delete outlineCache[componentId];"
+    sb.AppendLine "  }"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' 描边控制函数
+    sb.AppendLine "// 描边控制函数"
+    sb.AppendLine "function toggleOutlineEffect(enabled) {"
+    sb.AppendLine "  outlineEnabled = enabled;"
+    sb.AppendLine "  drawImages(currentHighlightedComponentId);"
+    sb.AppendLine "  return '描边 ' + (enabled ? '开启' : '关闭');"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function setOutlineMode(mode) {"
+    sb.AppendLine "  if (mode === 'hover' || mode === 'always') {"
+    sb.AppendLine "    outlineMode = mode;"
+    sb.AppendLine "    drawImages(currentHighlightedComponentId);"
+    sb.AppendLine "    return '描边模式已切换到: ' + (mode === 'hover' ? '悬停模式' : '常亮模式');"
+    sb.AppendLine "  }"
+    sb.AppendLine "  return '无效的模式，使用 hover 或 always';"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function getOutlineMode() {"
+    sb.AppendLine "  return outlineMode;"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function toggleOutlineMode() {"
+    sb.AppendLine "  if (outlineMode === 'hover') {"
+    sb.AppendLine "    return setOutlineMode('always');"
+    sb.AppendLine "  } else {"
+    sb.AppendLine "    return setOutlineMode('hover');"
+    sb.AppendLine "  }"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    GetOutlineFunctions = sb.ToString
+End Function
+
+
+Private Function GetAlwaysHighlightControlFunctions() As String
+    Dim sb As New clsStringBuilder
+    
+    sb.AppendLine
+    sb.AppendLine "// ========== 常亮组件控制函数 =========="
+    
+    ' 设置常亮组件
+    sb.AppendLine "function setAlwaysHighlightedComponents(componentIds) {"
+    sb.AppendLine "  if (!componentIds || !componentIds.length) {"
+    sb.AppendLine "    return '参数无效';"
+    sb.AppendLine "  }"
+    sb.AppendLine "  "
+    sb.AppendLine "  // 清空数组"
+    sb.AppendLine "  alwaysHighlightedComponents.length = 0;"
+    sb.AppendLine "  "
+    sb.AppendLine "  // 添加组件（兼容IE，不使用includes）"
+    sb.AppendLine "  for (var i = 0; i < componentIds.length; i++) {"
+    sb.AppendLine "    var compId = componentIds[i];"
+    sb.AppendLine "    // 检查组件是否存在"
+    sb.AppendLine "    if (components[compId]) {"
+    sb.AppendLine "      // 检查是否已存在（手动循环查找）"
+    sb.AppendLine "      var exists = false;"
+    sb.AppendLine "      for (var j = 0; j < alwaysHighlightedComponents.length; j++) {"
+    sb.AppendLine "        if (alwaysHighlightedComponents[j] === compId) {"
+    sb.AppendLine "          exists = true;"
+    sb.AppendLine "          break;"
+    sb.AppendLine "        }"
+    sb.AppendLine "      }"
+    sb.AppendLine "      "
+    sb.AppendLine "      if (!exists) {"
+    sb.AppendLine "        alwaysHighlightedComponents.push(compId);"
+    sb.AppendLine "      }"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    sb.AppendLine "  "
+    sb.AppendLine "  // 如果当前是常亮模式，重新绘制"
+    sb.AppendLine "  if (outlineMode === 'always') {"
+    sb.AppendLine "    drawImages(currentHighlightedComponentId);"
+    sb.AppendLine "  }"
+    sb.AppendLine "  "
+    sb.AppendLine "  return '设置了 ' + alwaysHighlightedComponents.length + ' 个常亮组件';"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' 添加单个常亮组件
+    sb.AppendLine "function addAlwaysHighlightedComponent(componentId) {"
+    sb.AppendLine "  if (!components[componentId]) {"
+    sb.AppendLine "    return '组件不存在: ' + componentId;"
+    sb.AppendLine "  }"
+    sb.AppendLine "  "
+    sb.AppendLine "  // 检查是否已存在（手动查找，不用includes）"
+    sb.AppendLine "  var exists = false;"
+    sb.AppendLine "  for (var i = 0; i < alwaysHighlightedComponents.length; i++) {"
+    sb.AppendLine "    if (alwaysHighlightedComponents[i] === componentId) {"
+    sb.AppendLine "      exists = true;"
+    sb.AppendLine "      break;"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    sb.AppendLine "  "
+    sb.AppendLine "  if (!exists) {"
+    sb.AppendLine "    alwaysHighlightedComponents.push(componentId);"
+    sb.AppendLine "  }"
+    sb.AppendLine "  "
+    sb.AppendLine "  // 如果当前是常亮模式，重新绘制"
+    sb.AppendLine "  if (outlineMode === 'always') {"
+    sb.AppendLine "    drawImages(currentHighlightedComponentId);"
+    sb.AppendLine "  }"
+    sb.AppendLine "  "
+    sb.AppendLine "  return '已添加常亮组件: ' + componentId;"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' 移除单个常亮组件
+    sb.AppendLine "function removeAlwaysHighlightedComponent(componentId) {"
+    sb.AppendLine "  // 查找索引（不用indexOf）"
+    sb.AppendLine "  var index = -1;"
+    sb.AppendLine "  for (var i = 0; i < alwaysHighlightedComponents.length; i++) {"
+    sb.AppendLine "    if (alwaysHighlightedComponents[i] === componentId) {"
+    sb.AppendLine "      index = i;"
+    sb.AppendLine "      break;"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    sb.AppendLine "  "
+    sb.AppendLine "  if (index !== -1) {"
+    sb.AppendLine "    alwaysHighlightedComponents.splice(index, 1);"
+    sb.AppendLine "    "
+    sb.AppendLine "    // 如果当前是常亮模式，重新绘制"
+    sb.AppendLine "    if (outlineMode === 'always') {"
+    sb.AppendLine "      drawImages(currentHighlightedComponentId);"
+    sb.AppendLine "    }"
+    sb.AppendLine "    "
+    sb.AppendLine "    return '已移除常亮组件: ' + componentId;"
+    sb.AppendLine "  }"
+    sb.AppendLine "  "
+    sb.AppendLine "  return '组件不在常亮列表中: ' + componentId;"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    GetAlwaysHighlightControlFunctions = sb.ToString
+End Function
+
+
+' ============================================================
+' 子模块4：分析和交互函数
+' ============================================================
+Private Function GetAnalysisFunctions() As String
+    Dim sb As New clsStringBuilder
+    
+    ' initAnalysisCanvases函数
+    sb.AppendLine "function initAnalysisCanvases() {"
+    sb.AppendLine "  for (var id in components) {"
+    sb.AppendLine "    if (components[id].visible && components[id].img) {"
+    sb.AppendLine "      analysisCanvases[id] = document.createElement('canvas');"
+    sb.AppendLine "      analysisCanvases[id].width = canvas.width;"
+    sb.AppendLine "      analysisCanvases[id].height = canvas.height;"
+    sb.AppendLine "      analysisCtxs[id] = analysisCanvases[id].getContext('2d');"
+    sb.AppendLine "      var posX = (canvas.width - components[id].img.width) / 2;"
+    sb.AppendLine "      var posY = (canvas.height - components[id].img.height) / 2;"
+    sb.AppendLine "      analysisCtxs[id].drawImage(components[id].img, posX, posY);"
+    sb.AppendLine "    } else if (analysisCanvases[id]) {"
+    sb.AppendLine "      delete analysisCanvases[id];"
+    sb.AppendLine "      delete analysisCtxs[id];"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' getComponentAtPosition函数
+    sb.AppendLine "function getComponentAtPosition(x, y) {"
+    sb.AppendLine "    if (!analysisCtxs || Object.keys(analysisCtxs).length === 0) {"
+    sb.AppendLine "        return null;"
+    sb.AppendLine "    }"
+    sb.AppendLine
+    sb.AppendLine "    try {"
+    sb.AppendLine "        var componentIds = Object.keys(analysisCtxs)"
+    sb.AppendLine "            .sort(function(a, b) { return components[b].layer - components[a].layer; });"
+    sb.AppendLine
+    sb.AppendLine "        for (var i = 0; i < componentIds.length; i++) {"
+    sb.AppendLine "            var id = componentIds[i];"
+    sb.AppendLine "            var pixel = analysisCtxs[id].getImageData(x, y, 1, 1);"
+    sb.AppendLine "            if (pixel.data[3] > 0) {"
+    sb.AppendLine "                return {"
+    sb.AppendLine "                    id: id,"
+    sb.AppendLine "                    name: components[id] ? components[id].name : id,"
+    sb.AppendLine "                    layer: components[id] ? components[id].layer : 0,"
+    sb.AppendLine "                    x: x,"
+    sb.AppendLine "                    y: y"
+    sb.AppendLine "                };"
+    sb.AppendLine "            }"
+    sb.AppendLine "        }"
+    sb.AppendLine "        return null;"
+    sb.AppendLine "    } catch(e) {"
+    sb.AppendLine "        return null;"
+    sb.AppendLine "    }"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' setupMouseEvents函数
+    sb.AppendLine "function setupMouseEvents() {"
+    sb.AppendLine "  canvas.onmousemove = function(event) {"
+    sb.AppendLine "    var rect = canvas.getBoundingClientRect();"
+    sb.AppendLine "    var scaleX = canvas.width / rect.width;"
+    sb.AppendLine "    var scaleY = canvas.height / rect.height;"
+    sb.AppendLine "    var x = Math.floor((event.clientX - rect.left) * scaleX);"
+    sb.AppendLine "    var y = Math.floor((event.clientY - rect.top) * scaleY);"
+    sb.AppendLine "    if (Object.keys(analysisCtxs).length === 0) {"
+    sb.AppendLine "      if (currentHighlightedComponentId != null) {"
+    sb.AppendLine "        currentHighlightedComponentId = null;"
+    sb.AppendLine "        drawImages(null);"
+    sb.AppendLine "      }"
+    sb.AppendLine "      tooltip.style.display = 'none';"
+    sb.AppendLine "      return;"
+    sb.AppendLine "    }"
+    sb.AppendLine "    try {"
+    sb.AppendLine "      var alphas = {};"
+    sb.AppendLine "      for (var id in analysisCtxs) {"
+    sb.AppendLine "        var pixel = analysisCtxs[id].getImageData(x, y, 1, 1);"
+    sb.AppendLine "        alphas[id] = pixel.data[3];"
+    sb.AppendLine "      }"
+    sb.AppendLine "      var componentIds = Object.keys(alphas)"
+    sb.AppendLine "        .sort(function(a, b) { return components[b].layer - components[a].layer; });"
+    sb.AppendLine "      var hoveredId = null;"
+    sb.AppendLine "      for (var i = 0; i < componentIds.length; i++) {"
+    sb.AppendLine "        var id = componentIds[i];"
+    sb.AppendLine "        if (alphas[id] > 0) {"
+    sb.AppendLine "          hoveredId = id;"
+    sb.AppendLine "          break;"
+    sb.AppendLine "        }"
+    sb.AppendLine "      }"
+    sb.AppendLine "      if (hoveredId != currentHighlightedComponentId) {"
+    sb.AppendLine "        currentHighlightedComponentId = hoveredId;"
+    sb.AppendLine "        drawImages(currentHighlightedComponentId);"
+    sb.AppendLine "      }"
+    sb.AppendLine "      if (hoveredId) {"
+    sb.AppendLine "        tooltip.innerHTML = '组件: ' + (components[hoveredId] ? components[hoveredId].name : hoveredId);"
+    sb.AppendLine "        tooltip.style.display = 'block';"
+    sb.AppendLine "        tooltip.style.left = (event.clientX + 15) + 'px';"
+    sb.AppendLine "        tooltip.style.top = (event.clientY + 15) + 'px';"
+    sb.AppendLine "      } else {"
+    sb.AppendLine "        tooltip.style.display = 'none';"
+    sb.AppendLine "      }"
+    sb.AppendLine "    } catch(e) {"
+    sb.AppendLine "      if (currentHighlightedComponentId != null) {"
+    sb.AppendLine "        currentHighlightedComponentId = null;"
+    sb.AppendLine "        drawImages(null);"
+    sb.AppendLine "      }"
+    sb.AppendLine "      tooltip.style.display = 'none';"
+    sb.AppendLine "    }"
+    sb.AppendLine "  };"
+    sb.AppendLine "  canvas.onmouseout = function() {"
+    sb.AppendLine "    if (currentHighlightedComponentId != null) {"
+    sb.AppendLine "      currentHighlightedComponentId = null;"
+    sb.AppendLine "      drawImages(null);"
+    sb.AppendLine "    }"
+    sb.AppendLine "    tooltip.style.display = 'none';"
+    sb.AppendLine "  };"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    GetAnalysisFunctions = sb.ToString
+End Function
+
+
+' ============================================================
+' 子模块5：VBA接口函数
+' ============================================================
+Private Function GetVBAInterfaceFunctions() As String
+    Dim sb As New clsStringBuilder
+    
+    sb.AppendLine "// VBA控制接口"
+    sb.AppendLine "function vbaEnableOutline(enabled) {"
+    sb.AppendLine "  return toggleOutlineEffect(enabled);"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function vbaSetOutlineMode(mode) {"
+    sb.AppendLine "  return setOutlineMode(mode);"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function vbaGetOutlineMode() {"
+    sb.AppendLine "  return getOutlineMode();"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function vbaToggleOutlineMode() {"
+    sb.AppendLine "  return toggleOutlineMode();"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function vbaSetAlwaysHighlightedComponents(componentIds) {"
+    sb.AppendLine "  return setAlwaysHighlightedComponents(componentIds);"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function vbaAddAlwaysHighlightedComponent(componentId) {"
+    sb.AppendLine "  return addAlwaysHighlightedComponent(componentId);"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function vbaRemoveAlwaysHighlightedComponent(componentId) {"
+    sb.AppendLine "  return removeAlwaysHighlightedComponent(componentId);"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function vbaClearAlwaysHighlightedComponents() {"
+    sb.AppendLine "  alwaysHighlightedComponents.length = 0;"
+    sb.AppendLine "  if (outlineMode === 'always') {"
+    sb.AppendLine "    drawImages(currentHighlightedComponentId);"
+    sb.AppendLine "  }"
+    sb.AppendLine "  return '已清空所有常亮组件';"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function vbaGetAlwaysHighlightedComponents() {"
+    sb.AppendLine "  return alwaysHighlightedComponents.slice();"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    sb.AppendLine "function vbaClearAllOutlineCache() {"
+    sb.AppendLine "  outlineCache = {};"
+    sb.AppendLine "  return '所有描边缓存已清除';"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    GetVBAInterfaceFunctions = sb.ToString
+End Function
+
+
+Public Function GetDynamicInitializationCode(base64Data As Dictionary) As String
+    Dim sb As New clsStringBuilder
+    
+    sb.AppendLine "var imagesLoaded = 0;"
+    sb.AppendLine
+    
+    sb.AppendLine "function checkAllLoaded() {"
+    sb.AppendLine "  imagesLoaded++;"
+    sb.AppendLine "  if (imagesLoaded >= " & base64Data.count & ") {"
+    sb.AppendLine "    console.log('所有图片加载完成，开始初始化显示');"
+    sb.AppendLine "    "
+    sb.AppendLine "    // 关键：同步执行初始化，避免竞争"
+    sb.AppendLine "    initializeDisplay();"
+    sb.AppendLine "    "
+    sb.AppendLine "    // 根据配置决定是否设置常亮组件"
+    sb.AppendLine "    if (vbaConfig.autoSetHighlight && vbaConfig.highlightComponents.length > 0) {"
+    sb.AppendLine "      setAlwaysHighlightedComponents(vbaConfig.highlightComponents);"
+    sb.AppendLine "      setOutlineMode(vbaConfig.initialOutlineMode);"
+    sb.AppendLine "    } else {"
+    sb.AppendLine "      // 使用默认模式"
+    sb.AppendLine "      setOutlineMode(vbaConfig.initialOutlineMode);"
+    sb.AppendLine "    }"
+    sb.AppendLine "    "
+    sb.AppendLine "    // 设置右键事件"
+    sb.AppendLine "    setupRightClickAfterLoad();"
+    sb.AppendLine "    "
+    sb.AppendLine "    // 最后重绘"
+    sb.AppendLine "    if (window.requestAnimationFrame) {"
+    sb.AppendLine "      requestAnimationFrame(drawImages);"
+    sb.AppendLine "    } else {"
+    sb.AppendLine "      drawImages();"
+    sb.AppendLine "    }"
+    sb.AppendLine "  }"
+    sb.AppendLine "}"
+    sb.AppendLine
+    
+    ' 遍历Dictionary的Keys
+    Dim compId As Variant
+    For Each compId In base64Data.keys
+        Dim base64Str As String
+        
+        ' 安全获取Base64数据
+        On Error Resume Next
+        base64Str = base64Data(compId)
+        On Error GoTo 0
+        
+        If Len(base64Str) > 0 Then
+            base64Str = cleanBase64(base64Str)
+            
+            sb.AppendLine "components['" & compId & "'].img = new Image();"
+            sb.AppendLine "components['" & compId & "'].img.onload = checkAllLoaded;"
+            sb.AppendLine "components['" & compId & "'].img.onerror = function() { "
+            sb.AppendLine "  console.error('图片加载失败: " & compId & "');"
+            sb.AppendLine "  if (debug) debug.innerHTML='图片加载失败: " & compId & "'; "
+            sb.AppendLine "};"
+            sb.AppendLine "components['" & compId & "'].img.src = '" & base64Str & "';"
+            sb.AppendLine
+        Else
+            ' 记录错误
+            Debug.Print "警告: 组件 " & compId & " 的Base64数据为空"
+        End If
+    Next compId
+    
+    GetDynamicInitializationCode = sb.ToString
+End Function
+
+
+' 新增：生成配置代码的函数
+Private Function GenerateConfigCode(initialSelected As Collection, autoHighlight As Boolean) As String
+    Dim sb As New clsStringBuilder
+    
+    sb.AppendLine
+    sb.AppendLine "// 动态设置配置"
+    
+    If autoHighlight And Not initialSelected Is Nothing And initialSelected.count > 0 Then
+        sb.AppendLine "vbaConfig.autoSetHighlight = true;"
+        sb.AppendLine "vbaConfig.initialOutlineMode = 'always';"
+        
+        ' 构建highlightComponents数组
+        sb.Append "vbaConfig.highlightComponents = ["
+        Dim i As Long
+        For i = 1 To initialSelected.count
+            If i > 1 Then sb.Append ","
+            sb.Append "'" & EscapeJSString(CStr(initialSelected(i))) & "'"
+        Next i
+        sb.AppendLine "];"
+    Else
+        sb.AppendLine "vbaConfig.autoSetHighlight = false;"
+        sb.AppendLine "vbaConfig.initialOutlineMode = 'hover';"
+        sb.AppendLine "vbaConfig.highlightComponents = [];"
+    End If
+    
+    GenerateConfigCode = sb.ToString
+End Function
+
+
+' JS字符串转义辅助函数
+Private Function EscapeJSString(ByVal Text As String) As String
+    If InStr(Text, "'") > 0 Or InStr(Text, "\") > 0 Then
+        EscapeJSString = Replace(Replace(Text, "\", "\\"), "'", "\'")
+    Else
+        EscapeJSString = Text
+    End If
+End Function
+
+
+' 保存生成的HTML文件以便分析
+Public Sub SaveGeneratedHTML(fullHtml As String)
+    On Error Resume Next
+
+    ' 保存到文件
+    Dim filePath As String
+    filePath = "D:\generated_" & Format(Now, "yyyymmdd_hhmmss") & ".html"
+
+    ' 尝试用ADODB.Stream保存
+    Dim objStream As Object
+    Set objStream = CreateObject("ADODB.Stream")
+    
+    If Not objStream Is Nothing Then
+        With objStream
+            .Charset = "utf-8"
+            .Type = 2
+            .Open
+            .WriteText fullHtml
+            .SaveToFile filePath, 2
+            .Close
+        End With
+        Set objStream = Nothing
+    Else
+        ' 回退方案
+        Open filePath For Output As #1
+        Print #1, fullHtml
+        Close #1
+    End If
+
+    Debug.Print "HTML已保存到: " & filePath
+    Debug.Print "文件大小: " & Len(fullHtml) & " 字节"
+
+    ' 同时保存一个简化版本（只包含关键部分）
+    SaveDebugHTML fullHtml
+End Sub
+
+
+' 保存调试版本（只包含关键信息）
+Private Sub SaveDebugHTML(fullHtml As String)
+    Dim debugHtml As String
+
+    ' 只提取关键部分
+    debugHtml = "<html><head><title>调试版</title></head><body>"
+    debugHtml = debugHtml & "<h3>生成的HTML关键部分</h3>"
+
+    ' 提取组件声明
+    Dim startPos As Long, endPos As Long
+    startPos = InStr(fullHtml, "var components = {")
+    If startPos > 0 Then
+        endPos = InStr(startPos, fullHtml, "};")
+        If endPos > startPos Then
+            Dim componentsDecl As String
+            componentsDecl = Mid(fullHtml, startPos, endPos - startPos + 2)
+            debugHtml = debugHtml & "<h4>组件声明:</h4>"
+            debugHtml = debugHtml & "<pre>" & Replace(componentsDecl, "<", "&lt;") & "</pre>"
+        End If
+    End If
+
+    ' 提取初始化代码
+    startPos = InStr(fullHtml, "var imagesLoaded = 0;")
+    If startPos > 0 Then
+        endPos = InStr(startPos, fullHtml, "components['")
+        If endPos > startPos Then
+            endPos = InStr(endPos + 50, fullHtml, ".src = '") + 100
+            Dim initCode As String
+            initCode = Mid(fullHtml, startPos, endPos - startPos)
+            debugHtml = debugHtml & "<h4>初始化代码（部分）:</h4>"
+            debugHtml = debugHtml & "<pre>" & Replace(initCode, "<", "&lt;") & "</pre>"
+        End If
+    End If
+
+    debugHtml = debugHtml & "</body></html>"
+
+    Dim debugPath As String
+    debugPath = "D:\" & "debug_view.html"
+
+    ' 尝试用ADODB.Stream保存
+    Dim objStream As Object
+    Set objStream = CreateObject("ADODB.Stream")
+    
+    If Not objStream Is Nothing Then
+        With objStream
+            .Charset = "utf-8"
+            .Type = 2
+            .Open
+            .WriteText debugHtml
+            .SaveToFile debugPath, 2
+            .Close
+        End With
+        Set objStream = Nothing
+    Else
+        ' 回退方案
+        Open debugPath For Output As #1
+        Print #1, debugHtml
+        Close #1
+    End If
+End Sub
+
+
