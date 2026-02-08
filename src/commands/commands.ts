@@ -7,8 +7,8 @@ function openDialog(event: Office.AddinCommands.Event) {
         Office.context.ui.displayDialogAsync(
             'https://localhost:3000/dialog.html',
             {
-                width: 60,
-                height: 30,
+                width: 50,
+                height: 62,
                 displayInIframe: true
             },
             function(result) {

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add server.js src/commands/commands.ts src/dialog/dialog.html)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\n优化图片显示和对话框尺寸\n\n- 添加静态文件服务支持图片访问\n- 调整对话框尺寸为更合理的比例\n- 实现从配置中自动加载真实图片\n- 添加图片路径处理和中文文件名编码\n- 自动为已选标注添加热点标记\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push)"
+    ]
+  }
+}

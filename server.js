@@ -8,12 +8,12 @@ app.use(cors());
 app.use(express.json());
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
-// MySQL 连接池 - 改成你的配置
+// MySQL 连接池
 const pool = mysql.createPool({
   host: 'localhost',
-  user: 'root',              // 你的MySQL用户名
-  password: 'Livsun24',  // 你的MySQL密码
-  database: 'quotation',      // 你的数据库名
+  user: 'root',
+  password: 'Livsun24',
+  database: 'quotation',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
@@ -29,7 +29,7 @@ app.get('/api/test', async (req, res) => {
   }
 });
 
-// 1. 获取产品类型列表（作为"分类"）
+// 1. 获取产品类型列表
 app.get('/api/categories', async (req, res) => {
   try {
     const [rows] = await pool.query(`
@@ -47,7 +47,7 @@ app.get('/api/categories', async (req, res) => {
   }
 });
 
-// 2. 获取某个类型下的产品型号列表（作为"项目"）
+// 2. 获取某个类型下的产品型号列表
 app.get('/api/projects/:categoryId', async (req, res) => {
   try {
     const { categoryId } = req.params;
@@ -68,7 +68,7 @@ app.get('/api/projects/:categoryId', async (req, res) => {
   }
 });
 
-// 3. 获取组件详细信息（非可选配件，is_Assembly=0，排除工艺和标准件）
+// 3. 获取组件详细信息（添加 component_pic 和 image_url）
 app.get('/api/details/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
@@ -77,7 +77,13 @@ app.get('/api/details/:projectId', async (req, res) => {
       SELECT 
         config_id as id,
         component_name as name,
-        CAST(is_active AS SIGNED) as is_required
+        component_pic,
+        CAST(is_active AS SIGNED) as is_required,
+        CASE 
+          WHEN component_pic IS NOT NULL AND component_pic != '' 
+          THEN CONCAT('http://localhost:3001/public/images/', component_pic, '.png')
+          ELSE NULL
+        END as image_url
       FROM ht_sales_product_default_config
       WHERE product_id = ?
         AND CAST(is_Assembly AS SIGNED) = 0
@@ -91,7 +97,7 @@ app.get('/api/details/:projectId', async (req, res) => {
   }
 });
 
-// 4. 获取标注选项（可选配件，is_Assembly=1）
+// 4. 获取标注选项（添加 component_pic 和 image_url）
 app.get('/api/annotations/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
@@ -100,8 +106,14 @@ app.get('/api/annotations/:projectId', async (req, res) => {
       SELECT 
         config_id as id,
         component_name as name,
+        component_pic,
         pic_level as position_x,
-        NULL as position_y
+        NULL as position_y,
+        CASE 
+          WHEN component_pic IS NOT NULL AND component_pic != '' 
+          THEN CONCAT('http://localhost:3001/public/images/', component_pic, '.png')
+          ELSE NULL
+        END as image_url
       FROM ht_sales_product_default_config
       WHERE product_id = ?
         AND CAST(is_Assembly AS SIGNED) = 1
@@ -114,7 +126,7 @@ app.get('/api/annotations/:projectId', async (req, res) => {
   }
 });
 
-// 5. 获取完整配置数据（用于提交）
+// 5. 获取完整配置数据
 app.get('/api/config/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
@@ -193,6 +205,5 @@ app.listen(PORT, () => {
   console.log(`✅ API 服务运行在 http://localhost:${PORT}`);
   console.log(`测试连接: http://localhost:${PORT}/api/test`);
   console.log(`获取分类: http://localhost:${PORT}/api/categories`);
-  console.log(`✅ API 服务运行在 http://localhost:${PORT}`);
   console.log(`图片服务: http://localhost:${PORT}/public/images/`);
 });

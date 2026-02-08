@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>数据输入对话框</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
     <style>
@@ -77,8 +77,9 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-star;
             min-width: 0;
+            padding: 10px 0;
         }
         
         .panel-title {
@@ -145,6 +146,7 @@
             flex: 1;
             min-height: 0;
             aspect-ratio: 1 / 1;
+            max-width: min(90vh, 100%);
             position: relative;
             border: 2px solid #0078d4;
             border-radius: 8px;
@@ -506,88 +508,133 @@
         return IMAGE_BASE + encodedFileName;
     }
 
-    // 6. 显示组件详情（多选，必选项自动选中）
-    function displayDetails(details) {
-        const detailList = document.getElementById('detailList');
-        detailList.innerHTML = '';
+// 6. 显示组件详情（多选，必选项自动选中）
+function displayDetails(details) {
+    const detailList = document.getElementById('detailList');
+    detailList.innerHTML = '';
+    
+    if (details.length === 0) {
+        detailList.innerHTML = '<div class="placeholder">暂无组件信息</div>';
+        return;
+    }
+    
+    details.forEach((detail, index) => {
+        const item = document.createElement('div');
+        item.className = 'listbox-item multi-select';
         
-        if (details.length === 0) {
-            detailList.innerHTML = '<div class="placeholder">暂无组件信息</div>';
-            return;
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `detail-${index}`;
+        checkbox.dataset.id = detail.id;
+        checkbox.dataset.componentPic = detail.component_pic || '';  // ← 新增：保存图片名
+        
+        // 必选项自动选中并禁用
+        if (detail.is_required === 1) {
+            checkbox.checked = true;
+            checkbox.disabled = true;
+            selectedDetails.add({ id: detail.id, name: detail.name });
         }
         
-        details.forEach((detail, index) => {
-            const item = document.createElement('div');
-            item.className = 'listbox-item multi-select';
+        checkbox.onchange = () => toggleDetail(detail.id, detail.name, checkbox.checked);
+        
+        const label = document.createElement('label');
+        label.htmlFor = `detail-${index}`;
+        label.textContent = detail.name + (detail.is_required === 1 ? ' [必选]' : '');
+        label.style.cursor = 'pointer';
+        label.style.flex = '1';
+        
+        if (detail.is_required === 1) {
+            label.style.fontWeight = 'bold';
+            label.style.color = '#0078d4';
+        }
+        
+        // ← 新增：点击整个 item 切换图片
+        item.onclick = (e) => {
+            // 如果点击的是 checkbox，不处理（让 checkbox 的事件处理）
+            if (e.target.type === 'checkbox') return;
             
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.id = `detail-${index}`;
-            checkbox.dataset.id = detail.id;
-            
-            // 必选项自动选中并禁用
-            if (detail.is_required === 1) {
-                checkbox.checked = true;
-                checkbox.disabled = true;
-                selectedDetails.add({ id: detail.id, name: detail.name });
+            // 显示该组件的图片
+            if (detail.image_url) {
+                displayImage(detail.image_url);
+            } else if (detail.component_pic) {
+                const imageUrl = getImageUrl(detail.component_pic);
+                if (imageUrl) {
+                    displayImage(imageUrl);
+                }
             }
             
-            checkbox.onchange = () => toggleDetail(detail.id, detail.name, checkbox.checked);
-            
-            const label = document.createElement('label');
-            label.htmlFor = `detail-${index}`;
-            label.textContent = detail.name + (detail.is_required === 1 ? ' [必选]' : '');
-            label.style.cursor = 'pointer';
-            label.style.flex = '1';
-            
-            if (detail.is_required === 1) {
-                label.style.fontWeight = 'bold';
-                label.style.color = '#0078d4';
-            }
-            
-            item.appendChild(checkbox);
-            item.appendChild(label);
-            detailList.appendChild(item);
-        });
-    }
+            // 高亮当前选中的项
+            document.querySelectorAll('#detailList .listbox-item').forEach(i => {
+                i.style.backgroundColor = '';
+            });
+            item.style.backgroundColor = '#fff9e6';  // 浅黄色高亮
+        };
+        
+        item.appendChild(checkbox);
+        item.appendChild(label);
+        detailList.appendChild(item);
+    });
+}
 
-    // 7. 显示标注选项（多选）
-    function displayAnnotations(annotations) {
-        const annotationList = document.getElementById('annotationList');
-        annotationList.innerHTML = '';
-        
-        if (annotations.length === 0) {
-            annotationList.innerHTML = '<div class="placeholder">暂无可选配件</div>';
-            return;
-        }
-        
-        annotations.forEach((annotation, index) => {
-            const item = document.createElement('div');
-            item.className = 'listbox-item multi-select';
-            
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.id = `anno-${index}`;
-            checkbox.dataset.id = annotation.id;
-            checkbox.onchange = () => toggleAnnotation(
-                annotation.id, 
-                annotation.name, 
-                annotation.position_x,
-                annotation.position_y,
-                checkbox.checked
-            );
-            
-            const label = document.createElement('label');
-            label.htmlFor = `anno-${index}`;
-            label.textContent = annotation.name;
-            label.style.cursor = 'pointer';
-            label.style.flex = '1';
-            
-            item.appendChild(checkbox);
-            item.appendChild(label);
-            annotationList.appendChild(item);
-        });
+// 7. 显示标注选项（多选）
+function displayAnnotations(annotations) {
+    const annotationList = document.getElementById('annotationList');
+    annotationList.innerHTML = '';
+    
+    if (annotations.length === 0) {
+        annotationList.innerHTML = '<div class="placeholder">暂无可选配件</div>';
+        return;
     }
+    
+    annotations.forEach((annotation, index) => {
+        const item = document.createElement('div');
+        item.className = 'listbox-item multi-select';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `anno-${index}`;
+        checkbox.dataset.id = annotation.id;
+        checkbox.onchange = () => toggleAnnotation(
+            annotation.id, 
+            annotation.name, 
+            annotation.position_x,
+            annotation.position_y,
+            checkbox.checked
+        );
+        
+        const label = document.createElement('label');
+        label.htmlFor = `anno-${index}`;
+        label.textContent = annotation.name;
+        label.style.cursor = 'pointer';
+        label.style.flex = '1';
+        
+        // ← 新增：点击整个 item 切换图片
+        item.onclick = (e) => {
+            // 如果点击的是 checkbox，不处理
+            if (e.target.type === 'checkbox') return;
+            
+            // 显示该组件的图片
+            if (annotation.image_url) {
+                displayImage(annotation.image_url);
+            } else if (annotation.component_pic) {
+                const imageUrl = getImageUrl(annotation.component_pic);
+                if (imageUrl) {
+                    displayImage(imageUrl);
+                }
+            }
+            
+            // 高亮当前选中的项
+            document.querySelectorAll('#annotationList .listbox-item').forEach(i => {
+                i.style.backgroundColor = '';
+            });
+            item.style.backgroundColor = '#fff9e6';  // 浅黄色高亮
+        };
+        
+        item.appendChild(checkbox);
+        item.appendChild(label);
+        annotationList.appendChild(item);
+    });
+}
 
     // 8. 切换组件选择
     function toggleDetail(detailId, detailName, isChecked) {
