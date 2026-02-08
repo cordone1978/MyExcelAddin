@@ -6,6 +6,7 @@ const path = require('path');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use('/public', express.static(path.join(__dirname, 'public')));
 
 // MySQL 连接池 - 改成你的配置
 const pool = mysql.createPool({
@@ -192,4 +193,6 @@ app.listen(PORT, () => {
   console.log(`✅ API 服务运行在 http://localhost:${PORT}`);
   console.log(`测试连接: http://localhost:${PORT}/api/test`);
   console.log(`获取分类: http://localhost:${PORT}/api/categories`);
+  console.log(`✅ API 服务运行在 http://localhost:${PORT}`);
+  console.log(`图片服务: http://localhost:${PORT}/public/images/`);
 });
