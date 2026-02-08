@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>数据输入对话框</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 12px;
+            background: #f5f5f5;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: grid;
+            grid-template-columns: 180px 320px 1fr;
+            gap: 12px;
+            height: calc(100vh - 24px);
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #e0e0e0;
+            padding-right: 12px;
+            height: 100%;
+            min-height: 0;
+        }
+        
+        .middle-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            border-right: 1px solid #e0e0e0;
+            padding-right: 12px;
+            height: 100%;
+            min-height: 0;
+        }
+        
+        .middle-left {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 0;
+        }
+        
+        .middle-right {
+            display: grid;
+            grid-template-rows: 1fr 1fr;
+            gap: 12px;
+            height: 100%;
+            min-height: 0;
+        }
+        
+                /* ← 在这里添加下面这段新代码 */
+        .middle-right > div {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 0;
+        }
+
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-width: 0;
+        }
+        
+        .panel-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #0078d4;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .listbox {
+            flex: 1;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            background: #fafafa;
+            min-height: 0;
+        }
+        
+        .listbox-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #e8e8e8;
+            transition: all 0.15s ease;
+            font-size: 13px;
+            color: #333;
+            display: flex;
+            align-items: center;
+        }
+        
+        .listbox-item:last-child {
+            border-bottom: none;
+        }
+        
+        .listbox-item:hover {
+            background: #e8f4fd;
+        }
+        
+        .listbox-item.selected {
+            background: #0078d4;
+            color: white;
+            font-weight: 500;
+        }
+        
+        .listbox-item.multi-select {
+            padding-left: 8px;
+        }
+        
+        .listbox-item.multi-select:hover {
+            background: #e8f4fd;
+        }
+        
+        .listbox-item input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+        
+        .image-container {
+            width: 100%;
+            flex: 1;
+            min-height: 0;
+            position: relative;
+            border: 2px solid #0078d4;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fafafa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        
+        .image-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        .placeholder {
+            color: #999;
+            font-size: 16px;
+            text-align: center;
+        }
+        
+        .loading {
+            color: #0078d4;
+            font-size: 16px;
+            text-align: center;
+        }
+        
+        .error {
+            color: #d13438;
+            font-size: 14px;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .hotspot-marker {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background: rgba(255, 59, 48, 0.9);
+            border: 3px solid white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 13px;
+            font-weight: bold;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+            transition: all 0.2s ease;
+        }
+        
+        .hotspot-marker:hover {
+            transform: translate(-50%, -50%) scale(1.3);
+            z-index: 10;
+        }
+        
+        .hotspot-marker.selected {
+            background: rgba(0, 120, 212, 0.9);
+        }
+        
+        .action-buttons {
+            margin-top: 16px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            width: 100%;
+        }
+        
+        .btn {
+            padding: 8px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: #0078d4;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #005a9e;
+        }
+        
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .listbox::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .listbox::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .listbox::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        
+        .listbox::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left-panel">
+            <h3 class="panel-title">产品类型</h3>
+            <div class="listbox" id="categoryList">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+        
+        <div class="middle-panel">
+            <div class="middle-left">
+                <h3 class="panel-title">产品型号</h3>
+                <div class="listbox" id="projectList"></div>
+            </div>
+            
+            <div class="middle-right">
+                <div>
+                    <h3 class="panel-title">详细信息（多选）</h3>
+                    <div class="listbox" id="detailList"></div>
+                </div>
+                <div>
+                    <h3 class="panel-title">标注选项（多选）</h3>
+                    <div class="listbox" id="annotationList"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="right-panel">
+            <h3 class="panel-title">图片预览与标注</h3>
+            <div class="image-container" id="imageContainer">
+                <div class="placeholder">← 选择项目后显示图片</div>
+            </div>
+            <div class="action-buttons">
+                <button class="btn btn-secondary" onclick="clearAll()">清除全部</button>
+                <button class="btn btn-primary" onclick="confirmData()">确认提交</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // API 配置
+    const API_BASE = 'http://localhost:3001/api';
+    
+    // 数据存储
+    let currentCategoryId = null;
+    let currentCategoryName = null;
+    let currentProjectId = null;
+    let currentProjectName = null;
+    let selectedDetails = new Set();
+    let selectedAnnotations = new Set();
+    let hotspotMarkers = [];
+
+    // 初始化
+    Office.onReady(() => {
+        console.log("Dialog 已就绪");
+        loadCategories();
+    });
+
+    // 1. 加载产品类型
+    async function loadCategories() {
+        try {
+            const response = await fetch(`${API_BASE}/categories`);
+            const result = await response.json();
+            
+            if (result.success) {
+                displayCategories(result.data);
+            } else {
+                showError('加载产品类型失败: ' + result.error);
+            }
+        } catch (error) {
+            console.error('加载产品类型失败:', error);
+            showError('无法连接到数据库服务器');
+        }
+    }
+
+    // 2. 显示产品类型列表
+    function displayCategories(categories) {
+        const categoryList = document.getElementById('categoryList');
+        categoryList.innerHTML = '';
+        
+        if (categories.length === 0) {
+            categoryList.innerHTML = '<div class="placeholder">暂无产品类型</div>';
+            return;
+        }
+        
+        categories.forEach(category => {
+            const item = document.createElement('div');
+            item.className = 'listbox-item';
+            item.textContent = category.name;
+            item.dataset.id = category.id;
+            item.onclick = () => selectCategory(category.id, category.name);
+            categoryList.appendChild(item);
+        });
+        
+        // 默认选中第一个
+        if (categories.length > 0) {
+            selectCategory(categories[0].id, categories[0].name);
+        }
+    }
+
+    // 3. 选择产品类型 → 加载产品型号
+    async function selectCategory(categoryId, categoryName) {
+        currentCategoryId = categoryId;
+        currentCategoryName = categoryName;
+        currentProjectId = null;
+        currentProjectName = null;
+        selectedDetails.clear();
+        selectedAnnotations.clear();
+        
+        // 更新选中状态
+        document.querySelectorAll('#categoryList .listbox-item').forEach(item => {
+            item.classList.toggle('selected', item.dataset.id == categoryId);
+        });
+        
+        // 加载产品型号列表
+        const projectList = document.getElementById('projectList');
+        projectList.innerHTML = '<div class="loading">加载中...</div>';
+        
+        try {
+            const response = await fetch(`${API_BASE}/projects/${categoryId}`);
+            const result = await response.json();
+            
+            if (result.success) {
+                displayProjects(result.data);
+            } else {
+                projectList.innerHTML = '<div class="error">加载产品型号失败</div>';
+            }
+        } catch (error) {
+            console.error('加载产品型号失败:', error);
+            projectList.innerHTML = '<div class="error">加载失败</div>';
+        }
+        
+        clearRightPanels();
+    }
+
+    // 4. 显示产品型号列表
+    function displayProjects(projects) {
+        const projectList = document.getElementById('projectList');
+        projectList.innerHTML = '';
+        
+        if (projects.length === 0) {
+            projectList.innerHTML = '<div class="placeholder">该类型下暂无产品</div>';
+            return;
+        }
+        
+        projects.forEach(project => {
+            const item = document.createElement('div');
+            item.className = 'listbox-item';
+            item.textContent = project.name;
+            item.dataset.id = project.id;
+            item.onclick = () => selectProject(project.id, project.name, project.image_url);
+            projectList.appendChild(item);
+        });
+    }
+
+    // 5. 选择产品型号 → 加载组件详情
+    async function selectProject(projectId, projectName, imageUrl) {
+        if (!currentCategoryId) return;
+        
+        currentProjectId = projectId;
+        currentProjectName = projectName;
+        selectedDetails.clear();
+        selectedAnnotations.clear();
+        
+        // 更新选中状态
+        document.querySelectorAll('#projectList .listbox-item').forEach(item => {
+            item.classList.toggle('selected', item.dataset.id == projectId);
+        });
+        
+        // 显示加载状态
+        document.getElementById('detailList').innerHTML = '<div class="loading">加载中...</div>';
+        document.getElementById('annotationList').innerHTML = '<div class="loading">加载中...</div>';
+        
+        try {
+            // 并行加载详细信息和标注
+            const [detailsRes, annotationsRes] = await Promise.all([
+                fetch(`${API_BASE}/details/${projectId}`),
+                fetch(`${API_BASE}/annotations/${projectId}`)
+            ]);
+            
+            const detailsResult = await detailsRes.json();
+            const annotationsResult = await annotationsRes.json();
+            
+            if (detailsResult.success) {
+                displayDetails(detailsResult.data);
+            }
+            
+            if (annotationsResult.success) {
+                displayAnnotations(annotationsResult.data);
+            }
+            
+            // 显示图片（暂时用占位图）
+            if (imageUrl) {
+                displayImage(imageUrl);
+            } else {
+                displayPlaceholderImage(projectName);
+            }
+            
+        } catch (error) {
+            console.error('加载项目详情失败:', error);
+            document.getElementById('detailList').innerHTML = '<div class="error">加载失败</div>';
+            document.getElementById('annotationList').innerHTML = '<div class="error">加载失败</div>';
+        }
+    }
+
+    // 6. 显示组件详情（多选，必选项自动选中）
+    function displayDetails(details) {
+        const detailList = document.getElementById('detailList');
+        detailList.innerHTML = '';
+        
+        if (details.length === 0) {
+            detailList.innerHTML = '<div class="placeholder">暂无组件信息</div>';
+            return;
+        }
+        
+        details.forEach((detail, index) => {
+            const item = document.createElement('div');
+            item.className = 'listbox-item multi-select';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = `detail-${index}`;
+            checkbox.dataset.id = detail.id;
+            
+            // 必选项自动选中并禁用
+            if (detail.is_required === 1) {
+                checkbox.checked = true;
+                checkbox.disabled = true;
+                selectedDetails.add({ id: detail.id, name: detail.name });
+            }
+            
+            checkbox.onchange = () => toggleDetail(detail.id, detail.name, checkbox.checked);
+            
+            const label = document.createElement('label');
+            label.htmlFor = `detail-${index}`;
+            label.textContent = detail.name + (detail.is_required === 1 ? ' [必选]' : '');
+            label.style.cursor = 'pointer';
+            label.style.flex = '1';
+            
+            if (detail.is_required === 1) {
+                label.style.fontWeight = 'bold';
+                label.style.color = '#0078d4';
+            }
+            
+            item.appendChild(checkbox);
+            item.appendChild(label);
+            detailList.appendChild(item);
+        });
+    }
+
+    // 7. 显示标注选项（多选）
+    function displayAnnotations(annotations) {
+        const annotationList = document.getElementById('annotationList');
+        annotationList.innerHTML = '';
+        
+        if (annotations.length === 0) {
+            annotationList.innerHTML = '<div class="placeholder">暂无可选配件</div>';
+            return;
+        }
+        
+        annotations.forEach((annotation, index) => {
+            const item = document.createElement('div');
+            item.className = 'listbox-item multi-select';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = `anno-${index}`;
+            checkbox.dataset.id = annotation.id;
+            checkbox.onchange = () => toggleAnnotation(
+                annotation.id, 
+                annotation.name, 
+                annotation.position_x,
+                annotation.position_y,
+                checkbox.checked
+            );
+            
+            const label = document.createElement('label');
+            label.htmlFor = `anno-${index}`;
+            label.textContent = annotation.name;
+            label.style.cursor = 'pointer';
+            label.style.flex = '1';
+            
+            item.appendChild(checkbox);
+            item.appendChild(label);
+            annotationList.appendChild(item);
+        });
+    }
+
+    // 8. 切换组件选择
+    function toggleDetail(detailId, detailName, isChecked) {
+        if (isChecked) {
+            selectedDetails.add({ id: detailId, name: detailName });
+        } else {
+            selectedDetails.forEach(item => {
+                if (item.id === detailId) {
+                    selectedDetails.delete(item);
+                }
+            });
+        }
+        console.log("当前选中的组件:", Array.from(selectedDetails));
+    }
+
+    // 9. 显示占位图片
+    function displayPlaceholderImage(projectName) {
+        const container = document.getElementById('imageContainer');
+        container.innerHTML = `
+            <div class="placeholder">
+                <div style="font-size: 24px; margin-bottom: 10px;">📦</div>
+                <div>${projectName}</div>
+                <div style="font-size: 12px; color: #999; margin-top: 5px;">暂无产品图片</div>
+            </div>
+        `;
+        clearHotspots();
+    }
+
+    // 10. 显示图片
+    function displayImage(imageUrl) {
+        const container = document.getElementById('imageContainer');
+        container.innerHTML = '';
+        
+        const img = document.createElement('img');
+        img.src = imageUrl;
+        img.onload = () => {
+            console.log("图片加载完成");
+        };
+        img.onerror = () => {
+            container.innerHTML = '<div class="error">图片加载失败</div>';
+        };
+        
+        container.appendChild(img);
+        clearHotspots();
+    }
+
+    // 11. 切换标注选项
+    function toggleAnnotation(annotationId, annotationName, posX, posY, isChecked) {
+        if (isChecked) {
+            selectedAnnotations.add({ id: annotationId, name: annotationName });
+            addHotspotMarker(annotationId, annotationName, posX, posY);
+        } else {
+            selectedAnnotations.forEach(item => {
+                if (item.id === annotationId) {
+                    selectedAnnotations.delete(item);
+                }
+            });
+            removeHotspotMarker(annotationId);
+        }
+        
+        console.log("当前选中的可选配件:", Array.from(selectedAnnotations));
+    }
+
+    // 12. 添加热点标记
+    function addHotspotMarker(annotationId, annotationName, posX, posY) {
+        const container = document.getElementById('imageContainer');
+        const img = container.querySelector('img');
+        if (!img) return;
+        
+        const marker = document.createElement('div');
+        marker.className = 'hotspot-marker';
+        marker.textContent = hotspotMarkers.length + 1;
+        marker.dataset.annotationId = annotationId;
+        
+        const x = posX !== null && posX !== undefined ? posX : 20 + Math.random() * 60;
+        const y = posY !== null && posY !== undefined ? posY : 20 + Math.random() * 60;
+        
+        marker.style.left = x + '%';
+        marker.style.top = y + '%';
+        
+        marker.onclick = () => {
+            alert(`配件: ${annotationName}\n位置: (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
+        };
+        
+        container.appendChild(marker);
+        hotspotMarkers.push({ annotationId, annotationName, marker, x, y });
+    }
+
+    // 13. 移除热点标记
+    function removeHotspotMarker(annotationId) {
+        const index = hotspotMarkers.findIndex(h => h.annotationId === annotationId);
+        if (index !== -1) {
+            const { marker } = hotspotMarkers[index];
+            marker.remove();
+            hotspotMarkers.splice(index, 1);
+            
+            hotspotMarkers.forEach((h, i) => {
+                h.marker.textContent = i + 1;
+            });
+        }
+    }
+
+    // 14. 清除所有热点
+    function clearHotspots() {
+        hotspotMarkers.forEach(h => h.marker.remove());
+        hotspotMarkers = [];
+    }
+
+    // 15. 清空右侧面板
+    function clearRightPanels() {
+        document.getElementById('detailList').innerHTML = '';
+        document.getElementById('annotationList').innerHTML = '';
+        document.getElementById('imageContainer').innerHTML = '<div class="placeholder">← 选择产品后显示图片</div>';
+        clearHotspots();
+    }
+
+    // 16. 清除全部
+    function clearAll() {
+        currentCategoryId = null;
+        currentCategoryName = null;
+        currentProjectId = null;
+        currentProjectName = null;
+        selectedDetails.clear();
+        selectedAnnotations.clear();
+        
+        document.querySelectorAll('.listbox-item').forEach(item => {
+            item.classList.remove('selected');
+        });
+        
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(cb => {
+            if (!cb.disabled) cb.checked = false;
+        });
+        
+        document.getElementById('projectList').innerHTML = '';
+        clearRightPanels();
+    }
+
+    // 17. 显示错误
+    function showError(message) {
+        const categoryList = document.getElementById('categoryList');
+        categoryList.innerHTML = `<div class="error">${message}</div>`;
+    }
+
+    // 18. 确认提交
+    function confirmData() {
+        if (!currentCategoryId || !currentProjectId) {
+            alert('请先选择产品类型和产品型号');
+            return;
+        }
+        
+        if (selectedDetails.size === 0) {
+            alert('请至少选择一个组件');
+            return;
+        }
+        
+        const result = {
+            categoryId: currentCategoryId,
+            category: currentCategoryName,
+            projectId: currentProjectId,
+            project: currentProjectName,
+            details: Array.from(selectedDetails),
+            annotations: Array.from(selectedAnnotations),
+            hotspots: hotspotMarkers.map(h => ({
+                annotationId: h.annotationId,
+                annotation: h.annotationName,
+                position: { x: h.x, y: h.y }
+            }))
+        };
+        
+        console.log("提交数据:", result);
+        alert('选择完成！\n\n' + 
+              '产品类型: ' + result.category + '\n' +
+              '产品型号: ' + result.project + '\n' +
+              '选中组件: ' + result.details.length + ' 个\n' +
+              '可选配件: ' + result.annotations.length + ' 个');
+        
+        // 发送给父窗口
+        Office.context.ui.messageParent(JSON.stringify(result));
+    }
+</script>
+</body>
+</html>

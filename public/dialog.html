@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>数据输入对话框</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 12px;
+            background: #f5f5f5;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: grid;
+            grid-template-columns: 180px 320px 1fr;  /* 给右侧更多空间 */
+            gap: 12px;
+            height: calc(100vh - 24px);
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        /* 左侧主列表 */
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #e0e0e0;
+            padding-right: 12px;
+        }
+        
+        /* 中间区域 */
+        .middle-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            border-right: 1px solid #e0e0e0;
+            padding-right: 12px;
+        }
+        
+        .middle-left {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .middle-right {
+            display: grid;
+            grid-template-rows: 1fr 1fr;
+            gap: 12px;
+        }
+        
+        /* 右侧图片区 - 关键改动 */
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-width: 0;  /* 防止溢出 */
+        }
+        
+        /* 通用标题样式 */
+        .panel-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #0078d4;
+            width: 100%;
+            text-align: center;
+        }
+        
+        /* ListBox 样式 */
+        .listbox {
+            flex: 1;
+            border: 1px solid #d1d1d1;
+            border-radius: 4px;
+            overflow-y: auto;
+            background: #fafafa;
+        }
+        
+        .listbox-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #e8e8e8;
+            transition: all 0.15s ease;
+            font-size: 13px;
+            color: #333;
+            display: flex;
+            align-items: center;
+        }
+        
+        .listbox-item:last-child {
+            border-bottom: none;
+        }
+        
+        .listbox-item:hover {
+            background: #e8f4fd;
+        }
+        
+        .listbox-item.selected {
+            background: #0078d4;
+            color: white;
+            font-weight: 500;
+        }
+        
+        /* 多选 checkbox 样式 */
+        .listbox-item.multi-select {
+            padding-left: 8px;
+        }
+        
+        .listbox-item.multi-select:hover {
+            background: #e8f4fd;
+        }
+        
+        .listbox-item input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+        
+        /* 图片容器 - 真正的正方形 */
+        .image-container {
+            width: 80vh;  /* 使用视口高度 */
+            height: 80vh;  /* 强制正方形 */
+            max-width: 100%;
+            max-height: calc(100vh - 150px);  /* 留出标题和按钮空间 */
+            position: relative;
+            border: 2px solid #0078d4;  /* 加粗边框更明显 */
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fafafa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .image-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;  /* 保持图片比例 */
+        }
+        
+        .placeholder {
+            color: #999;
+            font-size: 16px;
+            text-align: center;
+        }
+        
+        /* 热点标记 */
+        .hotspot-marker {
+            position: absolute;
+            width: 30px;  /* 稍微大一点 */
+            height: 30px;
+            background: rgba(255, 59, 48, 0.9);
+            border: 3px solid white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 13px;
+            font-weight: bold;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+            transition: all 0.2s ease;
+        }
+        
+        .hotspot-marker:hover {
+            transform: translate(-50%, -50%) scale(1.3);
+            z-index: 10;
+        }
+        
+        .hotspot-marker.selected {
+            background: rgba(0, 120, 212, 0.9);
+        }
+        
+        /* 底部操作按钮 */
+        .action-buttons {
+            margin-top: 16px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            width: 100%;
+        }
+        
+        .btn {
+            padding: 8px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: #0078d4;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #005a9e;
+        }
+        
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        /* 滚动条美化 */
+        .listbox::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .listbox::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .listbox::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        
+        .listbox::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧：主分类列表 -->
+        <div class="left-panel">
+            <h3 class="panel-title">主分类</h3>
+            <div class="listbox" id="categoryList"></div>
+        </div>
+        
+        <!-- 中间区域 -->
+        <div class="middle-panel">
+            <!-- 中间左：子项目列表 -->
+            <div class="middle-left">
+                <h3 class="panel-title">项目列表</h3>
+                <div class="listbox" id="projectList"></div>
+            </div>
+            
+            <!-- 中间右：上下两个列表（都是多选） -->
+            <div class="middle-right">
+                <div>
+                    <h3 class="panel-title">详细信息（多选）</h3>
+                    <div class="listbox" id="detailList"></div>
+                </div>
+                <div>
+                    <h3 class="panel-title">标注选项（多选）</h3>
+                    <div class="listbox" id="annotationList"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右侧：图片热点区 -->
+        <div class="right-panel">
+            <h3 class="panel-title">图片预览与标注</h3>
+            <div class="image-container" id="imageContainer">
+                <div class="placeholder">← 选择项目后显示图片</div>
+            </div>
+            <div class="action-buttons">
+                <button class="btn btn-secondary" onclick="clearAll()">清除全部</button>
+                <button class="btn btn-primary" onclick="confirmData()">确认提交</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 模拟数据结构
+        const mockData = {
+            "设备类型A": {
+                "项目A1": {
+                    details: ["细节1", "细节2", "细节3"],
+                    annotations: ["标注点1", "标注点2", "标注点3", "标注点4"],
+                    image: "https://via.placeholder.com/800x800/0078d4/ffffff?text=设备A1图片"
+                },
+                "项目A2": {
+                    details: ["细节A", "细节B"],
+                    annotations: ["位置A", "位置B", "位置C"],
+                    image: "https://via.placeholder.com/800x800/28a745/ffffff?text=设备A2图片"
+                }
+            },
+            "设备类型B": {
+                "项目B1": {
+                    details: ["参数1", "参数2", "参数3", "参数4"],
+                    annotations: ["热点1", "热点2", "热点3"],
+                    image: "https://via.placeholder.com/800x800/dc3545/ffffff?text=设备B1图片"
+                },
+                "项目B2": {
+                    details: ["配置1", "配置2"],
+                    annotations: ["区域1", "区域2", "区域3", "区域4", "区域5"],
+                    image: "https://via.placeholder.com/800x800/ffc107/333333?text=设备B2图片"
+                }
+            },
+            "设备类型C": {
+                "项目C1": {
+                    details: ["指标1", "指标2"],
+                    annotations: ["点位1", "点位2"],
+                    image: "https://via.placeholder.com/800x800/6f42c1/ffffff?text=设备C1图片"
+                }
+            }
+        };
+
+        let currentCategory = null;
+        let currentProject = null;
+        let selectedDetails = new Set();
+        let selectedAnnotations = new Set();
+        let hotspotMarkers = [];
+
+        // 初始化
+        Office.onReady(() => {
+            console.log("Dialog 已就绪");
+            initializeCategoryList();
+        });
+
+        // 1. 初始化主分类列表
+        function initializeCategoryList() {
+            const categoryList = document.getElementById('categoryList');
+            categoryList.innerHTML = '';
+            
+            Object.keys(mockData).forEach(category => {
+                const item = document.createElement('div');
+                item.className = 'listbox-item';
+                item.textContent = category;
+                item.onclick = () => selectCategory(category);
+                categoryList.appendChild(item);
+            });
+        }
+
+        // 2. 选择主分类 → 联动更新项目列表
+        function selectCategory(category) {
+            currentCategory = category;
+            currentProject = null;
+            selectedDetails.clear();
+            selectedAnnotations.clear();
+            
+            // 更新选中状态
+            document.querySelectorAll('#categoryList .listbox-item').forEach(item => {
+                item.classList.toggle('selected', item.textContent === category);
+            });
+            
+            // 更新项目列表
+            const projectList = document.getElementById('projectList');
+            projectList.innerHTML = '';
+            
+            Object.keys(mockData[category]).forEach(project => {
+                const item = document.createElement('div');
+                item.className = 'listbox-item';
+                item.textContent = project;
+                item.onclick = () => selectProject(project);
+                projectList.appendChild(item);
+            });
+            
+            // 清空右侧
+            clearRightPanels();
+        }
+
+        // 3. 选择项目 → 联动更新详细信息、标注选项，并显示图片
+        function selectProject(project) {
+            if (!currentCategory) return;
+            
+            currentProject = project;
+            selectedDetails.clear();
+            selectedAnnotations.clear();
+            
+            // 更新选中状态
+            document.querySelectorAll('#projectList .listbox-item').forEach(item => {
+                item.classList.toggle('selected', item.textContent === project);
+            });
+            
+            const projectData = mockData[currentCategory][project];
+            
+            // 更新详细信息列表（多选）
+            const detailList = document.getElementById('detailList');
+            detailList.innerHTML = '';
+            projectData.details.forEach((detail, index) => {
+                const item = document.createElement('div');
+                item.className = 'listbox-item multi-select';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `detail-${index}`;
+                checkbox.onchange = () => toggleDetail(detail, checkbox.checked);
+                
+                const label = document.createElement('label');
+                label.htmlFor = `detail-${index}`;
+                label.textContent = detail;
+                label.style.cursor = 'pointer';
+                label.style.flex = '1';
+                
+                item.appendChild(checkbox);
+                item.appendChild(label);
+                detailList.appendChild(item);
+            });
+            
+            // 更新标注选项列表（多选）
+            const annotationList = document.getElementById('annotationList');
+            annotationList.innerHTML = '';
+            projectData.annotations.forEach((annotation, index) => {
+                const item = document.createElement('div');
+                item.className = 'listbox-item multi-select';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `anno-${index}`;
+                checkbox.onchange = () => toggleAnnotation(annotation, checkbox.checked);
+                
+                const label = document.createElement('label');
+                label.htmlFor = `anno-${index}`;
+                label.textContent = annotation;
+                label.style.cursor = 'pointer';
+                label.style.flex = '1';
+                
+                item.appendChild(checkbox);
+                item.appendChild(label);
+                annotationList.appendChild(item);
+            });
+            
+            // 显示图片
+            displayImage(projectData.image);
+        }
+
+        // 切换详细信息选择
+        function toggleDetail(detail, isChecked) {
+            if (isChecked) {
+                selectedDetails.add(detail);
+            } else {
+                selectedDetails.delete(detail);
+            }
+            console.log("当前选中的详细信息:", Array.from(selectedDetails));
+        }
+
+        // 4. 显示图片
+        function displayImage(imageUrl) {
+            const container = document.getElementById('imageContainer');
+            container.innerHTML = '';
+            
+            const img = document.createElement('img');
+            img.src = imageUrl;
+            img.onload = () => {
+                console.log("图片加载完成");
+            };
+            
+            container.appendChild(img);
+            clearHotspots();
+        }
+
+        // 5. 切换标注选项 → 在图片上添加/删除热点标记
+        function toggleAnnotation(annotation, isChecked) {
+            if (isChecked) {
+                selectedAnnotations.add(annotation);
+                addHotspotMarker(annotation);
+            } else {
+                selectedAnnotations.delete(annotation);
+                removeHotspotMarker(annotation);
+            }
+            
+            console.log("当前选中的标注:", Array.from(selectedAnnotations));
+        }
+
+        // 6. 添加热点标记到图片上
+        function addHotspotMarker(annotation) {
+            const container = document.getElementById('imageContainer');
+            const img = container.querySelector('img');
+            if (!img) return;
+            
+            const marker = document.createElement('div');
+            marker.className = 'hotspot-marker';
+            marker.textContent = hotspotMarkers.length + 1;
+            marker.dataset.annotation = annotation;
+            
+            // 随机位置（实际应用中应该是预定义的坐标）
+            const randomX = 20 + Math.random() * 60;
+            const randomY = 20 + Math.random() * 60;
+            marker.style.left = randomX + '%';
+            marker.style.top = randomY + '%';
+            
+            marker.onclick = () => {
+                alert(`标注点: ${annotation}\n位置: (${randomX.toFixed(1)}%, ${randomY.toFixed(1)}%)`);
+            };
+            
+            container.appendChild(marker);
+            hotspotMarkers.push({ annotation, marker });
+        }
+
+        // 7. 移除热点标记
+        function removeHotspotMarker(annotation) {
+            const index = hotspotMarkers.findIndex(h => h.annotation === annotation);
+            if (index !== -1) {
+                const { marker } = hotspotMarkers[index];
+                marker.remove();
+                hotspotMarkers.splice(index, 1);
+                
+                // 更新编号
+                hotspotMarkers.forEach((h, i) => {
+                    h.marker.textContent = i + 1;
+                });
+            }
+        }
+
+        // 8. 清除所有热点
+        function clearHotspots() {
+            hotspotMarkers.forEach(h => h.marker.remove());
+            hotspotMarkers = [];
+        }
+
+        // 9. 清空右侧面板
+        function clearRightPanels() {
+            document.getElementById('detailList').innerHTML = '';
+            document.getElementById('annotationList').innerHTML = '';
+            document.getElementById('imageContainer').innerHTML = '<div class="placeholder">← 选择项目后显示图片</div>';
+            clearHotspots();
+        }
+
+        // 10. 清除全部
+        function clearAll() {
+            currentCategory = null;
+            currentProject = null;
+            selectedDetails.clear();
+            selectedAnnotations.clear();
+            
+            document.querySelectorAll('.listbox-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            
+            document.getElementById('projectList').innerHTML = '';
+            clearRightPanels();
+        }
+
+        // 11. 确认提交
+        function confirmData() {
+            if (!currentCategory || !currentProject) {
+                alert('请先选择分类和项目');
+                return;
+            }
+            
+            const result = {
+                category: currentCategory,
+                project: currentProject,
+                details: Array.from(selectedDetails),
+                annotations: Array.from(selectedAnnotations),
+                hotspots: hotspotMarkers.map(h => ({
+                    annotation: h.annotation,
+                    position: {
+                        left: h.marker.style.left,
+                        top: h.marker.style.top
+                    }
+                }))
+            };
+            
+            console.log("提交数据:", result);
+            
+            // 发送消息给父窗口（commands.ts）
+            Office.context.ui.messageParent(JSON.stringify(result));
+        }
+    </script>
+</body>
+</html>

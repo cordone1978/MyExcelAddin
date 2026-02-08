@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Contoso Task Pane Add-in</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+    <!-- For more information on Fluent UI, visit https://developer.microsoft.com/fluentui#/. -->
+    <link rel="stylesheet" href="https://res-1.cdn.office.net/files/fabric-cdn-prod_20230815.002/office-ui-fabric-core/11.1.0/css/fabric.min.css"/>
+
+    <!-- Template styles -->
+    <link href="taskpane.css" rel="stylesheet" type="text/css" />
+    <style>
+        /* 新增按钮样式 */
+        .dialog-btn {
+            display: block;
+            margin: 8px 0;
+            padding: 8px 12px;
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 200px;
+            text-align: left;
+        }
+
+        .dialog-btn:hover {
+            background-color: #005a9e;
+        }
+    </style>
+</head>
+
+<body class="ms-font-m ms-welcome ms-Fabric">
+    <header class="ms-welcome__header ms-bgColor-neutralLighter">
+        <img width="90" height="90" src="../../assets/logo-filled.png" alt="Contoso" title="Contoso" />
+        <h1 class="ms-font-su">Welcome</h1>
+    </header>
+    <section id="sideload-msg" class="ms-welcome__main">
+        <h2 class="ms-font-xl">Please <a target="_blank" href="https://learn.microsoft.com/office/dev/add-ins/testing/test-debug-office-add-ins#sideload-an-office-add-in-for-testing">sideload</a> your add-in to see app body.</h2>
+    </section>
+    <main id="app-body" class="ms-welcome__main" style="display: none;">
+        <h2 class="ms-font-xl"> Discover what Office Add-ins can do for you today! </h2>
+        <ul class="ms-List ms-welcome__features">
+            <li class="ms-ListItem">
+                <i class="ms-Icon ms-Icon--Ribbon ms-font-xl"></i>
+                <span class="ms-font-m">Achieve more with Office integration</span>
+            </li>
+            <li class="ms-ListItem">
+                <i class="ms-Icon ms-Icon--Unlock ms-font-xl"></i>
+                <span class="ms-font-m">Unlock features and functionality</span>
+            </li>
+            <li class="ms-ListItem">
+                <i class="ms-Icon ms-Icon--Design ms-font-xl"></i>
+                <span class="ms-font-m">Create and visualize like a pro</span>
+            </li>
+        </ul>
+        <p class="ms-font-l">Modify the source files, then click <b>Run</b>.</p>
+        <div role="button" id="run" class="ms-welcome__action ms-Button ms-Button--hero ms-font-xl" onclick="openDialog()">
+            <span class="ms-Button-label">Run</span>
+        </div>
+
+        <p><label id="item-subject"></label></p>
+
+        <!-- 新增三按钮，调用不同 Dialog -->
+        <div style="margin-top: 20px;">
+            <button class="dialog-btn" onclick="openDialog('dialog.html', '窗体1')">打开窗体1</button>
+            <button class="dialog-btn" onclick="openDialog('form2.html', '窗体2')">打开窗体2</button>
+            <button class="dialog-btn" onclick="openDialog('form3.html', '窗体3')">打开窗体3</button>
+        </div>
+    </main>
+
+    <script>
+        Office.onReady(() => {
+            console.log("Task Pane 已就绪");
+            // 如果需要，可以在这里显示 app-body
+            document.getElementById("app-body").style.display = "block";
+        });
+
+        function openDialog(url, title) {
+            Office.context.ui.displayDialogAsync(
+                url,
+                { height: 50, width: 50, displayInIframe: true },
+                function (asyncResult) {
+                    if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                        console.error("打开窗体失败:", asyncResult.error.message);
+                        return;
+                    }
+                    const dialog = asyncResult.value;
+                    dialog.addEventHandler(Office.EventType.DialogMessageReceived, function (arg) {
+                        console.log("Dialog 发送回来的数据:", arg.message);
+                        dialog.close();
+                    });
+                }
+            );
+        }
+    </script>
+</body>
+
+</html>
