@@ -1,0 +1,626 @@
+
+Option Explicit
+
+' 公共变量
+Public foundCell As Range
+Public g_WhatKind As String
+Private IsLoading As Boolean    ' 保护CalculateTotalPrices不被多次触发
+
+
+Private Sub UserForm_Initialize()
+
+    ' 强制更新g_cacheCraftWithPrice
+    InitializeAllCaches g_cacheCraftWithPrice
+    
+    IsLoading = True
+    
+    ' 只初始化UI，不加载数据
+    Me.lblInnerTotalPrice1 = ""
+    Me.lblOutterTotalPrice1 = ""
+    Me.lblTotalCountShow = ""
+   
+    ' 初始化ComboBoxes
+    InitializeComboBoxes
+
+    IsLoading = False
+    
+    Exit Sub
+    
+ErrorHandler:
+    MsgBox "窗体初始化错误: " & Err.Description, vbExclamation
+End Sub
+
+
+' 初始化ComboBoxes（带有"请选择..."空白项）
+Private Sub InitializeComboBoxes()
+    ' 清空ComboBoxes
+    Me.cmbInnerSqua1.Clear
+    Me.cmbInnerSqua2.Clear
+    Me.cmbInnerSqua3.Clear
+    
+    Me.cmbOutterSqua1.Clear
+    Me.cmbOutterSqua2.Clear
+    Me.cmbOutterSqua3.Clear
+    
+    ' 初始化内表面工艺单价ComboBox
+    Dim cmbList As Variant
+    Dim i As Integer
+    Dim key As Variant
+    
+    ' 把六个 ComboBox 放入数组
+    cmbList = Array(Me.cmbInnerUnitPrice1, Me.cmbInnerUnitPrice2, Me.cmbInnerUnitPrice3, _
+                    Me.cmbOutterUnitPrice1, Me.cmbOutterUnitPrice2, Me.cmbOutterUnitPrice3)
+    
+    For i = 0 To UBound(cmbList)
+        With cmbList(i)
+            .Clear ' 防止重复加载
+
+            ' 先添加一个提示空白项
+            .AddItem "请选择..."
+            
+            ' 添加缓存中的项目
+            For Each key In g_cacheCraftWithPrice.GetAllKeys
+                .AddItem CStr(key)
+            Next key
+            
+            ' 默认选中空白项（第一项）
+            If .ListCount > 0 Then
+                .ListIndex = 0  ' 设置为"请选择..."
+            End If
+            
+            'cmbInnerUnitPrice2的字体比其它的大一号，不想去找原因了，在这里统一设置
+            .Font.size = 11
+        End With
+    Next i
+       
+    Me.lblInnerTotalPrice1 = 0
+    Me.lblOutterTotalPrice1 = 0
+    Me.lblTotalCountShow = 0
+End Sub
+
+
+Private Sub cmdOK_Click()
+    Dim totalValue As String
+    
+    ' 直接获取数值
+    totalValue = GetPriceValueWithSymbol(Me.lblTotalCountShow.Caption)
+    
+    g_CalculatedTotalCraftingValue = totalValue
+        
+    BuildCraftingDescription
+    
+    Me.Hide
+End Sub
+
+
+Private Sub cmdCancel_Click()
+    g_CalculatedTotalCraftingValue = ""
+'    Me.lblTotalCountShow.Caption = ""
+    Me.Hide
+End Sub
+
+
+Private Sub UserForm_Activate()
+
+    IsLoading = True
+    
+    ' 声明变量
+    Dim cellValue As Variant
+    Dim componentName As String
+    
+    ' 检查是否有选中的单元格
+    If TypeName(Selection) = "Range" Then
+        ' 获取选中的第一个单元格的值
+        cellValue = Selection.Cells(1, 1).value
+        
+        ' 处理可能的空值
+        If Not IsEmpty(cellValue) And Not IsNull(cellValue) Then
+            ' 将值转换为字符串
+            componentName = CStr(cellValue)
+            
+            ' 显示在标签上（假设你有一个标签显示组件名称）
+            ' Me.lblComponentName.Caption = componentName  ' 如果需要显示
+            
+            ' 获取表面处理配置数据
+            Set g_CraftingConfigData = GetCraftingConfigDataByComponentName(componentName)
+            
+            ' 检查是否获取到数据
+            If g_CraftingConfigData.count > 0 Then
+                Debug.Print "成功加载表面处理配置，记录数: " & g_CraftingConfigData.count
+                ' 可以在这里初始化其他控件，比如显示工艺类型选择等
+            Else
+                Debug.Print "未找到表面处理配置"
+                ' 初始化空集合
+                Set g_CraftingConfigData = New Collection
+            End If
+        Else
+            ' 单元格为空
+            Debug.Print "选中的单元格为空"
+            Set g_CraftingConfigData = New Collection
+        End If
+    Else
+        ' 没有选中单元格
+        Debug.Print "没有选中任何单元格"
+        Set g_CraftingConfigData = New Collection
+    End If
+    
+    ' 清空组合框
+    Me.cmbInnerSqua1.value = ""
+    Me.cmbInnerSqua2.value = ""
+    Me.cmbInnerSqua3.value = ""
+    
+    Me.cmbOutterSqua1.value = ""
+    Me.cmbOutterSqua2.value = ""
+    Me.cmbOutterSqua3.value = ""
+
+    ' 将价格显示在ComboBox上
+    If g_CraftingConfigData.count > 0 Then
+        Me.cmbInnerSqua1.value = Format(g_CraftingConfigData(1)(IDX_CRFT_INNER_AREA1), "0.00")
+        Me.cmbInnerSqua2.value = Format(g_CraftingConfigData(1)(IDX_CRFT_INNER_AREA2), "0.00")
+        Me.cmbInnerSqua3.value = Format(g_CraftingConfigData(1)(IDX_CRFT_INNER_AREA3), "0.00")
+        
+        Me.cmbOutterSqua1.value = Format(g_CraftingConfigData(1)(IDX_CRFT_OUTTER_AREA1), "0.00")
+        Me.cmbOutterSqua2.value = Format(g_CraftingConfigData(1)(IDX_CRFT_OUTTER_AREA2), "0.00")
+        Me.cmbOutterSqua3.value = Format(g_CraftingConfigData(1)(IDX_CRFT_OUTTER_AREA3), "0.00")
+    End If
+    
+    ' 将工艺单价设定为记录里记录单价类型
+    ' 从ComboBox中读取记录，前几个字和记录取匹配，匹配正确就设定
+    MatchAndSetComboBoxValues
+
+    IsLoading = False
+    
+    ' 初始化计算
+    CalculateTotalPrices
+End Sub
+
+
+' 计算总价函数
+Private Sub CalculateTotalPrices()
+
+    If IsLoading Then Exit Sub
+    
+    Dim innerSqua1 As Double, innerUnitPrice1 As Double, innerTotal1 As Double
+    Dim innerSqua2 As Double, innerUnitPrice2 As Double, innerTotal2 As Double
+    Dim innerSqua3 As Double, innerUnitPrice3 As Double, innerTotal3 As Double
+    
+    Dim outterSqua1 As Double, outterUnitPrice1 As Double, outterTotal1 As Double
+    Dim outterSqua2 As Double, outterUnitPrice2 As Double, outterTotal2 As Double
+    Dim outterSqua3 As Double, outterUnitPrice3 As Double, outterTotal3 As Double
+    
+    Dim grandTotal As Double
+    
+    ' 初始化变量
+    innerTotal1 = 0
+    innerTotal2 = 0
+    innerTotal3 = 0
+    
+    outterTotal1 = 0
+    outterTotal2 = 0
+    outterTotal3 = 0
+    
+    grandTotal = 0
+    
+    ' 计算内层总价
+    If Len(Trim(Me.cmbInnerSqua1.value)) > 0 Then
+        innerSqua1 = ExtractNumber(Me.cmbInnerSqua1.value)
+    End If
+    
+    If Len(Trim(Me.cmbInnerSqua2.value)) > 0 Then
+        innerSqua2 = ExtractNumber(Me.cmbInnerSqua2.value)
+    End If
+    
+    If Len(Trim(Me.cmbInnerSqua3.value)) > 0 Then
+        innerSqua3 = ExtractNumber(Me.cmbInnerSqua3.value)
+    End If
+    
+    If Len(Trim(Me.cmbInnerUnitPrice1.value)) > 0 Then
+        innerUnitPrice1 = ExtractNumber(Me.cmbInnerUnitPrice1.value)
+    End If
+    
+    If Len(Trim(Me.cmbInnerUnitPrice2.value)) > 0 Then
+        innerUnitPrice2 = ExtractNumber(Me.cmbInnerUnitPrice2.value)
+    End If
+    
+    If Len(Trim(Me.cmbInnerUnitPrice3.value)) > 0 Then
+        innerUnitPrice3 = ExtractNumber(Me.cmbInnerUnitPrice3.value)
+    End If
+    
+    innerTotal1 = innerSqua1 * innerUnitPrice1
+    innerTotal2 = innerSqua2 * innerUnitPrice2
+    innerTotal3 = innerSqua3 * innerUnitPrice3
+    
+    ' 计算外层总价
+    If Len(Trim(Me.cmbOutterSqua1.value)) > 0 Then
+        outterSqua1 = ExtractNumber(Me.cmbOutterSqua1.value)
+    End If
+    
+    If Len(Trim(Me.cmbOutterSqua2.value)) > 0 Then
+        outterSqua2 = ExtractNumber(Me.cmbOutterSqua2.value)
+    End If
+    
+    If Len(Trim(Me.cmbOutterSqua3.value)) > 0 Then
+        outterSqua3 = ExtractNumber(Me.cmbOutterSqua3.value)
+    End If
+    
+    If Len(Trim(Me.cmbOutterUnitPrice1.value)) > 0 Then
+        outterUnitPrice1 = ExtractNumber(Me.cmbOutterUnitPrice1.value)
+    End If
+    
+    If Len(Trim(Me.cmbOutterUnitPrice2.value)) > 0 Then
+        outterUnitPrice2 = ExtractNumber(Me.cmbOutterUnitPrice2.value)
+    End If
+    
+    If Len(Trim(Me.cmbOutterUnitPrice3.value)) > 0 Then
+        outterUnitPrice3 = ExtractNumber(Me.cmbOutterUnitPrice3.value)
+    End If
+    
+    outterTotal1 = outterSqua1 * outterUnitPrice1
+    outterTotal2 = outterSqua2 * outterUnitPrice2
+    outterTotal3 = outterSqua3 * outterUnitPrice3
+    
+    ' 计算总计
+    grandTotal = innerTotal1 + innerTotal2 + innerTotal3 + outterTotal1 + outterTotal2 + outterTotal3
+    
+    ' 显示结果
+    Me.lblInnerTotalPrice1.Caption = FormatCurrency(innerTotal1, 2)
+    Me.lblInnerTotalPrice2.Caption = FormatCurrency(innerTotal2, 2)
+    Me.lblInnerTotalPrice3.Caption = FormatCurrency(innerTotal3, 2)
+    
+    Me.lblOutterTotalPrice1.Caption = FormatCurrency(outterTotal1, 2)
+    Me.lblOutterTotalPrice2.Caption = FormatCurrency(outterTotal2, 2)
+    Me.lblOutterTotalPrice3.Caption = FormatCurrency(outterTotal3, 2)
+    
+    Me.lblTotalCountShow.Caption = FormatCurrency(grandTotal, 2)
+End Sub
+
+
+' 从文本中提取数字（优先提取 ￥ 后的数字，否则从开头提取）
+Private Function ExtractNumber(Text As String) As Double
+    Dim s As String
+    Dim i As Long
+    Dim numStr As String
+    Dim hasDecimal As Boolean
+    Dim char As String
+    Dim pos As Long
+    
+    ' 去除所有空格，避免干扰（如 "￥ 123" → "￥123"）
+    Text = Replace(Text, " ", "")
+    
+    ' 查找 "￥" 的位置（不区分大小写，虽然 ￥ 没大小写）
+    pos = InStr(1, Text, "￥", vbTextCompare)
+    
+    ' 确定要解析的起始字符串
+    If pos > 0 Then
+        s = Mid(Text, pos + 1)  ' 从 ￥ 后一位开始
+    Else
+        s = Text                ' 没有 ￥，整串都参与提取（从头开始）
+    End If
+    
+    ' 开始提取连续数字（最多一个小数点）
+    numStr = ""
+    hasDecimal = False
+    
+    For i = 1 To Len(s)
+        char = Mid(s, i, 1)
+        
+        If IsNumeric(char) Then
+            numStr = numStr & char
+        ElseIf char = "." And Not hasDecimal Then
+            ' 允许一个小数点
+            numStr = numStr & "."
+            hasDecimal = True
+        Else
+            ' 一旦遇到非数字且非有效小数点，立即停止
+            Exit For
+        End If
+    Next i
+    
+    ' 转换结果
+    If Len(numStr) > 0 Then
+        On Error Resume Next
+        ExtractNumber = CDbl(numStr)
+        On Error GoTo 0
+    Else
+        ExtractNumber = 0#
+    End If
+End Function
+
+
+' 组合框变化时触发计算
+Private Sub cmbInnerSqua1_Change()
+    CalculateTotalPrices
+End Sub
+
+Private Sub cmbInnerSqua2_Change()
+    CalculateTotalPrices
+End Sub
+
+Private Sub cmbInnerSqua3_Change()
+    CalculateTotalPrices
+End Sub
+
+Private Sub cmbInnerUnitPrice1_Change()
+    CalculateTotalPrices
+End Sub
+
+Private Sub cmbInnerUnitPrice2_Change()
+    CalculateTotalPrices
+End Sub
+Private Sub cmbInnerUnitPrice3_Change()
+    CalculateTotalPrices
+End Sub
+
+Private Sub cmbOutterSqua1_Change()
+    CalculateTotalPrices
+End Sub
+
+Private Sub cmbOutterSqua2_Change()
+    CalculateTotalPrices
+End Sub
+
+Private Sub cmbOutterSqua3_Change()
+    CalculateTotalPrices
+End Sub
+
+Private Sub cmbOutterUnitPrice1_Change()
+    CalculateTotalPrices
+End Sub
+
+Private Sub cmbOutterUnitPrice2_Change()
+    CalculateTotalPrices
+End Sub
+
+Private Sub cmbOutterUnitPrice3_Change()
+    CalculateTotalPrices
+End Sub
+
+' 辅助函数：格式化货币
+Private Function FormatCurrency(value As Double, decimals As Long) As String
+    On Error Resume Next
+    If value = 0 Then
+        FormatCurrency = "0.00"
+    Else
+        FormatCurrency = Format(value, "￥#,##0." & String(decimals, "0"))
+    End If
+End Function
+
+
+' 匹配并设置ComboBox的选中值
+Sub MatchAndSetComboBoxValues()
+    On Error GoTo ErrorHandler
+    
+    ' 控件数组
+    Dim cmbList As Variant
+    cmbList = Array(Me.cmbInnerUnitPrice1, Me.cmbInnerUnitPrice2, Me.cmbInnerUnitPrice3, _
+                    Me.cmbOutterUnitPrice1, Me.cmbOutterUnitPrice2, Me.cmbOutterUnitPrice3)
+    
+    ' 对应的工艺类型字段索引
+    Dim craftTypeFields As Variant
+    craftTypeFields = Array(IDX_CRFT_INNER_CRAFTTYPE1, IDX_CRFT_INNER_CRAFTTYPE2, IDX_CRFT_INNER_CRAFTTYPE3, _
+                           IDX_CRFT_OUTTER_CRAFTTYPE1, IDX_CRFT_OUTTER_CRAFTTYPE2, IDX_CRFT_OUTTER_CRAFTTYPE3)
+    
+    ' 检查数据
+    If g_CraftingConfigData Is Nothing Then
+        Debug.Print "g_CraftingConfigData为Nothing"
+        Exit Sub
+    End If
+    
+    If g_CraftingConfigData.count = 0 Then
+        Debug.Print "g_CraftingConfigData为空"
+        Exit Sub
+    End If
+    
+    ' 获取配置数据（假设使用第一条记录）
+    Dim configRecord As Variant
+    configRecord = g_CraftingConfigData(1)
+    
+    Debug.Print "开始匹配并设置ComboBox..."
+    Dim matchCount As Long
+    matchCount = 0
+    
+    ' 遍历每个ComboBox
+    Dim i As Long
+    For i = LBound(cmbList) To UBound(cmbList)
+        Dim cmb As ComboBox
+        Set cmb = cmbList(i)
+        
+        ' 获取配置中的工艺类型
+        Dim craftTypeIndex As Long
+        craftTypeIndex = craftTypeFields(i)
+        
+        ' 检查字段索引是否有效
+        If UBound(configRecord) < craftTypeIndex Then
+            Debug.Print "错误：ComboBox[" & i & "] 的字段索引 " & craftTypeIndex & " 超出范围"
+            GoTo NextComboBox
+        End If
+        
+        Dim configCraftType As Variant
+        configCraftType = configRecord(craftTypeIndex)
+        
+        ' 检查配置中的工艺类型是否有效
+        If IsEmpty(configCraftType) Or IsNull(configCraftType) Then
+            Debug.Print "ComboBox[" & i & "] 的配置工艺类型为空"
+            GoTo NextComboBox
+        End If
+        
+        Dim configCraftTypeStr As String
+        configCraftTypeStr = Trim(CStr(configCraftType))
+        
+        If configCraftTypeStr = "" Then
+            Debug.Print "ComboBox[" & i & "] 的配置工艺类型为空字符串"
+            GoTo NextComboBox
+        End If
+        
+        ' 在ComboBox的列表项中查找匹配项
+        Dim foundMatch As Boolean
+        foundMatch = False
+        
+        Dim j As Long
+        For j = 0 To cmb.ListCount - 1
+            Dim listItem As String
+            listItem = cmb.List(j)
+            
+            If listItem <> "" Then
+                ' 提取列表项中的工艺类型
+                Dim listCraftType As String
+                listCraftType = ExtractCraftTypeFromCombo(listItem)
+                
+                ' 比较工艺类型
+                If StrComp(Trim(listCraftType), configCraftTypeStr, vbTextCompare) = 0 Then
+                    ' 找到匹配项，设置ComboBox的值为这个列表项
+                    cmb.value = listItem
+                    foundMatch = True
+                    matchCount = matchCount + 1
+                    
+                    Debug.Print "ComboBox[" & i & "] 设置为: " & listItem
+                    Exit For  ' 找到第一个匹配项就退出
+                End If
+            End If
+        Next j
+        
+        If Not foundMatch Then
+            Debug.Print "ComboBox[" & i & "] 未找到匹配项，保持原值: " & cmb.value
+        End If
+        
+NextComboBox:
+    Next i
+    
+    Debug.Print "匹配完成，成功设置 " & matchCount & " 个ComboBox"
+    
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "MatchAndSetComboBoxValues 错误: " & Err.Description
+    ' 出错时尝试恢复
+    Resume Next
+End Sub
+
+
+' 提取工艺类型辅助函数
+Private Function ExtractCraftTypeFromCombo(comboText As String) As String
+    On Error Resume Next
+    
+    ExtractCraftTypeFromCombo = ""
+    
+    If Len(Trim(comboText)) = 0 Then
+        Exit Function
+    End If
+    
+    ' 查找"--"分隔符
+    Dim separatorPos As Long
+    separatorPos = InStr(1, comboText, "--", vbTextCompare)
+    
+    If separatorPos > 0 Then
+        ' 提取"--"前面的部分（工艺类型）
+        ExtractCraftTypeFromCombo = Trim(left(comboText, separatorPos - 1))
+    Else
+        ' 如果没有"--"，检查是否包含"￥"
+        Dim pricePos As Long
+        pricePos = InStr(1, comboText, "￥", vbTextCompare)
+        
+        If pricePos > 0 Then
+            ExtractCraftTypeFromCombo = Trim(left(comboText, pricePos - 1))
+        Else
+            ' 如果既没有"--"也没有"￥"，返回整个文本
+            ExtractCraftTypeFromCombo = Trim(comboText)
+        End If
+    End If
+End Function
+
+
+' 构建表面处理描述字符串
+Private Sub BuildCraftingDescription()
+    Dim innerSet As Object, outerSet As Object
+    Set innerSet = CreateObject("Scripting.Dictionary")
+    Set outerSet = CreateObject("Scripting.Dictionary")
+    
+    ' 检查内表面
+    If ExtractNumber(Me.lblInnerTotalPrice1.Caption) > 0 And Me.cmbInnerUnitPrice1.value <> "请选择..." Then
+        innerSet(ExtractCraftTypeFromCombo(Me.cmbInnerUnitPrice1.value)) = 1
+    End If
+    If ExtractNumber(Me.lblInnerTotalPrice2.Caption) > 0 And Me.cmbInnerUnitPrice2.value <> "请选择..." Then
+        innerSet(ExtractCraftTypeFromCombo(Me.cmbInnerUnitPrice2.value)) = 1
+    End If
+    If ExtractNumber(Me.lblInnerTotalPrice3.Caption) > 0 And Me.cmbInnerUnitPrice3.value <> "请选择..." Then
+        innerSet(ExtractCraftTypeFromCombo(Me.cmbInnerUnitPrice3.value)) = 1
+    End If
+    
+    ' 检查外表面
+    If ExtractNumber(Me.lblOutterTotalPrice1.Caption) > 0 And Me.cmbOutterUnitPrice1.value <> "请选择..." Then
+        outerSet(ExtractCraftTypeFromCombo(Me.cmbOutterUnitPrice1.value)) = 1
+    End If
+    If ExtractNumber(Me.lblOutterTotalPrice2.Caption) > 0 And Me.cmbOutterUnitPrice2.value <> "请选择..." Then
+        outerSet(ExtractCraftTypeFromCombo(Me.cmbOutterUnitPrice2.value)) = 1
+    End If
+    If ExtractNumber(Me.lblOutterTotalPrice3.Caption) > 0 And Me.cmbOutterUnitPrice3.value <> "请选择..." Then
+        outerSet(ExtractCraftTypeFromCombo(Me.cmbOutterUnitPrice3.value)) = 1
+    End If
+    
+    ' 获取原始描述
+    Dim originalDesc As String
+    originalDesc = modPublicSequence.g_CallbackData.Desc
+    
+    ' 去掉原有的内外表面处理文字
+    Dim baseDesc As String
+    baseDesc = originalDesc
+    
+    ' 去掉内表面处理部分
+    Dim innerPos As Long
+    innerPos = InStr(baseDesc, "，内表面处理（")
+    If innerPos > 0 Then
+        Dim innerEndPos As Long
+        innerEndPos = InStr(innerPos, baseDesc, "）")
+        If innerEndPos > 0 Then
+            baseDesc = left(baseDesc, innerPos - 1)
+            ' 检查后面是否还有外表面处理
+            If InStr(innerEndPos, baseDesc & " ", "，外表面处理（") > 0 Then
+                ' 如果内表面处理后面直接是外表面处理，需要去掉连接符
+                baseDesc = left(baseDesc, Len(baseDesc) - 1)
+            End If
+        End If
+    End If
+    
+    ' 去掉外表面处理部分
+    Dim outerPos As Long
+    outerPos = InStr(baseDesc, "，外表面处理（")
+    If outerPos > 0 Then
+        Dim outerEndPos As Long
+        outerEndPos = InStr(outerPos, baseDesc, "）")
+        If outerEndPos > 0 Then
+            baseDesc = left(baseDesc, outerPos - 1)
+        End If
+    End If
+    
+    ' 去掉末尾的逗号
+    If Right(baseDesc, 1) = "，" Then
+        baseDesc = left(baseDesc, Len(baseDesc) - 1)
+    End If
+    
+    ' 构建新字符串
+    Dim result As String
+    result = baseDesc
+    
+    If innerSet.count > 0 Then
+        Dim innerList As String, key As Variant
+        For Each key In innerSet.keys
+            innerList = innerList & key & "，"
+        Next key
+        innerList = left(innerList, Len(innerList) - 1)
+        result = result & "，内表面处理（" & innerList & "）"
+    End If
+    
+    If outerSet.count > 0 Then
+        Dim outerList As String
+        For Each key In outerSet.keys
+            outerList = outerList & key & "，"
+        Next key
+        outerList = left(outerList, Len(outerList) - 1)
+        result = result & "，外表面处理（" & outerList & "）"
+    End If
+    
+    ' 更新到g_CallbackData
+    g_CallbackData.Desc = result
+    
+End Sub
+

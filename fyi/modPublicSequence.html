@@ -1,0 +1,699 @@
+' modPublicSequence - 预先加载一些必定会用的表格，减少对数据库的查询
+Option Explicit
+
+' 全局缓存实例
+' 定义汉字序列（一到十二对应的系统名称）
+Public ChineseSequence As Variant
+
+Public g_PeizhibiaoColumn As Variant
+
+
+' 全局变量：存储当前正在由 lstCrafting 编辑的目标单元格
+Public g_CurrentlstCraftingCell As Range
+
+Public g_ActiveComponentForm As frmDeviceChoice
+
+' 全局变量，用于传递改动后的工艺价格
+Public g_CalculatedTotalCraftingValue As String
+
+' 全局变量，用于在OnTime触发时传递坐标
+Public g_PendingMenuX As Long
+Public g_PendingMenuY As Long
+
+Public Type CellFillData
+    name As String
+    Desc As String
+    Type As String  ' 避免关键字冲突
+    Price As String
+    Unit As String
+    Brand As String
+    Material As String
+End Type
+
+' 公共变量用于传递
+Public g_CallbackData As CellFillData
+Public g_IsPriceChanged As Boolean
+
+Public Const WHERE_EXCEL As String = "Excel"
+Public Const WHERE_CHANGEPRICEWEB As String = "ChangePriceWeb"
+
+' 声明一个全局或模块级变量来存储二维数组
+' 通常放在模块顶部，声明在所有 Sub/Function 之外
+
+' 初始化配置表表头结构 (修改为二维数组)
+Public Sub InitializePeizhibiaoColumn()
+    ' ReDim 用于动态调整数组大小
+    ' 19 行 (0 To 11)， 2 列 (0 To 1)
+    ' 列 0: 表格抬头对应的字母
+    ' 列 1: 对应的表格抬头
+    ' 整个表格的抬头从第二行开始
+    ReDim g_PeizhibiaoColumn(0 To 18, 0 To 1)
+
+    g_PeizhibiaoColumn(0, 0) = "A":     g_PeizhibiaoColumn(0, 1) = "系列"
+    g_PeizhibiaoColumn(1, 0) = "B":     g_PeizhibiaoColumn(1, 1) = "设备名称"
+    g_PeizhibiaoColumn(2, 0) = "C":     g_PeizhibiaoColumn(1, 1) = "规格"
+    g_PeizhibiaoColumn(3, 0) = "D":     g_PeizhibiaoColumn(3, 1) = "型号"
+    g_PeizhibiaoColumn(4, 0) = "E":     g_PeizhibiaoColumn(4, 1) = "材质"
+    g_PeizhibiaoColumn(5, 0) = "F":     g_PeizhibiaoColumn(5, 1) = ""         '此列没有抬头
+    g_PeizhibiaoColumn(6, 0) = "G":     g_PeizhibiaoColumn(6, 1) = "品牌"
+    g_PeizhibiaoColumn(7, 0) = "H":     g_PeizhibiaoColumn(7, 1) = "数量"
+    g_PeizhibiaoColumn(8, 0) = "I":     g_PeizhibiaoColumn(8, 1) = "单位"
+    g_PeizhibiaoColumn(9, 0) = "J":     g_PeizhibiaoColumn(9, 1) = "数量"
+    g_PeizhibiaoColumn(10, 0) = "K":    g_PeizhibiaoColumn(10, 1) = "单位"
+    g_PeizhibiaoColumn(11, 0) = "L":    g_PeizhibiaoColumn(11, 1) = "单价 (元)"
+    g_PeizhibiaoColumn(12, 0) = "M":    g_PeizhibiaoColumn(12, 1) = "总价 (元)"
+    g_PeizhibiaoColumn(13, 0) = "N":    g_PeizhibiaoColumn(13, 1) = "成本单价 (元)"
+    g_PeizhibiaoColumn(14, 0) = "O":    g_PeizhibiaoColumn(14, 1) = "成本合计 (元)"
+    g_PeizhibiaoColumn(15, 0) = "P":    g_PeizhibiaoColumn(15, 1) = "成本总计 (元)"
+    g_PeizhibiaoColumn(16, 0) = "Q":    g_PeizhibiaoColumn(16, 1) = "系数"
+    g_PeizhibiaoColumn(17, 0) = "R":    g_PeizhibiaoColumn(17, 1) = "备注"
+    g_PeizhibiaoColumn(18, 0) = "S":    g_PeizhibiaoColumn(18, 1) = "备注"
+End Sub
+
+
+' 初始化汉字序列 (修改为二维数组)
+Public Sub InitializeChineseSequence()
+    ' ReDim 用于动态调整数组大小
+    ' 12 行 (0 To 11)， 2 列 (0 To 1)
+    ' 列 0: 汉字
+    ' 列 1: 对应的数字 (Long 类型)
+    ReDim ChineseSequence(0 To 12, 0 To 1)
+    
+    ChineseSequence(0, 0) = "一":     ChineseSequence(0, 1) = "原料给料系统"
+    ChineseSequence(1, 0) = "二":     ChineseSequence(1, 1) = "改性剂给料系统"
+    ChineseSequence(2, 0) = "三":     ChineseSequence(2, 1) = "磨机系统"
+    ChineseSequence(3, 0) = "四":     ChineseSequence(3, 1) = "除尘器系统"
+    ChineseSequence(4, 0) = "五":     ChineseSequence(4, 1) = "加热系统"
+    ChineseSequence(5, 0) = "六":     ChineseSequence(5, 1) = "输送管道部分"
+    ChineseSequence(6, 0) = "七":     ChineseSequence(6, 1) = "筛分除磁包装系统"
+    ChineseSequence(7, 0) = "八":     ChineseSequence(7, 1) = "仪器仪表"
+    ChineseSequence(8, 0) = "九":     ChineseSequence(8, 1) = "公用工程"
+    ChineseSequence(9, 0) = "十":     ChineseSequence(9, 1) = "钢构"
+    ChineseSequence(10, 0) = "十一":  ChineseSequence(10, 1) = "控制系统部分"
+    ChineseSequence(11, 0) = "十二":  ChineseSequence(11, 1) = "运输、安装"
+    ChineseSequence(12, 0) = "系列":  ChineseSequence(12, 1) = "" ' 或者用 -1 或其他特殊值表示
+End Sub
+
+
+' 公共函数：根据汉字查找对应的系统标识（第二列的值，作为字符串返回）
+' 输入: hanziChar - 要查找的汉字字符串
+' 输出: 对应的第二列值 (作为 String 返回)
+'       如果找到，返回对应的值（数字也会转为字符串）
+'       如果未找到，返回空字符串 ""
+Public Function GetSystemFromHanzi(ByVal hanziChar As String) As String
+    On Error GoTo ErrorHandler
+
+    Dim i As Long
+    Dim result As String
+    result = "" ' 初始化返回值为空字符串，表示未找到
+
+    ' 确保 ChineseSequence 已初始化
+    If IsEmpty(ChineseSequence) Then
+        InitializeChineseSequence ' 确保数组已加载
+    End If
+
+    ' 检查输入是否为空或无效
+    If Len(Trim(hanziChar)) = 0 Then
+        ' 输入为空，直接返回空字符串
+        GetSystemFromHanzi = result
+        Exit Function
+    End If
+
+    ' 遍历 ChineseSequence 数组的第一维（行），查找匹配的汉字
+    For i = LBound(ChineseSequence, 1) To UBound(ChineseSequence, 1)
+        If ChineseSequence(i, 0) = hanziChar Then ' 比较第一列（汉字）
+            ' 找到匹配项，将第二列的值转换为字符串并返回
+            result = CStr(ChineseSequence(i, 1)) ' CStr 确保返回字符串
+            Exit For ' 找到后退出循环
+        End If
+    Next i
+
+    ' 返回结果 (找到则为字符串，未找到则为空字符串 "")
+    GetSystemFromHanzi = result
+    Exit Function
+
+ErrorHandler:
+    ' 错误处理：打印错误信息到立即窗口
+    Debug.Print "GetSystemFromHanzi 错误: " & Err.Number & " - " & Err.Description & " (输入: " & hanziChar & ")"
+    ' 即使出错，也返回空字符串
+    GetSystemFromHanzi = ""
+End Function
+
+
+'-----------------------------------------------------------------------------
+' Procedure : Update_Related_Columns_After_Selection_Public
+' Purpose   : 当配置表的某个单元格被修改后，更新与其关联的列。
+'             所有更新操作均通过在目标单元格中写入公式来实现，而不是直接计算值。
+'             业务逻辑顺序: O (组件单价) -> P (产品成本) -> L (单台报价) -> M (总报价)
+'             注意：Q列已被删除。Q列之后的列 (R,S,...) 左移一列变为 (Q,R,...)。
+'                   因此，原代码中对 S 列的引用应修改为对 R 列的引用。
+'
+' Arguments :
+'   ws          (ByRef Worksheet) : 发生更改的工作表对象 (应为"配置表")。
+'   changedRow  (ByVal Long)      : 发生更改的单元格所在的行号。
+'
+' Author    : 基于您的原始代码修改
+' Date      : 2023-10-27 (修改日期)
+'-----------------------------------------------------------------------------
+Public Sub Update_Related_Columns_After_Selection_Public(ByRef ws As Worksheet, ByVal changedRow As Long)
+
+    On Error GoTo ErrorHandler ' 启用错误处理
+
+    Dim targetRow As Long
+    targetRow = changedRow
+
+    ' --- 1. 获取 B 列合并区域信息 ---
+    ' 目的：确定当前操作影响的产品范围，用于后续更新 P, L, M 列。
+    Dim bCell As Range
+    Dim mergedArea As Range
+    Dim firstMergedRow As Long ' 产品范围的起始行
+    Dim lastMergedRow As Long  ' 产品范围的结束行
+
+    Set bCell = ws.Cells(targetRow, "B") ' B列通常包含产品标识
+    Set mergedArea = bCell.mergeArea      ' 获取该产品标识所在的合并区域
+    firstMergedRow = mergedArea.row
+    lastMergedRow = mergedArea.row + mergedArea.Rows.count - 1
+
+    ' --- 2. 更新 O 列 (组件单价 = N * H) ---
+    ' 依赖：N列和H列已有数据。
+    Call Update_Column_O_Component_Unit_Price_Formula(ws, targetRow)
+
+    ' --- 3. 更新 P 列 (产品成本 = SUM(O列)) ---
+    ' 依赖：O列公式已设置。
+    Call Update_Column_P_Product_Cost_Formula(ws, firstMergedRow, lastMergedRow)
+
+    ' --- 4. 更新 L 列 (单台报价 = P * R) --- ' <<< 修改点：原 S 列 -> 现 R 列 >>>
+    ' 依赖：P列公式已设置；R列为报价系数 (原S列)。
+    Call Update_Column_L_Listed_Price_Per_Unit_Formula(ws, firstMergedRow) ' <<< 此函数内部需要修改 >>>
+
+    ' --- 5. 更新 M 列 (总报价 = L * J) ---
+    ' 依赖：L列公式已设置；J列为数量系数。
+    Call Update_Column_M_Total_Quotation_Formula(ws, firstMergedRow, lastMergedRow)
+
+    ' --- 注意：---
+    ' Q列已被删除，因此不再需要 Update_Column_Q_Total_Cost_Formula 相关逻辑。
+
+    Exit Sub ' 正常退出
+
+' --- 统一错误处理 ---
+ErrorHandler:
+    MsgBox "更新关联列时发生错误: " & Err.Description & " (行: " & changedRow & ")", vbCritical, "VBA 错误"
+    Debug.Print "Error in Update_Related_Columns_After_Selection_Public (Row: " & changedRow & "): " & Err.Description & " (" & Err.Number & ")"
+
+End Sub ' Update_Related_Columns_After_Selection_Public
+
+'-----------------------------------------------------------------------------
+' 以下为辅助子程序，均为 Private，仅供本模块内 Update_Related_Columns_After_Selection_Public 调用
+'-----------------------------------------------------------------------------
+
+' --- 更新 O 列公式 ---
+Private Sub Update_Column_O_Component_Unit_Price_Formula(ByRef ws As Worksheet, ByVal row As Long)
+    On Error GoTo ErrorHandler
+    Dim formula_O As String
+    formula_O = "=" & ws.Cells(row, "N").Address(False, False) & "*" & ws.Cells(row, "H").Address(False, False)
+    ws.Cells(row, "O").formula = formula_O
+    Exit Sub
+ErrorHandler:
+    Debug.Print "Error in Update_Column_O_Component_Unit_Price_Formula (Row: " & row & "): " & Err.Description & " (" & Err.Number & ")"
+    ws.Cells(row, "O").formula = "" ' 清除公式以防错误
+End Sub
+
+' --- 更新 P 列公式 ---
+Private Sub Update_Column_P_Product_Cost_Formula(ByRef ws As Worksheet, ByVal firstRow As Long, ByVal lastRow As Long)
+    On Error GoTo ErrorHandler
+    Dim sum_O_Formula As String
+    sum_O_Formula = "=SUM(" & ws.Cells(firstRow, "O").Address(False, False) & ":" & ws.Cells(lastRow, "O").Address(False, False) & ")"
+    ws.Cells(firstRow, "P").formula = sum_O_Formula
+    Exit Sub
+ErrorHandler:
+    Debug.Print "Error in Update_Column_P_Product_Cost_Formula (Rows: " & firstRow & "-" & lastRow & "): " & Err.Description & " (" & Err.Number & ")"
+    ws.Cells(firstRow, "P").formula = "" ' 清除公式以防错误
+End Sub
+
+' --- 更新 L 列公式 ---
+Private Sub Update_Column_L_Listed_Price_Per_Unit_Formula(ByRef ws As Worksheet, ByVal firstRow As Long)
+    On Error GoTo ErrorHandler
+    Dim formula_L As String
+    ' <<< 修改点：原 S 列 -> 现 R 列 >>>
+    formula_L = "=" & ws.Cells(firstRow, "P").Address(False, False) & "*" & ws.Cells(firstRow, "Q").Address(False, False)
+    ws.Cells(firstRow, "L").formula = formula_L
+    Exit Sub
+ErrorHandler:
+    Debug.Print "Error in Update_Column_L_Listed_Price_Per_Unit_Formula (Row: " & firstRow & "): " & Err.Description & " (" & Err.Number & ")"
+    ws.Cells(firstRow, "L").formula = "" ' 清除公式以防错误
+End Sub
+
+' --- 更新 M 列公式 ---
+Private Sub Update_Column_M_Total_Quotation_Formula(ByRef ws As Worksheet, ByVal firstRow As Long, ByVal lastRow As Long)
+    On Error GoTo ErrorHandler
+    Dim r As Long
+    Dim formula_M As String
+    ' 注意：此处引用的 L 列没有变动
+    For r = firstRow To lastRow
+        formula_M = "=" & ws.Cells(firstRow, "L").Address(False, False) & "*" & ws.Cells(r, "J").Address(False, False)
+        ws.Cells(r, "M").formula = formula_M
+    Next r
+    Exit Sub
+ErrorHandler:
+    Debug.Print "Error in Update_Column_M_Total_Quotation_Formula (Rows: " & firstRow & "-" & lastRow & "): " & Err.Description & " (" & Err.Number & ")"
+    ' 出错时清除该产品范围内的 M 列公式
+    For r = firstRow To lastRow
+        ws.Cells(r, "M").formula = ""
+    Next r
+End Sub
+
+' --- 注意：所有辅助子程序 Update_Column_X_..._Formula 仍保持为 Private ---
+' --- 因为我们只希望外部通过公共的入口函数 Update_Related_Columns_After_Selection_Public 来调用它们 ---
+
+
+' --- 辅助函数：处理 Null 值 ---
+' Nz 函数在 Access VBA 中内置，在 Excel VBA 中需要自己定义或使用替代方法
+' 这里提供一个简单的 Nz 替代
+Public Function Nz(varIn, varDefault)
+    If IsNull(varIn) Or varIn = "" Then
+        Nz = varDefault
+    Else
+        Nz = varIn
+    End If
+End Function
+
+' 检查指定名称的 UserForm 是否已加载
+Public Function IsUserFormLoaded(formName As String) As Boolean
+    Dim frm As Object
+    For Each frm In VBA.UserForms
+        If frm.name = formName Then
+            IsUserFormLoaded = True
+            Exit Function
+        End If
+    Next frm
+    IsUserFormLoaded = False
+End Function
+
+
+' 记录错误
+Public Sub LogError(methodName As String, errorDesc As String)
+    Debug.Print "错误 [" & methodName & "]: " & errorDesc & " (时间: " & Now & ")"
+End Sub
+
+
+' ============================================
+' 函数2：辅助函数，读取文件二进制数据
+' ============================================
+Private Function ReadBinaryFile(filePath As String) As Byte()
+    On Error GoTo ErrorHandler
+    
+    Dim fileNum As Integer
+    Dim fileData() As Byte
+    
+    ' 检查文件是否存在
+    If Dir(filePath) = "" Then
+        ReDim fileData(0)
+        ReadBinaryFile = fileData
+        Exit Function
+    End If
+    
+    fileNum = FreeFile
+    Open filePath For Binary As #fileNum
+    ReDim fileData(LOF(fileNum) - 1)
+    Get #fileNum, , fileData
+    Close #fileNum
+    
+    ReadBinaryFile = fileData
+    Exit Function
+    
+ErrorHandler:
+    ReDim fileData(0)
+    ReadBinaryFile = fileData
+    Debug.Print "ReadBinaryFile Error: " & Err.Description
+End Function
+
+
+' ============================================
+' 图片打包工具 - 创建 .pkd (Pack Data) 文件
+' ============================================
+Public Sub CreatePackFile()
+    ' 获取 Excel 文件所在的目录
+    Dim outputDir As String
+    outputDir = ThisWorkbook.Path & "\" ' Excel 文件所在目录
+    Dim outputFile As String
+    outputFile = outputDir & "images.pkd" ' 自定义后缀，不会被加密
+    
+    ' 构建图片目录路径
+    Dim picDir As String
+    picDir = outputDir & "pic\"
+    
+    ' 检查 pic 目录是否存在
+    If Dir(picDir, vbDirectory) = "" Then
+        MsgBox "错误：目录不存在: " & picDir, vbCritical
+        Exit Sub
+    End If
+    
+    ' 搜索目录下的所有 PNG 文件
+    Dim fileName As String
+    Dim filePath As String
+    Dim pngFilePaths As Collection
+    Set pngFilePaths = New Collection
+    
+    fileName = Dir(picDir & "*.png", vbNormal)
+    Do While fileName <> ""
+        filePath = picDir & fileName
+        pngFilePaths.Add filePath
+        fileName = Dir()
+    Loop
+    
+    If pngFilePaths.count = 0 Then
+        MsgBox "警告：在目录 '" & picDir & "' 中未找到任何 PNG 文件！", vbExclamation
+        Exit Sub
+    End If
+    
+    Dim fileNum As Integer
+    fileNum = FreeFile
+    
+    ' 创建打包文件
+    Open outputFile For Binary As #fileNum
+    
+    ' 1. 文件头："PK"标识
+    Put #fileNum, , CByte(Asc("P"))
+    Put #fileNum, , CByte(Asc("K"))
+    
+    ' 2. 文件数量（2字节，最大65535个文件）
+    Dim fileCount As Integer
+    fileCount = pngFilePaths.count
+    Put #fileNum, , CInt(fileCount)
+    
+    ' 3. 逐个写入文件
+    Dim i As Integer
+    Dim totalOriginalSize As Double ' 使用 Double 防止溢出
+    For i = 1 To pngFilePaths.count ' Collection 索引从 1 开始
+        filePath = pngFilePaths(i)
+        
+        Dim fileNameOnly As String
+        Dim fileData() As Byte
+        
+        ' 提取文件名（不含路径）
+        fileNameOnly = Mid(filePath, InStrRev(filePath, "\") + 1)
+        ' 读取文件二进制数据
+        fileData = ReadBinaryFile(filePath)
+        
+        If Not Not fileData Then ' 检查数组是否非空
+            ' 累加原始文件大小
+            totalOriginalSize = totalOriginalSize + (UBound(fileData) - LBound(fileData) + 1)
+            
+            ' 3.1 文件名长度（1字节，最大255字符）
+            Put #fileNum, , CByte(Len(fileNameOnly))
+            
+            ' 3.2 文件名
+            Put #fileNum, , fileNameOnly
+            
+            ' 3.3 文件数据长度（4字节，最大4GB）
+            Dim dataLength As Long
+            dataLength = UBound(fileData) - LBound(fileData) + 1
+            Put #fileNum, , dataLength
+            
+            ' 3.4 文件数据
+            Put #fileNum, , fileData
+        Else
+            ' 如果某个文件读取失败，给出警告（可以选择跳过或中断）
+            Debug.Print "警告：无法读取文件 '" & filePath & "'"
+        End If
+    Next i
+    
+    Close #fileNum
+    
+    ' 获取打包后文件的大小
+    Dim packedFileSize As Double
+    packedFileSize = FileLen(outputFile)
+    
+    ' 计算压缩率 (可选)
+    Dim compressionRatio As Double
+    If totalOriginalSize > 0 Then
+        compressionRatio = (totalOriginalSize - packedFileSize) / totalOriginalSize * 100
+    Else
+        compressionRatio = 0 ' 如果原始大小为0，压缩率为0
+    End If
+    
+    ' 显示调试信息
+    MsgBox "打包完成！" & vbCrLf & _
+           "原始文件数量: " & fileCount & vbCrLf & _
+           "原始文件总大小: " & Format(totalOriginalSize, "#,##0") & " 字节 (" & Format(totalOriginalSize / 1024 / 1024, "0.00") & " MB)" & vbCrLf & _
+           "打包后文件大小: " & Format(packedFileSize, "#,##0") & " 字节 (" & Format(packedFileSize / 1024 / 1024, "0.00") & " MB)" & vbCrLf & _
+           "压缩率: " & Format(compressionRatio, "0.00") & "%", vbInformation
+
+End Sub
+
+
+' ============================================
+' 从打包文件中读取图片并转换为Base64
+' ============================================
+Public Function GetImageFromPack(imageName As String) As String
+    Static packData As Object ' 缓存打包文件数据
+    Dim packFile As String
+    
+    ' 构建打包文件的完整路径，位于 Excel 文件所在的目录
+    packFile = ThisWorkbook.Path & "\images.pkd"
+    
+    ' 第一次调用时加载并解析整个打包文件
+    If packData Is Nothing Then
+        Set packData = ParsePackFile(packFile)
+        If packData Is Nothing Then
+            GetImageFromPack = ""
+            Exit Function
+        End If
+    End If
+    
+    ' 从缓存中获取图片
+    If packData.Exists(imageName) Then
+        Dim bytes() As Byte
+        bytes = packData(imageName)
+        GetImageFromPack = BytesToBase64(bytes)
+    Else
+        GetImageFromPack = ""
+    End If
+End Function
+
+
+' 解析打包文件到字典中
+Private Function ParsePackFile(filePath As String) As Object
+    On Error GoTo ErrorHandler
+    
+    Dim fileNum As Integer
+    Dim fileData() As Byte
+    Dim dict As Object
+    Set dict = CreateObject("Scripting.Dictionary")
+    
+    fileNum = FreeFile
+    Open filePath For Binary As #fileNum
+    
+    ' 1. 检查文件头
+    Dim header(1) As Byte
+    Get #fileNum, , header
+    If Chr(header(0)) & Chr(header(1)) <> "PK" Then
+        Close #fileNum
+        Set ParsePackFile = Nothing
+        Exit Function
+    End If
+    
+    ' 2. 读取文件数量
+    Dim fileCount As Integer
+    Get #fileNum, , fileCount
+    
+    ' 3. 读取所有文件
+    Dim i As Integer
+    For i = 1 To fileCount
+        ' 3.1 文件名长度
+        Dim nameLen As Byte
+        Get #fileNum, , nameLen
+        
+        ' 3.2 文件名
+        Dim fileName As String
+        fileName = String(nameLen, " ")
+        Get #fileNum, , fileName
+        
+        ' 3.3 文件数据长度
+        Dim dataLength As Long
+        Get #fileNum, , dataLength
+        
+        ' 3.4 文件数据
+        Dim fileBytes() As Byte
+        ReDim fileBytes(dataLength - 1)
+        Get #fileNum, , fileBytes
+        
+        ' 存入字典
+        dict(fileName) = fileBytes
+    Next i
+    
+    Close #fileNum
+    Set ParsePackFile = dict
+    Exit Function
+    
+ErrorHandler:
+    Close #fileNum
+    Set ParsePackFile = Nothing
+End Function
+
+
+' 字节数组转Base64
+Private Function BytesToBase64(bytes() As Byte) As String
+    On Error Resume Next
+    Dim xmlDoc As Object, xmlNode As Object
+    
+    Set xmlDoc = CreateObject("MSXML2.DOMDocument")
+    Set xmlNode = xmlDoc.createElement("b64")
+    
+    xmlNode.DataType = "bin.base64"
+    xmlNode.nodeTypedValue = bytes
+    
+    BytesToBase64 = "data:image/png;base64," & xmlNode.Text
+    
+    Set xmlNode = Nothing
+    Set xmlDoc = Nothing
+End Function
+
+
+' 清理Base64字符串
+Public Function cleanBase64(base64Str As String) As String
+    Dim result As String
+    result = base64Str
+    ' 1. 转义JSON/JavaScript中的特殊字符
+    result = Replace(result, "\", "\\")  ' 反斜杠本身需要转义
+    result = Replace(result, "'", "\'")  ' 单引号
+    result = Replace(result, """", "\""") ' 双引号（虽然我们多用单引号，但安全起见）
+    result = Replace(result, "{", "\{")
+    result = Replace(result, "}", "\}")
+    ' 2. 移除可能会破坏字符串结构的换行符
+    result = Replace(result, vbCr, "")
+    result = Replace(result, vbLf, "")
+    result = Replace(result, vbTab, "")
+    cleanBase64 = result
+End Function
+
+
+Public Sub ShowMenuSafely()
+    On Error GoTo ErrorHandler
+    Dim menuForm As frmWebRightClickMenu
+    
+    Debug.Print ">>> 使用 vbModal 模式创建菜单..."
+    Set menuForm = New frmWebRightClickMenu
+    
+    With menuForm
+        .StartUpPosition = 0
+        .left = g_PendingMenuX
+        .top = g_PendingMenuY
+        .Width = 100  ' 你的菜单宽度
+        .Height = 250 ' 你的菜单高度
+        
+        ' --- 关键修改：使用 vbModal 显示 ---
+        ' 虽然它是模态的，但我们可以立即做一些调整
+        .Show vbModal ' 不再是 vbModeless
+        
+        ' 注意：代码执行到这里时，菜单已经关闭
+        ' 所以在这里设置属性的操作是无效的
+    End With
+    
+    Debug.Print ">>> 菜单交互完成。"
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print ">>> [ERROR] " & Err.Number & ": " & Err.Description
+    ' 如果出错，尝试最基础的显示
+    MsgBox "菜单坐标: (" & g_PendingMenuX & ", " & g_PendingMenuY & ")", vbInformation
+End Sub
+
+
+Public Sub TestNewMenuForm()
+    On Error GoTo ErrorHandler
+    Dim frm As frmWebRightClickMenu
+    Set frm = New frmWebRightClickMenu ' 使用全新的窗体
+    
+    With frm
+            Debug.Print "窗体可见性1: " & .visible
+        
+        .StartUpPosition = 0
+        .left = 300
+        .top = 300
+        .Width = 200
+        .Height = 150
+        .BackColor = RGB(255, 200, 200) ' 浅红色背景，醒目
+        
+        Debug.Print "【测试】新窗体创建成功，即将显示..."
+        .Show vbModeless
+                Debug.Print "窗体可见性2: " & .visible
+
+    End With
+    ' 注意：这里没有 Set frm = Nothing，保留引用以观察
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "【测试】错误 " & Err.Number & ": " & Err.Description
+End Sub
+
+
+' 加载HTML到WebBrowser
+Public Sub LoadHTMLToWebBrowser(wb As Object, html As String)
+
+    ' 这里直接写入html，目的是让wb必须在初始化的地方初始化
+
+    Do While wb.ReadyState <> 4 Or wb.Busy
+        DoEvents
+    Loop
+
+'    If wb.Document Is Nothing Then
+'        ' Debug.Print "WebBrowser Document 为 Nothing，尝试初始化..."
+'        ' 导航到空白页以强制初始化 Document 对象
+'        wb.Navigate "about:blank"
+'    End If
+
+    wb.Document.Open "text/html", "replace"
+    wb.Document.Write html
+    wb.Document.Close
+
+End Sub
+
+
+' === 用全局变量数据填充单元格 ===
+Public Sub FillCellsWithData(ByVal targetCell As Range, ByRef fillData As CellFillData)
+    If targetCell Is Nothing Then Exit Sub
+    
+    With targetCell
+'        .Offset(0, 0).value = fillData.Name       ' B列（注释掉）
+        .Offset(0, 1).value = fillData.Desc       ' C列
+        .Offset(0, 2).value = fillData.Type       ' E列
+        .Offset(0, 3).value = fillData.Material   ' F列
+        .Offset(0, 4).value = fillData.Brand      ' G列
+        .Offset(0, 6).value = fillData.Unit       ' I列，单位列
+        
+        ' 如果数量列为空，设置为1
+        If .Offset(0, 5).value = "" Then
+            .Offset(0, 5).value = 1#
+        End If
+        
+        ' 根据工作表填写单价
+        If .Worksheet.name = "易损件表" Then
+            .Offset(0, 9).value = fillData.Price   ' L列
+        Else
+            .Offset(0, 11).value = fillData.Price  ' N列
+        End If
+    End With
+End Sub
+
+
+' 从传入的字符串中提取价格数值（去除格式化符号）
+Public Function GetPriceValueWithSymbol(priceText As String) As String
+    Dim cleanedText As String
+    
+    On Error Resume Next ' 启用错误处理，如果 Replace 遇到 Null 或非字符串类型，会返回 Null，但不会中断程序
+    
+    ' 初始化清理后的文本
+    cleanedText = priceText
+    
+    ' 清理文本
+    cleanedText = Replace(cleanedText, ",", "")  ' 去掉千分位逗号
+    cleanedText = Replace(cleanedText, "￥", "") ' 去掉货币符号 (第一个)
+    cleanedText = Replace(cleanedText, "￥", "") ' 去掉货币符号 (第二个，以防万一) - 实际上一次就够了
+    
+    ' 可以根据需要进一步清理其他符号，例如空格、美元符号等
+    ' cleanedText = Replace(cleanedText, "$", "")
+    ' cleanedText = Replace(cleanedText, " ", "")
+
+    GetPriceValueWithSymbol = cleanedText ' 返回清理后的文本
+End Function

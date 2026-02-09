@@ -1,0 +1,220 @@
+' modSelectionConditions - 支持合并单元格的条件判断模块
+Option Explicit
+
+' 定义处理程序类型
+Public Type SelectionHandler
+    condition As String
+    HandlerName As String
+    Description As String
+End Type
+
+' 注册的处理程序数组
+Private handlers() As SelectionHandler
+Private handlerCount As Integer
+
+
+' 获取单元格的实际值（通用版，正确处理合并单元格）
+Public Function GetCellValue(ByVal Target As Range) As String
+    If Target Is Nothing Then
+        GetCellValue = ""
+        Exit Function
+    End If
+
+    Dim realCell As Range
+    On Error Resume Next
+    ' MergeArea 对所有单元格都有效：
+    ' - 如果是合并单元格的一部分，返回整个合并区域
+    ' - 如果是普通单元格，返回自身
+    
+    ' 总是从左上角单个单元格开始
+    Dim firstCell As Range
+    Set firstCell = Target.Cells(1, 1)
+    
+    If firstCell.MergeCells Then
+        Set realCell = firstCell.mergeArea.Cells(1, 1)
+    Else
+        Set realCell = firstCell
+    End If
+
+    On Error GoTo 0
+
+    If realCell Is Nothing Then
+        GetCellValue = ""
+        Exit Function
+    End If
+
+    Dim v As Variant
+    v = realCell.value
+
+    ' 安全转换：过滤空值、错误值
+    If IsEmpty(v) Or IsNull(v) Or v = "" Or IsError(v) Then
+        GetCellValue = ""
+    Else
+        GetCellValue = Trim(CStr(v))
+    End If
+End Function
+
+
+' A列汉字序列条件判断（支持合并单元格）
+Public Function IsAColumnChineseSequence(ByVal Target As Range) As Boolean
+    ' 只处理A列
+    If Target.Column <> 1 Then Exit Function
+    
+    ' 处理合并单元格 - 检查整个合并区域是否在A列
+    If Target.MergeCells Then
+        If Target.Column <> 1 Then Exit Function
+    End If
+    
+    ' 只处理单个单元格或合并单元格
+    If Target.count > 1 And Not Target.MergeCells Then Exit Function
+    
+    IsAColumnChineseSequence = True
+End Function
+
+
+' B列设备名称条件判断（支持合并单元格）
+Public Function IsBColumnDeviceName(ByVal Target As Range) As Boolean
+    ' 只处理B列
+    If Target.Column <> 2 Then Exit Function
+    
+    ' 处理合并单元格 - 检查整个合并区域是否在B列
+    If Target.MergeCells Then
+        If Target.Column <> 2 Then Exit Function
+    End If
+    
+    ' 只处理单个单元格或合并单元格
+    If Target.count > 1 And Not Target.MergeCells Then Exit Function
+    
+    IsBColumnDeviceName = True
+End Function
+
+
+' C列设备模块条件判断（支持合并单元格）
+Public Function IsCColumnDeviceModel(ByVal Target As Range) As Boolean
+    ' 只处理C列
+    If Target.Column <> 3 Then Exit Function
+    
+    ' 处理合并单元格 - 检查整个合并区域是否在C列
+    If Target.MergeCells Then
+        If Target.Column <> 3 Then Exit Function
+    End If
+    
+    ' 只处理单个单元格或合并单元格
+    If Target.count > 1 And Not Target.MergeCells Then Exit Function
+    
+    IsCColumnDeviceModel = True
+End Function
+
+
+' F列选择条件判断（支持合并单元格）
+Public Function IsFColumnChoice(ByVal Target As Range) As Boolean
+    ' 只处理F列
+    If Target.Column <> 6 Then Exit Function
+    
+    ' 处理合并单元格 - 检查整个合并区域是否在F列
+    If Target.MergeCells Then
+        If Target.Column <> 6 Then Exit Function
+    End If
+    
+    ' 只处理单个单元格或合并单元格
+    If Target.count > 1 And Not Target.MergeCells Then Exit Function
+    
+    IsFColumnChoice = True
+End Function
+
+
+' 特定范围条件判断（支持合并单元格）
+Public Function IsDColumnCrafting(ByVal Target As Range) As Boolean
+    ' 1. 必须是 D 列（第4列）
+    If Target.Column <> 4 Then Exit Function
+    
+    ' 2. 如果是多个非合并单元格（如用户选中区域），不处理
+    If Target.CountLarge > 1 And Not Target.MergeCells Then Exit Function
+    
+    ' 3. 获取 D 列对应行在 C 列的单元格（考虑合并区域）
+    Dim cCell As Range
+    Set cCell = Cells(Target.row, 3) ' C列
+    
+    ' 4. 检查 C 列对应位置是否属于合并单元格
+    If Not cCell.MergeCells Then
+        ' C列不是合并单元格 → 不符合业务规则，退出
+        Exit Function
+    End If
+    
+    ' 5. （可选）也可以进一步验证：C列的合并区域是否跨多行？
+    ' 这里假设只要合并就算有效
+    
+    IsDColumnCrafting = True
+End Function
+
+
+' 初始化事件处理器
+Public Sub InitializeSelectionHandlers()
+    handlerCount = 5 ' 根据实际处理程序数量调整
+    
+    ReDim handlers(1 To handlerCount)
+    
+    ' 注册各个处理程序
+    handlers(1).condition = "A列汉字序列检查"
+    handlers(1).HandlerName = "HandleAColoumShow"
+    handlers(1).Description = "处理A列汉字序列点击事件（支持合并单元格）"
+    
+    handlers(2).condition = "B列设备名称"
+    handlers(2).HandlerName = "HandleBDeviceName"
+    handlers(2).Description = "处理B列设备名称（支持合并单元格）"
+    
+    handlers(3).condition = "D列材质和工艺"
+    handlers(3).HandlerName = "HandleDColumnCrafting"
+    handlers(3).Description = "处理D列材质和工艺（不支持合并单元格）"
+   
+    handlers(4).condition = "F列选择应用"
+    handlers(4).HandlerName = "HandleCDateCheck"
+    handlers(4).Description = "处理F列选择应用（支持合并单元格）"
+    
+    handlers(5).condition = "其他通用处理"
+    handlers(5).HandlerName = "HandleGeneralCases"
+    handlers(5).Description = "处理其他通用情况（支持合并单元格）"
+End Sub
+
+
+' 主事件分发函数（支持合并单元格信息）
+Public Sub ProcessSelectionChange(ByVal Target As Range, ByVal ws As Worksheet)
+    On Error GoTo ErrorHandler
+    
+    If Target.count > 1 And Not Target.MergeCells Then
+        Exit Sub
+    End If
+        
+    ' 初始化处理程序（如果尚未初始化）
+    If handlerCount = 0 Then
+        InitializeSelectionHandlers
+    End If
+    
+    ' 根据条件调用相应的处理程序
+    Select Case True
+        Case IsAColumnChineseSequence(Target)
+            HandleAColoumShow Target, ws
+
+'        Case IsBColumnDeviceName(Target)
+'            HandleBDeviceName Target, ws
+
+        Case IsCColumnDeviceModel(Target)
+            HandleCDeviceModel Target, ws
+
+        Case IsDColumnCrafting(Target)
+            HandleDColumnCrafting Target, ws
+        
+'        Case IsFColumnChoice(Target)
+'            HandleFChoice Target, ws
+
+        Case Else
+            HandleGeneralCases Target, ws
+    End Select
+    
+    Exit Sub
+    
+ErrorHandler:
+    LogError "ProcessSelectionChange", "处理选择变化时出错: " & Err.Description & _
+             " (目标: " & Target.Address
+End Sub
+

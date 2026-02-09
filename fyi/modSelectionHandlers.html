@@ -1,0 +1,864 @@
+' modSelectionHandlers - 支持合并单元格的具体事件处理程序
+Option Explicit
+
+
+'-----------------------------------------------------------------------------
+' 函数: HandleAColoumShow
+' 描述: 处理 A 列单元格选择事件，根据同行 A 列的值查询系统并弹窗显示。
+'       支持处理合并单元格。
+' 参数:
+'   ByVal Target As Range - 触发事件的单元格或区域。
+'   ByVal ws As Worksheet - 目标工作表对象。
+'-----------------------------------------------------------------------------
+Public Sub HandleAColoumShow(ByVal Target As Range, ByVal ws As Worksheet)
+    On Error GoTo ErrorHandler
+    
+    ' 初始化汉字序列
+    If IsEmpty(ChineseSequence) Then
+        InitializeChineseSequence
+    End If
+    
+    ' 获取单元格实际值（处理合并单元格）
+    Dim cellValue As String
+    cellValue = GetCellValue(Target)
+    
+    If cellValue = "" Then Exit Sub
+    
+    ' 检查是否在汉字序列中
+    If IsInChineseSequence(cellValue) And cellValue <> "系列" Then
+        ' 在序列中，什么都不做
+        Exit Sub
+    Else
+        ' 不在序列中，向上查找并获取找到的结果
+        Dim foundCell As Range
+        If FindChineseSequenceAbove(Target, ws, foundCell) Then
+            ' 如果找到了，则调用 ShowDeviceListForm
+            ShowDeviceListForm foundCell, Target
+        End If
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    LogError "HandleAColoumShow", "处理汉字序列时出错: " & Err.Description
+End Sub
+
+
+'-----------------------------------------------------------------------------
+' 函数: HandleBDeviceName
+' 描述: 处理 B 列单元格选择事件，根据同行 A 列的值查询设备列表并在单元格旁显示。
+'       支持处理合并单元格。
+' 参数:
+'   ByVal Target As Range - 触发事件的单元格或区域。
+'   ByVal ws As Worksheet - 目标工作表对象。
+'-----------------------------------------------------------------------------
+Public Sub HandleBDeviceName(ByVal Target As Range, ByVal ws As Worksheet)
+    Const PROC_NAME As String = "HandleBDeviceName"
+    Const LISTBOX_NAME As String = "lstDeviceList" ' *** 必须与工作表上 ActiveX ListBox 的 (Name) 属性一致 ***
+
+    Dim oleObj As OLEObject          ' 指向 ActiveX 控件的 OLEObject (用于定位和显示)
+    Dim lstDeviceList As Object      ' 指向 OLEObject 内部的 ListBox 对象 (用于操作列表项)
+    Dim categoryKey As String        ' 从 A 列获取的类别关键字
+
+    ' --- 初始化和错误处理设置 ---
+    On Error GoTo ErrorHandler
+
+    ' --- 1. 获取 ActiveX ListBox 控件 ---
+    ' a. 获取包装 ListBox 的 OLEObject
+    On Error Resume Next
+    Set oleObj = ws.OLEObjects(LISTBOX_NAME)
+    On Error GoTo ErrorHandler
+
+    If oleObj Is Nothing Then
+        Debug.Print PROC_NAME & ": 无法找到名为 '" & LISTBOX_NAME & "' 的 ActiveX 控件。请检查控件是否存在且名称正确。"
+        Exit Sub ' 静默退出，不提示用户以免干扰
+    End If
+
+    ' b. 获取 OLEObject 内部的 ListBox 对象
+    Set lstDeviceList = oleObj.Object
+    oleObj.visible = False
+
+    If lstDeviceList Is Nothing Then
+        Debug.Print PROC_NAME & ": 无法获取 '" & LISTBOX_NAME & "' 控件的内部对象。"
+        Exit Sub
+    End If
+
+    ' --- 2. 清空列表框旧内容 ---
+    lstDeviceList.Clear
+
+    ' --- 3. 获取并验证 A 列的类别关键字 ---
+    categoryKey = GetCellValue(ws.Cells(Target.row, "A"))
+
+    If Len(Trim(categoryKey)) = 0 Then
+        ' A 列为空，无需显示列表框
+        Exit Sub
+    End If
+
+    ' 通过得到产品大类获取属于该大类的产品明细列表
+    ' 注意：GetValues 返回的是 Collection 对象
+    Dim deviceListCollection As Collection
+    Set deviceListCollection = g_cacheTypeNameToModels.GetValues(categoryKey)
+
+    ' --- 检查是否有返回的 Device Names ---
+    If deviceListCollection Is Nothing Or deviceListCollection.count = 0 Then
+        ' 如果没有找到对应的设备名称，可以选择提示用户或保持 ListBox 为空
+        ' 可以选择添加一个提示项
+        Exit Sub ' 或者继续，ListBox 保持为空
+    End If
+
+    ' --- 遍历 Collection 并将 Device Names 添加到 ListBox ---
+    Dim deviceName As Variant ' Collection 中的元素通常用 Variant 遍历
+    For Each deviceName In deviceListCollection
+        ' 确保添加的是字符串
+        If Not IsNull(deviceName) And deviceName <> "" Then
+            lstDeviceList.AddItem CStr(deviceName)
+        End If
+    Next deviceName
+
+    ' --- 根据查询结果设置并显示列表框 ---
+    If lstDeviceList.ListCount > 0 Then
+        ' --- 关键修改：通过 OLEObject 设置位置和大小 ---
+        With oleObj
+            .top = Target.top
+            .left = Target.left + Target.Width
+            .Width = Target.Width
+            .visible = True
+        End With
+    Else
+        ' 没有找到任何设备，隐藏列表框
+        oleObj.visible = False
+    End If
+
+    Exit Sub ' 正常退出
+
+' --- 错误处理 ---
+ErrorHandler:
+    ' 记录详细的错误信息
+    Debug.Print PROC_NAME & " Error: " & Err.Description & " (" & Err.Number & ") "
+    Debug.Print "  Target Cell: " & IIf(Not Target Is Nothing, Target.Address, "Nothing")
+    Debug.Print "  Row: " & IIf(Not Target Is Nothing, Target.row, "N/A")
+
+    ' 出错时隐藏列表框，避免显示不完整或错误的信息
+    If Not oleObj Is Nothing Then
+        oleObj.visible = False
+    End If
+    On Error GoTo 0 ' 恢复正常的错误处理模式
+
+End Sub
+
+
+'-----------------------------------------------------------------------------
+' 函数: HandleCDeviceModel
+' 描述: 处理 C 列单元格选择事件，根据同行 A 列的值查询设备列表并在单元格旁显示。
+'       支持处理合并单元格。
+' 参数:
+'   ByVal Target As Range - 触发事件的单元格或区域。
+'   ByVal ws As Worksheet - 目标工作表对象。
+'-----------------------------------------------------------------------------
+Public Sub HandleCDeviceModel(ByVal Target As Range, ByVal ws As Worksheet)
+    ' 新增：根据单元格内容判断逻辑
+    Dim cellValue As String
+    Dim sql As String
+    Dim productID As String
+    Dim whatKind As String
+    Dim currentRow As Long
+    currentRow = Target.row
+
+    ' 获取当前行的A列和B列数据
+    Dim aValue As String, bValue As String
+    aValue = GetCellValue(ws.Cells(currentRow, "A"))
+    bValue = GetCellValue(ws.Cells(currentRow, "B"))
+    
+    ' 获取单元格值
+    cellValue = Trim(CStr(Target.value))
+    
+    If cellValue = "" Or cellValue = "组件名称" Then
+        Exit Sub
+    End If
+    
+    Dim conn As Object, rs As Object
+    Set conn = GetConnection() ' 假设你的 GetConnection 函数是正确的
+    If conn Is Nothing Then
+        MsgBox "无法连接到数据库", vbExclamation
+        Exit Sub
+    End If
+    
+    '根据A列B列的数据查询当前产品的product_id
+    sql = "SELECT product_id from ht_sales_products where base_description = '" & aValue & "' and product_model = '" & bValue & "'"
+
+'    Debug.Print "sql ->  " & sql
+    
+    On Error GoTo ErrorHandler
+    Set rs = conn.Execute(sql)
+    On Error GoTo 0
+
+    If rs.EOF And rs.BOF Then
+        MsgBox "未找到匹配的产品ID", vbInformation, "提示"
+        Exit Sub
+    End If
+    
+    productID = rs.Fields(0).value
+
+    ' 执行数据库查询，根据cellValue从ht_sales_product_default_config中读取其属于哪种whatkind
+    sql = "SELECT whatkind from ht_sales_product_default_config where component_name = '" & cellValue & "' and product_id = " & productID & ""
+'    Debug.Print "sql ->  " & sql
+    
+    On Error GoTo ErrorHandler
+    Set rs = conn.Execute(sql)
+    On Error GoTo 0
+
+    If rs.EOF And rs.BOF Then
+        Call SearchStandardMaterial(Target, ws)
+        Exit Sub
+    End If
+
+    '从数据库中获取该字段值的判断信息
+    ' Case循环判断逻辑
+    whatKind = rs.Fields(0).value
+    
+    Select Case whatKind
+        Case COMPONENT_KIND_PROCESS                        ' 工艺则调用工艺维护界面
+'            ' 加载并显示工艺窗体
+            
+            Exit Sub
+            
+        Case COMPONENT_KIND_STANDARD_PART                      ' 标准件则什么都不做
+            
+            Exit Sub
+
+        Case COMPONENT_KIND_COMPONENT, COMPONENT_KIND_OUTSOURCED
+        
+            ' 加载并显示自定义窗体
+            ShowForm "frmChangePriceWeb", Target, whatKind
+            Exit Sub
+                    
+        Case Else
+            Exit Sub
+    End Select
+    
+    Exit Sub
+    
+ErrorHandler:
+    MsgBox "显示窗体时出错: " & Err.Description, vbExclamation
+End Sub
+
+
+'-----------------------------------------------------------------------------
+' 函数: HandleFChoice
+' 描述: 处理 F 列单元格选择事件，根据同行A列和B列的值查询细节信息列表并在单元格旁显示。
+'       支持处理合并单元格。
+' 参数:
+'   ByVal Target As Range - 触发事件的单元格或区域。
+'   ByVal ws As Worksheet - 目标工作表对象。
+'-----------------------------------------------------------------------------
+Public Sub HandleFChoice(ByVal Target As Range, ByVal ws As Worksheet)
+    On Error GoTo ErrorHandler
+
+    Dim currentRow As Long
+    currentRow = Target.row
+
+    ' 获取A列和B列的值（去除前后空格）
+    Dim aVal As String, bVal As String
+    aVal = GetCellValue(ws.Cells(currentRow, "A"))
+    bVal = GetCellValue(ws.Cells(currentRow, "B"))
+    
+    ' 若A或B为空，不处理
+    If aVal = "" Or bVal = "" Then Exit Sub
+
+    ' 检查A列值是否在设备映射字典中，待后续补充
+'    If Not DeviceMapHasKey(aVal) Then
+'        Debug.Print "A列值 '" & aVal & "' 不在 g_htQuotationDeviceMap 中"
+'        Exit Sub
+'    End If
+
+    Dim dataSource As Variant
+    dataSource = GetDropdownDataSource(currentRow)
+
+    ' 显示列表框
+    Dim lstBox As MSForms.ListBox
+    On Error Resume Next
+    Set lstBox = ws.OLEObjects("lstData").Object
+    On Error GoTo ErrorHandler
+
+    If lstBox Is Nothing Then
+        Debug.Print "错误：未找到列表框 'lstData'"
+        Exit Sub
+    End If
+
+    ' 如果有匹配数据，显示下拉框
+    If Not IsEmpty(dataSource) Then
+        With lstBox
+            ' 设置列表框位置和大小
+            .top = Target.top
+            .left = Target.left + Target.Width
+            .Width = Target.Width + 580 ' 增加宽度以显示更多内容
+            .Height = 250
+
+            ' 设置数据源
+            .List = dataSource
+            .ColumnCount = 3
+            .ColumnWidths = "320;60;200" ' 设置三列宽度
+            .ColumnHeads = True  ' 启用列标题显示
+            .visible = True
+        End With
+    Else
+        lstBox.visible = False
+    End If
+    
+    Exit Sub
+
+ErrorHandler:
+    Debug.Print "HandleFChoice 错误: " & Err.Description & " (" & Err.Number & ")"
+    LogError "HandleFChoice", Err.Description
+    
+    On Error Resume Next
+    If Not lstBox Is Nothing Then lstBox.visible = False
+End Sub
+
+
+' 新版D列调用响应函数，旧版的请保留不要删除
+' 新版D列调用其实和C列差不多，但是C列目前有合并单元格无法处理的情况，转由D列来处理
+Public Sub HandleDColumnCrafting(ByVal Target As Range, ByVal ws As Worksheet)
+    On Error GoTo ErrorHandler
+
+    Call SearchStandardMaterial(Target, ws)
+
+    Exit Sub ' 正常退出
+
+ErrorHandler:
+    ' 错误处理时隐藏列表框，防止显示异常状态
+    On Error Resume Next
+    On Error GoTo 0
+    LogError "HandleDColumnCrafting", "处理特定范围时出错: " & Err.Description & " (" & Err.Number & ")"
+    ' 可选：显示错误消息给用户
+    ' MsgBox "填充工艺列表时出错：" & Err.Description, vbCritical, "错误"
+End Sub
+
+
+'' 处理D列选择材质和工艺范围程序
+'Public Sub HandleDColumnCrafting(ByVal Target As Range, ByVal ws As Worksheet)
+'    On Error GoTo ErrorHandler
+'
+'    ' --- 1. 获取并检查列表框 ---
+'    Dim lstBox As MSForms.ListBox
+'    On Error Resume Next
+'    Set lstBox = ws.OLEObjects("lstCrafting").Object
+'    On Error GoTo ErrorHandler ' 恢复主错误处理
+'
+'    If lstBox Is Nothing Then
+'        Debug.Print "错误：未找到列表框 'lstCrafting'"
+'        Exit Sub
+'    End If
+'
+'    ' 获取A列的值（去除前后空格）
+'    Dim aVal As String
+'    aVal = GetCellValue(ws.Cells(Target.row, "A"))
+'
+'    ' 遍历 ChineseSequence 数组的第一维（行），查找匹配的汉字
+'    If IsInChineseSequence(aVal) Then
+'        lstBox.Visible = False
+'        Exit Sub ' 找到A列是汉字数字或者“序列”就退出
+'    End If
+'    ' --- 2. 检查目标单元格条件 ---
+''    If Target.Cells.count > 1 Or Target.Interior.Color <> RGB(245, 250, 50) Then
+''        lstBox.Visible = False
+''        Exit Sub
+''    End If
+'
+'    ' --- 3. 确保缓存已加载 ---
+'    g_cacheMaterials.EnsureLoaded ' 确保 g_cacheMaterials 已加载
+'
+'    ' --- 4. 配置并显示 ListBox ---
+'    With lstBox
+'        .Top = Target.Top
+'        .Left = Target.Left + Target.Width
+'        .Width = 180 ' 可根据需要调整
+'        .Height = 250
+'        .ColumnCount = 2 ' 设置为两列
+'        .ColumnWidths = "100;60" ' 调整列宽
+'        .MultiSelect = fmMultiSelectMulti ' 设置多选模式
+'        .Clear ' 清空现有列表项
+'
+'        ' --- 6. 准备二维数组数据 ---
+'        Dim dataArray As Variant
+'        dataArray = Empty ' 初始化为 Empty
+'
+'        ' 获取缓存的字典对象
+'        Dim cacheDict As Object ' Scripting.Dictionary
+'        Set cacheDict = g_cacheMaterials.GetAllValues()
+'
+'        Dim keyCount As Long
+'        keyCount = 0
+'        If Not cacheDict Is Nothing Then keyCount = cacheDict.count
+'
+'        If keyCount > 0 Then
+'            ' --- 7. 构建二维数组 ---
+'            ' 数组维度: (1 To keyCount, 0 To 1)
+'            ' 第一维是行 (1 到 键的数量)
+'            ' 第二维是列 (0 到 1)
+'            ReDim dataArray(1 To keyCount, 0 To 1)
+'
+'            Dim i As Long
+'            Dim keyVariant As Variant
+'            Dim keyString As String
+'            Dim valuesCollection As Collection
+'            Dim firstValue As String
+'
+'            i = 0 ' 用于数组行索引
+'            ' 遍历字典中的每一个 Key
+'            For Each keyVariant In cacheDict.keys
+'                i = i + 1 ' 数组行索引从 1 开始
+'                keyString = CStr(keyVariant)
+'
+'                ' 获取与 Key 关联的值集合
+'                Set valuesCollection = cacheDict(keyString)
+'
+'                ' 获取第一个值作为第二列内容
+'                firstValue = ""
+'                If Not valuesCollection Is Nothing And valuesCollection.count > 0 Then
+'                    firstValue = CStr(valuesCollection(1)) ' Collection 索引从 1 开始
+'                End If
+'
+'                ' 将 Key 和 FirstValue 放入二维数组
+'                dataArray(i, 0) = keyString    ' 第一列 (索引 0) 放 Key
+'                dataArray(i, 1) = firstValue   ' 第二列 (索引 1) 放第一个 Value
+'
+'                ' 清理循环内使用的对象变量引用
+'                Set valuesCollection = Nothing
+'            Next keyVariant
+'
+'            Debug.Print "已成功构建包含 " & keyCount & " 行数据的二维数组。"
+'        Else
+'             Debug.Print "警告：g_cacheMaterials 缓存为空或未加载，将使用空数组填充 ListBox。"
+'             ' ReDim dataArray(0 To 0, 0 To 1) ' 可选：创建一个最小的空数组
+'        End If
+'
+'        ' --- 8. 将二维数组填充到 ListBox ---
+'        On Error Resume Next ' 防止数组赋值出错
+'        If IsArray(dataArray) And Not IsEmpty(dataArray) Then
+'             .List = dataArray ' 直接赋值二维数组
+'             Debug.Print "ListBox 'lstCrafting' 已通过二维数组成功填充。"
+'        Else
+'             Debug.Print "Info: Data array is empty or not initialized, ListBox remains empty."
+'             ' 可选：添加提示项
+'             ' .AddItem "(无数据)"
+'             ' .List(0, 1) = ""
+'        End If
+'        On Error GoTo ErrorHandler ' 恢复主错误处理
+'
+'        ' --- 9. 显示 ListBox ---
+'        .Visible = True
+'
+'    End With ' lstBox
+'
+'        ' --- 5. 恢复选中状态 ---
+'        ' (这部分代码假设存在且有效，负责根据 Target 单元格内容设置选中项)
+'        ' *** 注意：您需要确保这个子程序能正确处理两列 ListBox 的选中恢复 ***
+'        RestoreSelectionFromCellValue Target, lstBox
+'
+'
+'    Exit Sub ' 正常退出
+'
+'ErrorHandler:
+'    ' 错误处理时隐藏列表框，防止显示异常状态
+'    On Error Resume Next
+'    If Not lstBox Is Nothing Then lstBox.Visible = False
+'    On Error GoTo 0
+'    LogError "HandleDColumnCrafting", "处理特定范围时出错: " & Err.Description & " (" & Err.Number & ")"
+'    ' 可选：显示错误消息给用户
+'    ' MsgBox "填充工艺列表时出错：" & Err.Description, vbCritical, "错误"
+'End Sub
+'
+
+
+' 通用情况处理程序（支持合并单元格）
+Public Sub HandleGeneralCases(ByVal Target As Range, ByVal ws As Worksheet)
+    On Error GoTo ErrorHandler
+    
+    ' 这里处理不满足上述特定条件的通用情况
+    ' 可以添加一些默认处理逻辑
+    
+    Exit Sub
+    
+ErrorHandler:
+    LogError "HandleGeneralCases", "处理通用情况时出错: " & Err.Description
+End Sub
+
+' ========== 汉字序列相关函数（支持合并单元格） ==========
+
+' 检查是否在汉字序列中
+Private Function IsInChineseSequence(ByVal value As String) As Boolean
+    If IsEmpty(ChineseSequence) Then
+        InitializeChineseSequence
+    End If
+    
+    Dim i As Long
+    ' UBound(ChineseSequence, 1) 获取第一维（行）的上界
+    For i = 0 To UBound(ChineseSequence, 1)
+        ' 检查第一列 (0) 是否匹配
+        If ChineseSequence(i, 0) = value Then
+            IsInChineseSequence = True
+            Exit Function
+        End If
+    Next i
+    IsInChineseSequence = False
+End Function
+
+
+Private Function FindChineseSequenceAbove(ByVal StartCell As Range, ByVal ws As Worksheet, ByRef foundCell As Range) As Boolean
+    Dim currentRow As Long
+    Dim currentCell As Range
+    Dim cellValue As String
+    Dim found As Boolean
+    
+    currentRow = StartCell.row - 1
+    found = False
+    
+    ' 向上查找，直到第一行
+    Do While currentRow >= 1
+        Set currentCell = ws.Cells(currentRow, 1) ' A列
+        
+        ' 跳过空单元格
+        If Not IsEmpty(currentCell) Then
+            cellValue = GetCellValue(currentCell)
+            
+            ' 检查是否在前12个汉字序列中（排除"系列"）
+            If IsInChineseSequence(cellValue) And cellValue <> "系列" Then
+                found = True
+                Set foundCell = currentCell ' 设置找到的单元格
+                Exit Do
+            End If
+        End If
+        
+        ' 移动到上一行
+        currentRow = currentCell.row - 1 ' 使用实际单元格的行号，避免在合并区域内循环
+    Loop
+    
+    ' 返回是否找到
+    FindChineseSequenceAbove = found
+End Function
+
+
+' 显示设备选择窗体（支持合并单元格信息）
+Private Sub ShowDeviceListForm(ByVal foundCell As Range, ByVal ClickedCell As Range)
+    Dim message As String
+    message = "找到汉字序列单元格: " & foundCell.Address & vbCrLf & _
+              "内容: '" & foundCell.value & "'" & vbCrLf & _
+              "行号: " & foundCell.row
+    
+    ' 加载并显示自定义窗体
+    Dim frm As frmDeviceChoice
+    ShowForm "frmDeviceChoice", foundCell
+    
+    Exit Sub
+    
+    ' 可选：选中找到的单元格
+    foundCell.Select
+    
+ErrorHandler:
+    MsgBox "显示窗体时出错: " & Err.Description, vbExclamation
+    If Not frm Is Nothing Then
+        Unload frm
+        Set frm = Nothing
+    End If
+End Sub
+
+
+' 主函数 - 获取F列所需要的数据
+' 一共四列数据，第一列是材质，第二列工艺，第三列价格，第四列项目信息，目前先实现第1、3、4列
+Private Function GetDropdownDataSource(rowNum As Long) As Variant
+    On Error GoTo ErrorHandler
+    
+    ' 获取当前行的B列和C列数据
+    Dim bValue As String, cValue As String
+    
+    bValue = GetCellValue(Cells(rowNum, "B"))
+    cValue = GetCellValue(Cells(rowNum, "C"))
+    
+    Debug.Print "=== 数据库查询调试信息开始 ==="
+    Debug.Print "当前行: " & rowNum
+    Debug.Print "B列值: '" & bValue & "'"
+    Debug.Print "C列值: '" & cValue & "'"
+    
+    ' 利用数据库的视图来简化查询，视图名v_component_details
+    ' 第四步：构建SQL查询 - 使用DISTINCT避免重复数据
+    Dim sql As String
+    sql = "SELECT DISTINCT material_combination, component_price, project_name " & _
+          "FROM v_component_details " & _
+          "WHERE product_model = '" & bValue & "' AND component_name = '" & cValue & "' " & _
+          "ORDER BY component_price"
+    
+    Debug.Print "执行SQL: " & sql
+    
+    ' 第五步：执行查询
+    Dim rs As ADODB.Recordset
+    Set rs = ExecuteQuery(sql)
+    
+    If rs Is Nothing Then
+        Debug.Print "错误：查询执行失败"
+        GetDropdownDataSource = Empty
+        Exit Function
+    End If
+    
+    ' 第六步：处理查询结果
+    If rs.EOF And rs.BOF Then
+        Debug.Print "警告：未找到匹配的数据"
+        GetDropdownDataSource = Empty
+        rs.Close
+        Set rs = Nothing
+        Exit Function
+    End If
+    
+    ' 收集数据到数组
+    Dim dataCollection As Collection
+    Set dataCollection = New Collection
+    
+    ' 使用字典来跟踪已添加的数据，避免重复
+    Dim uniqueDataDict As Object
+    Set uniqueDataDict = CreateObject("Scripting.Dictionary")
+    
+    Dim recordCount As Long
+    recordCount = 0
+    
+    Do While Not rs.EOF
+        Dim cellValue As String, nextCellValue As String, secondLastColumnValue As String
+        cellValue = Nz(rs.Fields(0).value, "")
+        nextCellValue = Nz(rs.Fields(1).value, "")
+        secondLastColumnValue = Nz(rs.Fields(2).value, "")
+        
+        ' 创建唯一键，避免重复数据
+        Dim uniqueKey As String
+        uniqueKey = cellValue & "|" & nextCellValue & "|" & secondLastColumnValue
+        
+        ' 只添加未出现过的数据
+        If Not uniqueDataDict.Exists(uniqueKey) Then
+            Dim dataPair(1 To 3) As String
+            dataPair(1) = cellValue                    ' 第一列：匹配的数据
+            ' --- 修改这一行：格式化价格为不带小数点的整数 ---
+            If IsNumeric(nextCellValue) And Not IsNull(nextCellValue) Then
+                ' 使用 Format 函数，"0" 表示显示为整数，无小数位
+                dataPair(2) = Format(nextCellValue, "0")
+            Else
+                ' 如果不是有效数字或为空，则显示为空字符串或原始值
+                dataPair(2) = ""
+                ' 或者 dataPair(2) = nextCellValue ' 如果想保留原始非数字内容
+            End If
+            ' --- 修改结束 ---
+            dataPair(3) = secondLastColumnValue        ' 第三列：倒数第二列数据
+            dataCollection.Add dataPair
+            uniqueDataDict.Add uniqueKey, True
+            recordCount = recordCount + 1
+            Debug.Print "找到数据: '" & cellValue & "', '" & nextCellValue & "', '" & secondLastColumnValue & "'"
+        Else
+            Debug.Print "跳过重复数据: '" & cellValue & "', '" & nextCellValue & "', '" & secondLastColumnValue & "'"
+        End If
+        
+        rs.MoveNext
+    Loop
+    
+    rs.Close
+    Set rs = Nothing
+    
+    ' 将集合转换为数组
+    If dataCollection.count > 0 Then
+        Dim resultData() As Variant
+        ReDim resultData(0 To dataCollection.count - 1, 0 To 2)
+        
+        ' 填充数据
+        Dim i As Long
+        For i = 1 To dataCollection.count
+            resultData(i - 1, 0) = dataCollection(i)(1)
+            resultData(i - 1, 1) = dataCollection(i)(2)
+            resultData(i - 1, 2) = dataCollection(i)(3)
+        Next i
+        
+        Debug.Print "成功从数据库收集 " & dataCollection.count & " 条数据（已去重）"
+        GetDropdownDataSource = resultData
+    Else
+        Debug.Print "错误：查询到数据但未找到有效记录"
+        GetDropdownDataSource = Empty
+    End If
+    
+    Exit Function
+    
+ErrorHandler:
+    Debug.Print "错误发生: " & Err.Description & " (错误号: " & Err.Number & ")"
+    If Not rs Is Nothing Then
+        If rs.State = adStateOpen Then rs.Close
+        Set rs = Nothing
+    End If
+    GetDropdownDataSource = Empty
+End Function
+
+Public Sub RestoreSelectionFromCellValue(cell As Range, lb As MSForms.ListBox)
+    ' 如果单元格为空，则不恢复任何选择
+    If IsEmpty(cell) Or Trim(cell.value) = "" Then
+        Exit Sub
+    End If
+    
+    Dim cellValue As String
+    cellValue = Trim(cell.value)
+    
+'    Debug.Print "Trim后内容: >" & cellValue & "<"
+'    Debug.Print "Trim后长度: " & Len(cellValue)
+'    Debug.Print "====================="
+    
+    ' 假设单元格值是用加号分隔的选项（如"选项1+选项2+选项3"）
+    Dim selectedItems() As String
+    selectedItems = Split(cellValue, "+")
+    
+'    Debug.Print "Split结果: " & Join(selectedItems, ", ")
+    
+    Dim i As Long, j As Long
+    Dim item As String
+    
+    ' 遍历所有选中的项
+    For i = 0 To UBound(selectedItems)
+        item = Trim(selectedItems(i)) ' 去除前后空格
+        
+         ' 如果分割后有空字符串，跳过
+        If Len(item) = 0 Then
+            GoTo ContinueLoop
+        End If
+        
+        ' 在列表框中查找匹配的项
+        For j = 0 To lb.ListCount - 1
+            ' 假设我们显示的是第一列（索引0），根据实际情况调整
+            If Trim(lb.List(j, 0)) = item Then
+                lb.selected(j) = True
+                Exit For
+            End If
+        Next j
+ContinueLoop:
+    Next i
+End Sub
+
+
+'-----------------------------------------------------------------------------
+' 函数: SearchStandardMaterial
+' 描述: 搜索标准物料并显示选择界面
+' 参数:
+'   Target - 目标单元格
+'   ws - 工作表对象
+'   strFromWhere - 可选，调用来源标识
+'-----------------------------------------------------------------------------
+Public Sub SearchStandardMaterial(ByVal Target As Range, _
+                                  ByVal ws As Worksheet, _
+                                  Optional ByVal strFromWhere As String = WHERE_EXCEL)
+    ' === 新增：根据 Target 列动态确定搜索关键词 ===
+    Dim BColumnKeyword As String
+    
+    Select Case Target.Column
+        Case 3 ' C列：直接使用自身值
+            BColumnKeyword = Trim(Target.value)
+            
+        Case 4 ' D列：优先使用左侧 C 列的值，若为空则用自己
+            Dim cCell As Range
+            Set cCell = ws.Cells(Target.row, 3) ' C列同行动态引用
+            
+            If Not IsEmpty(cCell.value) And Trim(cCell.value) <> "" Then
+                BColumnKeyword = Trim(cCell.value)
+            Else
+                BColumnKeyword = Trim(Target.value)
+            End If
+            
+        Case Else
+            ' 不是 C 或 D 列，不处理（可根据需要弹出提示或退出）
+            Exit Sub
+    End Select
+
+    ' 组合列
+    Dim sDesc As String
+    Dim sType As String
+    Dim sMate As String
+    Dim sBrand As String
+    sDesc = ""
+    sType = ""
+    sMate = ""
+    sBrand = ""
+
+    If BColumnKeyword = "" Then
+        MsgBox "查询信息不能为空", vbExclamation, "提示"
+        Exit Sub
+    End If
+
+    ' 3. 构造 SQL 查询语句 (这部分也沿用你原来的逻辑)
+    Dim sql As String
+'    sql = "SELECT DISTINCT ItemName, ItemDesc, ItemType, ItemPrice, OrderDate " & _
+'          "FROM (SELECT *, " & _
+'                "ROW_NUMBER() OVER (PARTITION BY ItemName ORDER BY OrderDate DESC) as rn " & _
+'                "FROM ht_sales_price_list " & _
+'                "WHERE MATCH(ItemName) AGAINST('" & BColumnKeyword & "' IN NATURAL LANGUAGE MODE)" & _
+'                ") as subquery " & _
+'          "WHERE rn = 1 " & _
+'          "LIMIT 10;"
+    
+    sql = "SELECT DISTINCT ItemName, ItemDesc, ItemType, ItemPrice, OrderDate " & _
+          "FROM (SELECT *, " & _
+                "ROW_NUMBER() OVER (PARTITION BY ItemName ORDER BY OrderDate DESC) as rn " & _
+                "FROM ht_sales_price_list " & _
+                "WHERE ItemName LIKE '%" & BColumnKeyword & "%'" & _
+                ") as subquery " & _
+          "WHERE rn = 1 " & _
+          "LIMIT 100;"
+          
+          
+    Debug.Print vbCrLf & "SQL:   " & sql & vbCrLf
+
+    ' 4. 执行数据库查询 (这部分也沿用你原来的逻辑)
+    Dim conn As Object, rs As Object
+    Set conn = GetConnection() ' 假设你的 GetConnection 函数是正确的
+    If conn Is Nothing Then
+        MsgBox "无法连接到数据库", vbExclamation
+        Exit Sub
+    End If
+
+    On Error GoTo QueryError
+    Set rs = conn.Execute(sql)
+    On Error GoTo 0
+
+    ' 5. 创建窗体的新实例
+    Dim frm As frmShowPriceForm
+    Set frm = New frmShowPriceForm
+
+    ' 6. 把被双击的单元格 (Target) 传给窗体
+    Set frm.foundCell = Target ' <-- 这是关键：通过 frm 访问窗体的变量
+    frm.txtMainKey = BColumnKeyword
+    frm.g_FromWhere = strFromWhere
+    
+    If rs.EOF And rs.BOF Then
+        frm.Show vbModal
+'        MsgBox "未找到匹配的数据", vbInformation, "提示"
+        GoTo Cleanup
+    End If
+
+    ' **************************************************************************
+    ' ********************** 核心：显示 ListView 窗体 *************************
+    ' **************************************************************************
+
+    ' 7. 把查询到的数据 (rs) 填充到窗体的 ListView 里
+    rs.MoveFirst
+    frm.ShowItemListView.ListItems.Clear
+    Do While Not rs.EOF
+        With frm.ShowItemListView.ListItems.Add(, , Nz(rs("ItemName"), ""))
+            .SubItems(1) = Nz(rs("ItemDesc"), "")
+            .SubItems(2) = Nz(rs("ItemType"), "")
+            .SubItems(3) = Nz(rs("ItemPrice"), "")
+        End With
+        rs.MoveNext
+    Loop
+
+    ' 8. 显示窗体 (模态)
+    frm.Show vbModal
+
+Cleanup:
+    On Error Resume Next
+    rs.Close
+    Set rs = Nothing
+    Set frm = Nothing ' 释放窗体对象
+    Exit Sub
+
+QueryError:
+    MsgBox "查询数据库时出错: " & Err.Description, vbCritical
+    Resume Cleanup
+End Sub

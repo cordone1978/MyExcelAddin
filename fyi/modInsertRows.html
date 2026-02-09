@@ -1,0 +1,496 @@
+
+'-----------------------------------------------------------------------------
+' 函数名: InsertComponentsAndFormat
+' 作者  : [朱辉华]
+' 日期  : 2026-01-05
+' 目的  :
+'   在指定位置高效地插入多行，并根据预设规则填充数据、合并单元格及复制公式。
+'   依赖于全局配置数组 g_PeizhibiaoColumn 来动态确定操作范围。
+'
+' 参数  :
+'   ws                  - 目标工作表对象
+'   targetRow           - 插入点所在的行号 (新行将插入在此行下方)
+'   sourceRowRange      - 包含源格式和公式的行范围 (通常就是 targetRow 所在的行)
+'   targetCell          - 触发此操作的目标单元格 (用于定位源行)
+'   rootName            - 要填充到合并后的 A 列的根类别名称
+'   sonName             - 要填充到合并后的 B 列的子类别名称
+'   subCategoryData     - 包含要填入 C 列的子类目数据的集合
+'   firstDataCol        - (可选) 数据填充的起始列，默认为第 3 列 (C列)
+'
+' 依赖  :
+'   - 全局变量 g_PeizhibiaoColumn (二维数组):
+'       第一列 (索引0) 存放需要处理的列的字母 (如 "A", "B", "C", ..., "J", "K")。
+'       调用者需保证此数组已正确初始化且首尾元素有效。
+'   - 自定义类模块 MergeInfo (用于暂存合并单元格信息)
+'-----------------------------------------------------------------------------
+Public Sub InsertComponentsAndFormat(ByVal ws As Worksheet, _
+                                ByVal targetRow As Long, _
+                                ByRef sourceRowRange As Range, _
+                                ByRef targetCell As Range, _
+                                ByVal rootName As String, _
+                                ByVal sonName As String, _
+                                ByVal subCategoryData As Collection, _
+                                Optional ByVal firstDataCol As Long = 3)
+    On Error GoTo ErrorHandler
+    
+    ' --- 应用程序状态保存 ---
+    With Application
+        Dim originalScreenUpdating As Boolean: originalScreenUpdating = .ScreenUpdating
+        Dim originalCalculation As XlCalculation: originalCalculation = .Calculation
+        Dim originalEnableEvents As Boolean: originalEnableEvents = .EnableEvents
+        .ScreenUpdating = False
+        .Calculation = xlCalculationManual
+        .EnableEvents = False
+    End With
+    
+    ' --- 基础参数检查和准备 ---
+    Dim nRowsToInsert As Long: nRowsToInsert = subCategoryData.count
+    If nRowsToInsert <= 0 Then
+        MsgBox "提示：没有子类目数据需要插入。", vbInformation
+        GoTo Cleanup
+    End If
+    
+    ' --- 动态确定操作范围 ---
+    If IsEmpty(g_PeizhibiaoColumn) Then InitializePeizhibiaoColumn
+    
+    Dim firstColLetter As String: firstColLetter = Trim(g_PeizhibiaoColumn(LBound(g_PeizhibiaoColumn, 1), 0))
+    Dim lastColLetter As String: lastColLetter = Trim(g_PeizhibiaoColumn(UBound(g_PeizhibiaoColumn, 1), 0))
+    Dim minCol As Long, maxCol As Long
+    
+    On Error Resume Next
+    minCol = ws.Range(firstColLetter & "1").Column
+    maxCol = ws.Range(lastColLetter & "1").Column
+    On Error GoTo ErrorHandler
+    
+    If minCol < 1 Or maxCol > ws.Columns.count Or minCol > maxCol Then
+        MsgBox "致命错误：无法从 g_PeizhibiaoColumn 确定有效的列范围。请检查配置数组。", vbCritical
+        GoTo Cleanup
+    End If
+    
+    ' --- 插入行范围定义 ---
+    Dim insertStartRow As Long: insertStartRow = targetRow + 1
+    Dim insertEndRow As Long: insertEndRow = targetRow + nRowsToInsert
+    
+    ' --- 【前置步骤】记录受影响合并单元格信息 ---
+    Dim mergeInfoCollection As New Collection
+    Dim scanStartRow As Long: scanStartRow = Application.Max(1, targetRow - 18)
+    Dim scanArea As Range: Set scanArea = ws.Range(ws.Cells(scanStartRow, minCol), ws.Cells(targetRow, maxCol))
+    Dim cell As Range
+    
+    For Each cell In scanArea.Cells
+        If cell.MergeCells And (cell.Address = cell.mergeArea.Cells(1, 1).Address) Then
+            Dim mi As New MergeInfo
+            With mi
+                .OriginalTop = cell.mergeArea.row
+                .OriginalLeft = cell.mergeArea.Column
+                .OriginalBottom = .OriginalTop + cell.mergeArea.Rows.count - 1
+                .OriginalRight = .OriginalLeft + cell.mergeArea.Columns.count - 1
+                .NewTop = .OriginalTop
+                .NewLeft = .OriginalLeft
+                .NewBottom = .OriginalBottom
+                .NewRight = .OriginalRight
+                If .OriginalBottom >= insertStartRow Then
+                    .NewTop = .NewTop + nRowsToInsert
+                    .NewBottom = .NewBottom + nRowsToInsert
+                End If
+            End With
+            mergeInfoCollection.Add mi
+        End If
+    Next cell
+    
+    ' --- 核心操作：插入行 ---
+    Dim targetInsertionRange As Range
+    Set targetInsertionRange = ws.Range(ws.Cells(insertStartRow, minCol), ws.Cells(insertEndRow, maxCol))
+    targetInsertionRange.Insert Shift:=xlDown, CopyOrigin:=xlFormatFromLeftOrAbove
+    
+    ' --- 【后置步骤】恢复合并单元格 ---
+    Dim var_mi As Variant
+    For Each var_mi In mergeInfoCollection
+        Set mi = var_mi
+        On Error Resume Next
+        ws.Range(ws.Cells(mi.NewTop, mi.NewLeft), ws.Cells(mi.NewBottom, mi.NewRight)).UnMerge
+        ws.Range(ws.Cells(mi.NewTop, mi.NewLeft), ws.Cells(mi.NewBottom, mi.NewRight)).Merge
+        On Error GoTo ErrorHandler
+    Next var_mi
+    Set mergeInfoCollection = Nothing
+    
+    ' --- 填充子类目数据（使用字典映射版本）---
+    ' 功能：将子分类数据填充到Excel工作表的指定列中
+    ' 使用常量索引，代码更清晰易维护
+    
+    Dim i As Long, targetRowNew As Long
+    Dim componentData As Variant  ' 单个组件的数据数组
+    Dim colLetter As Variant      ' 列字母
+    Dim sourceIndex As Long       ' 数据源中的索引
+    
+    ' 创建字典来管理列映射关系（列字母 → 字段索引常量）
+    Dim colMaps As Object
+    Set colMaps = CreateObject("Scripting.Dictionary")
+    
+    ' 定义列映射关系（根据您的原代码和配置表结构）
+    ' 格式：列字母 → 字段索引常量
+    colMaps.Add "C", IDX_COMPONENT_NAME       ' C列 - 规格 - 组件名称
+    colMaps.Add "D", IDX_COMPONENT_DESC       ' D列 - 型号 - 组件描述
+    colMaps.Add "E", IDX_COMPONENT_TYPE       ' E列 - 材质 - 组件类型
+    colMaps.Add "F", IDX_COMPONENT_MATERIAL   ' F列 - 空列 - 组件材质（配置表中此列没有抬头）
+    colMaps.Add "G", IDX_COMPONENT_BRAND      ' G列 - 品牌 - 组件品牌
+    colMaps.Add "H", IDX_COMPONENT_QUANTITY   ' H列 - 数量 - 组件数量
+    colMaps.Add "I", IDX_COMPONENT_UNIT       ' I列 - 单位 - 计量单位
+    colMaps.Add "N", IDX_COMPONENT_UNITPRICE  ' N列 - 成本单价 (元) - 单价
+    colMaps.Add "O", IDX_COMPONENT_TOTALPRICE ' O列 - 成本合计 (元) - 总价
+    colMaps.Add "R", IDX_BACKUP               ' R列 - 备注 - 备用字段
+    
+    ' 遍历要插入的所有行
+    For i = 1 To nRowsToInsert
+        ' 检查当前行的数据是否有效
+        If Not IsEmpty(subCategoryData(i)) And IsArray(subCategoryData(i)) Then
+            componentData = subCategoryData(i)  ' 获取当前组件的数据数组
+            targetRowNew = insertStartRow + i - 1  ' 计算目标行号
+            
+            ' 遍历所有列映射
+            For Each colLetter In colMaps.keys
+                sourceIndex = colMaps(colLetter)  ' 获取字段索引
+                
+                ' 检查索引是否在数组范围内
+                If sourceIndex >= LBound(componentData) And sourceIndex <= UBound(componentData) Then
+                    ' 检查字段值是否为空
+                    If Not IsEmpty(componentData(sourceIndex)) Then
+                        ' 直接填充值到单元格
+                        ws.Cells(targetRowNew, colLetter).value = componentData(sourceIndex)
+                    Else
+                        ' 字段值为空，填充空字符串
+                        ws.Cells(targetRowNew, colLetter).value = ""
+                    End If
+                Else
+                    ' 索引超出范围，填充空字符串
+                    ws.Cells(targetRowNew, colLetter).value = ""
+                End If
+            Next colLetter
+            
+'            ' 可选：添加简单的调试信息
+'            If i <= 3 Then  ' 只打印前3行的调试信息
+'                Debug.Print "第 " & i & " 行数据填充完成 - " & _
+'                            "规格（C列）: " & ws.Cells(targetRowNew, "C").value & ", " & _
+'                            "型号（D列）: " & ws.Cells(targetRowNew, "D").value
+'            End If
+        Else
+            ' 如果数据无效，在目标行填充空值
+            targetRowNew = insertStartRow + i - 1
+            
+            ' 遍历所有映射的列，填充空字符串
+            For Each colLetter In colMaps.keys
+                ws.Cells(targetRowNew, colLetter).value = ""
+            Next colLetter
+            
+            Debug.Print "警告：第 " & i & " 行数据为空或无效，已填充空行"
+        End If
+    Next i
+
+    ' 清理字典对象
+    Set colMaps = Nothing
+    
+    ' >>>>>>>>>>> 新增代码开始 <<<<<<<<<<<<<
+    ' --- 设置 C、D 列左对齐，并清除加粗 ---
+    Dim formatRange As Range
+
+    ' C 列
+    Set formatRange = ws.Range(ws.Cells(insertStartRow, ws.Range("C1").Column), ws.Cells(insertEndRow, ws.Range("C1").Column))
+    With formatRange
+        .HorizontalAlignment = xlLeft
+    End With
+
+    ' D 列
+    Set formatRange = ws.Range(ws.Cells(insertStartRow, ws.Range("D1").Column), ws.Cells(insertEndRow, ws.Range("D1").Column))
+    With formatRange
+        .HorizontalAlignment = xlLeft
+    End With
+
+    ' 整体取消加粗（可选但推荐）
+    Set formatRange = ws.Range(ws.Cells(insertStartRow, minCol), ws.Cells(insertEndRow, maxCol))
+    formatRange.Font.Bold = False
+    ' >>>>>>>>>>> 新增代码结束 <<<<<<<<<<<<<
+    
+    ' --- 统一处理所有需要合并的列 ---
+    Dim allMergeColumns As Variant: allMergeColumns = Array("A", "B", "J", "K", "L", "M", "P", "Q", "S")
+    Dim colIndex As Long, colNumber As Long
+    Dim mergeRange As Range
+    
+    For colIndex = 0 To UBound(allMergeColumns)
+        colLetter = allMergeColumns(colIndex)
+        colNumber = ws.Range(colLetter & "1").Column
+        
+        If colNumber >= minCol And colNumber <= maxCol Then
+
+            Set mergeRange = ws.Range(ws.Cells(insertStartRow, colNumber), ws.Cells(insertEndRow, colNumber))
+            
+            On Error Resume Next
+            If mergeRange.MergeCells Then mergeRange.UnMerge
+            mergeRange.Merge
+            On Error GoTo ErrorHandler
+            
+            With mergeRange
+                .HorizontalAlignment = xlCenter
+                .VerticalAlignment = xlCenter
+                .WrapText = True
+            End With
+            
+            Select Case colLetter
+                Case "A"
+                    mergeRange.value = rootName
+                    mergeRange.Orientation = xlVertical
+                    mergeRange.Font.Bold = True
+                Case "B"
+                    mergeRange.value = sonName
+                    Call MergeConsecutiveEqualCells(ws, subCategoryData, insertStartRow, insertEndRow, colNumber)
+                Case "J"
+                    mergeRange.value = 1#
+                Case "K"
+                    mergeRange.value = "套"
+                Case "Q"
+                    mergeRange.value = 2#
+                    mergeRange.HorizontalAlignment = xlCenter
+                    mergeRange.VerticalAlignment = xlCenter
+            End Select
+        End If
+    Next colIndex
+
+    ' --- 设置公式和计算 ---
+    Dim nCol As Long: nCol = ws.Range("N1").Column
+    Dim oCol As Long: oCol = ws.Range("O1").Column
+    Dim pCol As Long: pCol = ws.Range("P1").Column
+    Dim lCol As Long: lCol = ws.Range("L1").Column
+    Dim mCol As Long: mCol = ws.Range("M1").Column
+    Dim qCol As Long: qCol = ws.Range("Q1").Column
+    Dim hCol As Long: hCol = ws.Range("H1").Column
+    Dim jCol As Long: jCol = ws.Range("J1").Column
+    
+    ' 设置O列公式：=N列 × H列
+    Dim rowNum As Long
+    For rowNum = insertStartRow To insertEndRow
+        ws.Cells(rowNum, oCol).formula = "=$N" & rowNum & "*$H" & rowNum
+    Next rowNum
+    
+    ' 设置合并单元格公式
+    If pCol > 0 Then
+        ws.Cells(insertStartRow, pCol).formula = "=SUM($O" & insertStartRow & ":$O" & insertEndRow & ")"
+    End If
+    
+    If lCol > 0 Then
+        ws.Cells(insertStartRow, lCol).formula = "=$P" & insertStartRow & "*$Q" & insertStartRow
+    End If
+    
+    If mCol > 0 Then
+        ws.Cells(insertStartRow, mCol).formula = "=$L" & insertStartRow & "*$J" & insertStartRow
+    End If
+    
+    ' --- 设置边框格式（保持原有逻辑）---
+    Dim borderRange As Range
+    Dim firstRowRange As Range
+    Dim lastRowRange As Range
+    Dim rightColRange As Range
+
+    ' 定义整个新插入区域
+    Set borderRange = ws.Range(ws.Cells(insertStartRow, minCol), ws.Cells(insertEndRow, maxCol))
+
+    ' 定义特殊边框区域
+    Set firstRowRange = ws.Range(ws.Cells(insertStartRow, minCol), ws.Cells(insertStartRow, maxCol))
+    Set lastRowRange = ws.Range(ws.Cells(insertEndRow, minCol), ws.Cells(insertEndRow, maxCol))
+    Set rightColRange = ws.Range(ws.Cells(insertStartRow, maxCol), ws.Cells(insertEndRow, maxCol))
+
+    ' 1. 先设置整个区域的所有边框为细线（基础边框）
+    With borderRange.Borders
+        .LineStyle = xlContinuous
+        .Weight = xlThin
+        .ColorIndex = xlAutomatic
+    End With
+
+    ' 2. 单独设置第一行的上边框为粗线
+    With firstRowRange.Borders(xlEdgeTop)
+        .LineStyle = xlContinuous
+        .Weight = xlMedium
+        .ColorIndex = xlAutomatic
+    End With
+
+    ' 3. 单独设置最后一行的下边框为粗线
+    With lastRowRange.Borders(xlEdgeBottom)
+        .LineStyle = xlContinuous
+        .Weight = xlMedium
+        .ColorIndex = xlAutomatic
+    End With
+
+    Dim bottomLineRow As Long
+    bottomLineRow = insertEndRow + 1
+    
+    Dim bottomRng As Range
+    Set bottomRng = ws.Range(ws.Cells(bottomLineRow, minCol), ws.Cells(bottomLineRow, maxCol))
+    
+'    With bottomRng.Borders(xlEdgeTop)
+'        .LineStyle = xlNone          ' 先清
+'    End With
+    
+    With bottomRng.Borders(xlEdgeTop)
+        .LineStyle = xlContinuous
+        .Weight = xlMedium
+        .ColorIndex = xlAutomatic
+    End With
+
+    ' 4. 单独设置最右侧列的右边框为粗线
+    With rightColRange.Borders(xlEdgeRight)
+        .LineStyle = xlContinuous
+        .Weight = xlMedium
+        .ColorIndex = xlAutomatic
+    End With
+
+    ' 5. 设置内部边框（保留细线）
+    With borderRange.Borders(xlInsideVertical)
+        .LineStyle = xlContinuous
+        .Weight = xlThin
+        .ColorIndex = xlAutomatic
+    End With
+
+    With borderRange.Borders(xlInsideHorizontal)
+        .LineStyle = xlContinuous
+        .Weight = xlThin
+        .ColorIndex = xlAutomatic
+    End With
+
+Cleanup:
+    ' --- 恢复应用程序原始设置 ---
+    With Application
+        .ScreenUpdating = originalScreenUpdating
+        .Calculation = originalCalculation
+        .EnableEvents = originalEnableEvents
+    End With
+    Exit Sub
+
+ErrorHandler:
+    ' --- 发生错误时恢复设置并报告 ---
+    With Application
+        .ScreenUpdating = originalScreenUpdating
+        .Calculation = originalCalculation
+        .EnableEvents = originalEnableEvents
+    End With
+    MsgBox "插入行时发生未预期的错误: " & Err.Description & " (错误号: " & Err.Number & ")" & vbCrLf & _
+           "请检查数据和配置。", vbCritical, "VBA 宏错误"
+End Sub
+
+
+' --- 辅助函数：将列号转换为列字母 ---
+' 例如 ColumnLetter(1) = "A", ColumnLetter(27) = "AA"
+Public Function ColumnLetter(colNum As Long) As String
+    If colNum <= 0 Then
+        ColumnLetter = ""
+        Exit Function
+    End If
+    ColumnLetter = Replace(Cells(1, colNum).Address(False, False), "1", "")
+End Function
+
+
+Private Sub MergeConsecutiveEqualCells(ws As Worksheet, ByVal subCategoryData As Collection, startRow As Long, endRow As Long, colNum As Long)
+    On Error Resume Next
+    
+    Application.DisplayAlerts = False
+    
+    ' 1. 取消范围内所有合并
+    ws.Range(ws.Cells(startRow, colNum), ws.Cells(endRow, colNum)).UnMerge
+    
+    ' 2. 创建组别映射字典
+    Dim compGroup As Object
+    Set compGroup = CreateObject("Scripting.Dictionary")
+    
+    Dim dataItem As Variant
+    Dim compName As String
+    Dim groupName As String
+    
+    For Each dataItem In subCategoryData
+        If IsArray(dataItem) And UBound(dataItem) >= IDX_IS_ASSEMBLY Then
+            ' 获取组件名
+            If Not IsEmpty(dataItem(IDX_COMPONENT_NAME)) Then
+                compName = Trim(CStr(dataItem(IDX_COMPONENT_NAME)))
+            Else
+                compName = ""
+            End If
+            
+            ' 根据 is_Assembly 决定组别
+            If Not IsEmpty(dataItem(IDX_IS_ASSEMBLY)) Then
+                If CLng(dataItem(IDX_IS_ASSEMBLY)) >= 1 Then
+                    groupName = "OPTIONAL_GROUP"
+                Else
+                    groupName = "NORMAL_GROUP"
+                End If
+            Else
+                groupName = "NORMAL_GROUP"
+            End If
+            
+            If Len(compName) > 0 Then
+                compGroup(compName) = Array(groupName, compName) ' 保存组名和组件名
+            End If
+        End If
+    Next
+    
+    ' 3. 按组别合并
+    Dim groupStartRow As Long
+    Dim currentGroup As String
+    Dim i As Long
+    Dim groupFirstCompName As String ' 新增：记录组内的第一个组件名
+    
+    groupStartRow = startRow
+    currentGroup = ""
+    
+    For i = startRow To endRow
+        Dim cellValue As String
+        cellValue = Trim(CStr(ws.Cells(i, colNum + 1).value))
+        
+        Dim thisGroup As String
+        Dim thisCompName As String
+        If compGroup.Exists(cellValue) Then
+            Dim groupInfo As Variant
+            groupInfo = compGroup(cellValue)
+            thisGroup = groupInfo(0)
+            thisCompName = groupInfo(1)
+        Else
+            thisGroup = "UNKNOWN"
+            thisCompName = ""
+        End If
+        
+        ' 如果是第一行，初始化组别
+        If i = startRow Then
+            currentGroup = "NORMAL_GROUP"
+            groupFirstCompName = thisCompName ' 记录第一个组件名
+        End If
+        
+        ' 如果组别发生变化
+        If thisGroup <> currentGroup Or i = endRow Then
+            ' 确定合并的结束行
+            Dim mergeEndRow As Long
+            If thisGroup <> currentGroup Then
+                mergeEndRow = i - 1
+            Else
+                mergeEndRow = i
+            End If
+            
+            ' 如果需要合并（多于1行）
+            If mergeEndRow > groupStartRow Then
+                With ws.Range(ws.Cells(groupStartRow, colNum), ws.Cells(mergeEndRow, colNum))
+                    .Merge
+                    .HorizontalAlignment = xlCenter
+                    .VerticalAlignment = xlCenter
+                    
+                    ' ??? 关键：设置合并单元格的值 ???
+                    If Len(groupFirstCompName) > 0 And currentGroup = "OPTIONAL_GROUP" Then
+                        .value = groupFirstCompName
+                    End If
+                End With
+            End If
+            
+            ' 重置起始位置和组别
+            groupStartRow = i
+            currentGroup = thisGroup
+            groupFirstCompName = thisCompName ' 更新为新的组件名
+        End If
+    Next i
+    
+    Application.DisplayAlerts = True
+End Sub
+
+

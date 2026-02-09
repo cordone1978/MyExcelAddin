@@ -1,3 +1,5 @@
+const fs = require('fs');
+const https = require('https');
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
@@ -7,6 +9,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use('/public', express.static(path.join(__dirname, 'public')));
+// 提供 dist 目录（Webpack 编译后的文件）
+app.use(express.static(path.join(__dirname, 'dist')));
 
 // MySQL 连接池
 const pool = mysql.createPool({
@@ -78,10 +82,11 @@ app.get('/api/details/:projectId', async (req, res) => {
         config_id as id,
         component_name as name,
         component_pic,
+        component_sn,
         CAST(is_active AS SIGNED) as is_required,
         CASE 
           WHEN component_pic IS NOT NULL AND component_pic != '' 
-          THEN CONCAT('http://localhost:3001/public/images/', component_pic, '.png')
+          THEN CONCAT('https://localhost:3001/public/images/', component_pic, '.png')
           ELSE NULL
         END as image_url
       FROM ht_sales_product_default_config
@@ -111,7 +116,7 @@ app.get('/api/annotations/:projectId', async (req, res) => {
         NULL as position_y,
         CASE 
           WHEN component_pic IS NOT NULL AND component_pic != '' 
-          THEN CONCAT('http://localhost:3001/public/images/', component_pic, '.png')
+          THEN CONCAT('https://localhost:3001/public/images/', component_pic, '.png')
           ELSE NULL
         END as image_url
       FROM ht_sales_product_default_config
@@ -199,11 +204,24 @@ app.get('/api/materials/:componentId', async (req, res) => {
   }
 });
 
-// 启动服务器
+// ==================== HTTPS 服务器 ====================
+
+// 读取证书
+const httpsOptions = {
+    key: fs.readFileSync('./localhost+2-key.pem'),
+    cert: fs.readFileSync('./localhost+2.pem')
+};
+
+// 启动 HTTPS 服务器（← 这里是关键修改）
 const PORT = 3001;
-app.listen(PORT, () => {
-  console.log(`✅ API 服务运行在 http://localhost:${PORT}`);
-  console.log(`测试连接: http://localhost:${PORT}/api/test`);
-  console.log(`获取分类: http://localhost:${PORT}/api/categories`);
-  console.log(`图片服务: http://localhost:${PORT}/public/images/`);
+https.createServer(httpsOptions, app).listen(PORT, () => {
+  console.log('========================================');
+  console.log(`✅ HTTPS 服务运行在 https://localhost:${PORT}`);
+  console.log('🔒 SSL 证书已加载');
+  console.log('========================================');
+  console.log('📍 API 端点:');
+  console.log(`   测试: https://localhost:${PORT}/api/test`);
+  console.log(`   分类: https://localhost:${PORT}/api/categories`);
+  console.log(`   图片: https://localhost:${PORT}/public/images/`);
+  console.log('========================================');
 });

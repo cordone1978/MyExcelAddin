@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8" />
@@ -22,7 +22,7 @@
         
         .container {
             display: grid;
-            grid-template-columns: 180px 320px 1fr;
+            grid-template-columns: 180px 180px 180px 1fr;
             gap: 12px;
             height: calc(100vh - 24px);
             background: white;
@@ -41,9 +41,8 @@
         }
         
         .middle-panel {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
+            display: flex;
+            flex-direction: column;
             border-right: 1px solid #e0e0e0;
             padding-right: 12px;
             height: 100%;
@@ -59,8 +58,10 @@
         
         .middle-right {
             display: grid;
-            grid-template-rows: 1fr 1fr;
+            grid-template-rows: 2fr 1fr;
             gap: 12px;
+            border-right: 1px solid #e0e0e0;
+            padding-right: 12px;
             height: 100%;
             min-height: 0;
         }
@@ -79,7 +80,7 @@
             align-items: center;
             justify-content: flex-start;
             min-width: 0;
-            padding: 10px 0;
+            gap: 8px;
         }
         
         .panel-title {
@@ -142,11 +143,11 @@
         }
         
         .image-container {
+            flex: 1 1 auto;
             width: 100%;
-            flex: 1;
+            max-width: 100%;
+            max-height: 100%;
             min-height: 0;
-            aspect-ratio: 1 / 1;
-            max-width: min(90vh, 100%);
             position: relative;
             border: 2px solid #0078d4;
             border-radius: 8px;
@@ -155,20 +156,38 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            align-self: center;
         }
 
-
-        .image-container img {
+        .image-container img,
+        .image-container canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
             object-fit: contain;
         }
 
+        #previewImage {
+            display: none;
+            z-index: 1;
+        }
+
         #mainCanvas {
-            display: block;
+            display: none;
             cursor: crosshair;
-            max-width: 100%;
-            max-height: 100%;
+            z-index: 2;
+        }
+
+        #placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 0;
         }
         
         .placeholder {
@@ -225,7 +244,7 @@
         }
         
         .action-buttons {
-            margin-top: 16px;
+            margin-top: 8px;
             display: flex;
             gap: 12px;
             justify-content: center;
@@ -293,16 +312,16 @@
                 <h3 class="panel-title">产品型号</h3>
                 <div class="listbox" id="projectList"></div>
             </div>
-            
-            <div class="middle-right">
-                <div>
-                    <h3 class="panel-title">详细信息（多选）</h3>
-                    <div class="listbox" id="detailList"></div>
-                </div>
-                <div>
-                    <h3 class="panel-title">标注选项（多选）</h3>
-                    <div class="listbox" id="annotationList"></div>
-                </div>
+        </div>
+
+        <div class="middle-right">
+            <div>
+                <h3 class="panel-title">详细信息（多选）</h3>
+                <div class="listbox" id="detailList"></div>
+            </div>
+            <div>
+                <h3 class="panel-title">标注选项（多选）</h3>
+                <div class="listbox" id="annotationList"></div>
             </div>
         </div>
         
@@ -310,6 +329,8 @@
             <h3 class="panel-title">图片预览与标注</h3>
             <div class="image-container" id="imageContainer">
                 <canvas id="mainCanvas"></canvas>
+                <img id="previewImage" alt="" />
+                <div id="placeholder" class="placeholder">← 选择产品后显示图片</div>
                 <div id="tooltip"></div>
             </div>
             <div class="action-buttons">
@@ -321,9 +342,10 @@
 
 <script>
     // API 配置
-    const API_BASE = 'http://localhost:3001/api';
+    const API_BASE = 'https://localhost:3001/api';
     // 新增：图片基础路径
-    const IMAGE_BASE = 'http://localhost:3001/public/images/';
+    const IMAGE_BASE = 'https://localhost:3001/public/images/';
+    const IMAGE_CACHE_BUSTER = Date.now().toString(36);
     
     // 数据存储
     let currentCategoryId = null;
@@ -347,6 +369,35 @@
     let outlineEnabled = true;
     let isDraggingHotspot = false;
     let draggedHotspot = null;
+    let currentBaseImageUrl = '';
+
+    function resizeImageArea() {
+        const imageContainer = document.getElementById('imageContainer');
+        const rightPanel = imageContainer ? imageContainer.parentElement : null;
+        if (!imageContainer || !rightPanel) return;
+
+        const titleEl = rightPanel.querySelector('.panel-title');
+        const actionsEl = rightPanel.querySelector('.action-buttons');
+        const titleHeight = titleEl ? titleEl.offsetHeight : 0;
+        const actionsHeight = actionsEl ? actionsEl.offsetHeight : 0;
+
+        const availableHeight = Math.max(200, rightPanel.clientHeight - titleHeight - actionsHeight - 12);
+        const availableWidth = Math.max(200, rightPanel.clientWidth);
+        const size = Math.min(availableWidth, availableHeight);
+
+        imageContainer.style.width = `${size}px`;
+        imageContainer.style.height = `${size}px`;
+
+        if (canvas && bufferCanvas) {
+            canvas.width = size;
+            canvas.height = size;
+            bufferCanvas.width = size;
+            bufferCanvas.height = size;
+        }
+        if (Object.keys(components).length > 0) {
+            renderCanvas();
+        }
+    }
 
     // 初始化
     Office.onReady(() => {
@@ -359,9 +410,8 @@
         bufferCtx = bufferCanvas.getContext('2d');
 
         // 设置初始 Canvas 尺寸
-        const container = document.getElementById('imageContainer');
-        canvas.width = 800;
-        canvas.height = 600;
+        resizeImageArea();
+        window.addEventListener('resize', resizeImageArea);
 
         // 显示占位符
         showCanvasPlaceholder('← 选择项目后显示图片');
@@ -577,7 +627,33 @@
         
         // 编码中文文件名
         const encodedFileName = encodeURIComponent(fileName);
-        return IMAGE_BASE + encodedFileName;
+        const url = new URL(IMAGE_BASE + encodedFileName, window.location.origin);
+        url.searchParams.set('v', IMAGE_CACHE_BUSTER);
+        return url.toString();
+    }
+
+    // 统一处理后端返回的 image_url（协议、中文编码）
+    function normalizeImageUrl(rawUrl) {
+        if (!rawUrl) return null;
+        try {
+            const url = new URL(rawUrl, window.location.origin);
+            // 强制与当前页面一致的协议（https）
+            url.protocol = window.location.protocol;
+            // 仅编码路径中的文件名部分
+            const parts = url.pathname.split("/").map((part, idx) => {
+                if (idx === 0) return part;
+                try {
+                    return encodeURIComponent(decodeURIComponent(part));
+                } catch {
+                    return encodeURIComponent(part);
+                }
+            });
+            url.pathname = parts.join("/");
+            url.searchParams.set('v', IMAGE_CACHE_BUSTER);
+            return url.toString();
+        } catch (e) {
+            return getImageUrl(rawUrl);
+        }
     }
 
 // 6. 显示组件详情（多选，必选项自动选中）
@@ -602,7 +678,7 @@ function displayDetails(details) {
         // 获取图片URL
         let imageUrl = null;
         if (detail.image_url) {
-            imageUrl = detail.image_url;
+            imageUrl = normalizeImageUrl(detail.image_url);
         } else if (detail.component_pic) {
             imageUrl = getImageUrl(detail.component_pic);
         }
@@ -633,21 +709,11 @@ function displayDetails(details) {
             label.style.color = '#0078d4';
         }
 
-        // ← 新增：点击整个 item 切换图片（单独显示）
+        // 单击列表项：仅切换勾选，保持叠加显示
         item.onclick = (e) => {
-            // 如果点击的是 checkbox，不处理（让 checkbox 的事件处理）
-            if (e.target.type === 'checkbox') return;
-
-            // 显示该组件的单独图片
-            if (imageUrl) {
-                displaySingleImage(imageUrl);
-            }
-
-            // 高亮当前选中的项
-            document.querySelectorAll('#detailList .listbox-item').forEach(i => {
-                i.style.backgroundColor = '';
-            });
-            item.style.backgroundColor = '#fff9e6';  // 浅黄色高亮
+            if (e.target && e.target.type === 'checkbox') return;
+            checkbox.checked = !checkbox.checked;
+            checkbox.dispatchEvent(new Event('change'));
         };
 
         item.appendChild(checkbox);
@@ -666,25 +732,32 @@ function displayAnnotations(annotations) {
         return;
     }
 
-    annotations.forEach((annotation, index) => {
+    const normalized = normalizeAnnotations(annotations);
+
+    if (normalized.length === 0) {
+        annotationList.innerHTML = '<div class="placeholder">暂无可选配件</div>';
+        return;
+    }
+
+    normalized.forEach((annotation, index) => {
         const item = document.createElement('div');
         item.className = 'listbox-item multi-select';
 
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.id = `anno-${index}`;
-        checkbox.dataset.id = annotation.id;
+        checkbox.dataset.key = annotation.key;
 
         // 获取图片URL
         let imageUrl = null;
         if (annotation.image_url) {
-            imageUrl = annotation.image_url;
+            imageUrl = normalizeImageUrl(annotation.image_url);
         } else if (annotation.component_pic) {
             imageUrl = getImageUrl(annotation.component_pic);
         }
 
         checkbox.onchange = () => toggleAnnotation(
-            annotation.id,
+            annotation.key,
             annotation.name,
             annotation.position_x,
             annotation.position_y,
@@ -698,27 +771,56 @@ function displayAnnotations(annotations) {
         label.style.cursor = 'pointer';
         label.style.flex = '1';
 
-        // ← 新增：点击整个 item 切换图片
+        // 单击空白处切换勾选，保持叠加显示
         item.onclick = (e) => {
-            // 如果点击的是 checkbox，不处理
-            if (e.target.type === 'checkbox') return;
-
-            // 显示该组件的单独图片
-            if (imageUrl) {
-                displaySingleImage(imageUrl);
-            }
-
-            // 高亮当前选中的项
-            document.querySelectorAll('#annotationList .listbox-item').forEach(i => {
-                i.style.backgroundColor = '';
-            });
-            item.style.backgroundColor = '#fff9e6';  // 浅黄色高亮
+            if (e.target && e.target.type === 'checkbox') return;
+            checkbox.checked = !checkbox.checked;
+            toggleAnnotation(
+                annotation.key,
+                annotation.name,
+                annotation.position_x,
+                annotation.position_y,
+                imageUrl,
+                checkbox.checked
+            );
         };
 
         item.appendChild(checkbox);
         item.appendChild(label);
         annotationList.appendChild(item);
     });
+}
+
+// 合并重复的标注项（按名称），优先保留有图片/坐标的记录
+function normalizeAnnotations(annotations) {
+    const map = new Map();
+    annotations.forEach((anno) => {
+        const key = (anno.name || '').trim() || `__id_${anno.id}`;
+        const existing = map.get(key);
+        if (!existing) {
+            map.set(key, { ...anno, key });
+            return;
+        }
+
+        const existingHasImage = !!(existing.image_url || existing.component_pic);
+        const candidateHasImage = !!(anno.image_url || anno.component_pic);
+        if (!existingHasImage && candidateHasImage) {
+            existing.image_url = anno.image_url;
+            existing.component_pic = anno.component_pic;
+            existing.id = anno.id;
+        }
+
+        if ((existing.position_x === null || existing.position_x === undefined || existing.position_x === '') &&
+            (anno.position_x !== null && anno.position_x !== undefined && anno.position_x !== '')) {
+            existing.position_x = anno.position_x;
+        }
+
+        if ((existing.position_y === null || existing.position_y === undefined || existing.position_y === '') &&
+            (anno.position_y !== null && anno.position_y !== undefined && anno.position_y !== '')) {
+            existing.position_y = anno.position_y;
+        }
+    });
+    return Array.from(map.values());
 }
 
     // 8. 切换组件选择
@@ -781,6 +883,8 @@ function displayAnnotations(annotations) {
     function renderCanvas() {
         const container = document.getElementById('imageContainer');
         const canvas = document.getElementById('mainCanvas');
+        const previewImage = document.getElementById('previewImage');
+        const placeholder = document.getElementById('placeholder');
 
         if (!canvas) {
             console.error('Canvas element not found');
@@ -791,14 +895,19 @@ function displayAnnotations(annotations) {
 
         // 如果没有选中任何组件，显示占位符
         if (Object.keys(components).length === 0) {
-            container.style.display = 'flex';
             canvas.style.display = 'none';
+            if (previewImage && previewImage.src) {
+                previewImage.style.display = 'block';
+                if (placeholder) placeholder.style.display = 'none';
+            } else if (placeholder) {
+                placeholder.style.display = 'flex';
+            }
             return;
         }
 
-        // 隐藏占位符，显示 Canvas
-        container.style.display = 'none';
+        // 显示 Canvas，隐藏其他
         canvas.style.display = 'block';
+        if (placeholder) placeholder.style.display = 'none';
 
         // 获取所有已加载的组件
         const loadedComponents = Object.values(components)
@@ -810,17 +919,12 @@ function displayAnnotations(annotations) {
             return;
         }
 
-        // 计算 Canvas 尺寸（使用第一张图片的尺寸）
-        const firstImage = loadedComponents[0].image;
-        canvas.width = firstImage.width;
-        canvas.height = firstImage.height;
-
         // 清空 Canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         // 按层级顺序绘制所有组件
         loadedComponents.forEach(component => {
-            ctx.drawImage(component.image, 0, 0);
+            ctx.drawImage(component.image, 0, 0, canvas.width, canvas.height);
         });
 
         console.log('Canvas 渲染完成，组件数量:', loadedComponents.length);
@@ -828,85 +932,91 @@ function displayAnnotations(annotations) {
 
     // 显示单张图片（用于点击列表项时预览）
     function displaySingleImage(imageUrl) {
-        const container = document.getElementById('imageContainer');
         const canvas = document.getElementById('mainCanvas');
+        const previewImage = document.getElementById('previewImage');
+        const placeholder = document.getElementById('placeholder');
 
-        // 隐藏 Canvas，显示容器
-        canvas.style.display = 'none';
-        container.style.display = 'flex';
-        container.innerHTML = '';
+        if (canvas) canvas.style.display = 'none';
+        if (placeholder) placeholder.style.display = 'none';
+        if (!previewImage) return;
 
-        const img = document.createElement('img');
-        img.src = imageUrl;
-        img.onload = () => {
+        previewImage.onload = () => {
             console.log("单张图片加载完成:", imageUrl);
         };
-        img.onerror = () => {
+        previewImage.onerror = () => {
             console.error("图片加载失败:", imageUrl);
-            container.innerHTML = '<div class="error">图片加载失败</div>';
+            if (placeholder) {
+                placeholder.textContent = "图片加载失败";
+                placeholder.style.display = 'flex';
+            }
         };
 
-        container.appendChild(img);
+        previewImage.src = imageUrl;
+        previewImage.style.display = 'block';
         clearHotspots();
     }
 
     // 10. 显示 Canvas 占位符
     function showCanvasPlaceholder(message) {
-        const container = document.getElementById('imageContainer');
         const mainCanvas = document.getElementById('mainCanvas');
+        const previewImage = document.getElementById('previewImage');
+        const placeholder = document.getElementById('placeholder');
 
         // 隐藏 Canvas
         if (mainCanvas) {
             mainCanvas.style.display = 'none';
         }
 
-        // 显示占位符
-        container.style.display = 'flex';
-        container.innerHTML = `
-            <canvas id="mainCanvas" style="display: none;"></canvas>
-            <div id="tooltip"></div>
-            <div class="placeholder">
-                <div style="font-size: 18px; color: #999;">${message}</div>
-            </div>
-        `;
+        if (previewImage) {
+            previewImage.src = '';
+            previewImage.style.display = 'none';
+        }
+        if (placeholder) {
+            placeholder.textContent = message;
+            placeholder.style.display = 'flex';
+        }
         clearHotspots();
     }
 
     // 11. 显示占位图片
     function displayPlaceholderImage(projectName) {
-        const container = document.getElementById('imageContainer');
         const canvas = document.getElementById('mainCanvas');
+        const previewImage = document.getElementById('previewImage');
+        const placeholder = document.getElementById('placeholder');
 
         // 隐藏 Canvas，显示容器
         if (canvas) {
             canvas.style.display = 'none';
         }
-        container.style.display = 'flex';
-        container.innerHTML = `
-            <div class="placeholder">
+        if (previewImage) {
+            previewImage.src = '';
+            previewImage.style.display = 'none';
+        }
+        if (placeholder) {
+            placeholder.innerHTML = `
                 <div style="font-size: 24px; margin-bottom: 10px;">📦</div>
                 <div>${projectName}</div>
                 <div style="font-size: 12px; color: #999; margin-top: 5px;">暂无产品图片</div>
-            </div>
-        `;
+            `;
+            placeholder.style.display = 'flex';
+        }
         clearHotspots();
     }
 
     // 12. 显示图片（用于产品主图）
     function displayImage(imageUrl) {
-        const container = document.getElementById('imageContainer');
         const canvas = document.getElementById('mainCanvas');
+        const previewImage = document.getElementById('previewImage');
+        const placeholder = document.getElementById('placeholder');
 
         // 隐藏 Canvas，显示容器
         if (canvas) {
             canvas.style.display = 'none';
         }
-        container.style.display = 'flex';
-        container.innerHTML = '';
+        if (placeholder) placeholder.style.display = 'none';
+        if (!previewImage) return;
 
-        const img = document.createElement('img');
-        img.src = imageUrl;
-        img.onload = () => {
+        previewImage.onload = () => {
             console.log("图片加载完成:", imageUrl);
 
             // 自动为已选的标注添加热点
@@ -916,43 +1026,50 @@ function displayAnnotations(annotations) {
                 });
             }, 100);
         };
-        img.onerror = () => {
+        previewImage.onerror = () => {
             console.error("图片加载失败:", imageUrl);
-            container.innerHTML = '<div class="error">图片加载失败</div>';
+            if (placeholder) {
+                placeholder.textContent = "图片加载失败";
+                placeholder.style.display = 'flex';
+            }
         };
-
-        container.appendChild(img);
+        currentBaseImageUrl = imageUrl || '';
+        previewImage.src = imageUrl;
+        previewImage.style.display = 'block';
         clearHotspots();
     }
 
     // 12. 切换标注选项
-    function toggleAnnotation(annotationId, annotationName, posX, posY, imageUrl, isChecked) {
+    function toggleAnnotation(annotationKey, annotationName, posX, posY, imageUrl, isChecked) {
         if (isChecked) {
-            selectedAnnotations.set(annotationId, {
+            selectedAnnotations.set(annotationKey, {
                 name: annotationName,
                 posX,
                 posY,
                 imageUrl
             });
-            addHotspotMarker(annotationId, annotationName, posX, posY);
+            // 可选配件同样叠加到 Canvas
+            addComponentToCanvas(annotationKey, annotationName, imageUrl, posX || 0);
+            // 同时保留热点
+            addHotspotMarker(annotationKey, annotationName, posX, posY);
         } else {
-            selectedAnnotations.delete(annotationId);
-            removeHotspotMarker(annotationId);
+            selectedAnnotations.delete(annotationKey);
+            removeHotspotMarker(annotationKey);
+            removeComponentFromCanvas(annotationKey);
         }
 
         console.log("当前选中的可选配件:", Array.from(selectedAnnotations.entries()).map(([id, data]) => ({id, ...data})));
+        renderCanvas();
     }
 
     // 13. 添加热点标记
-    function addHotspotMarker(annotationId, annotationName, posX, posY) {
+    function addHotspotMarker(annotationKey, annotationName, posX, posY) {
         const container = document.getElementById('imageContainer');
-        const img = container.querySelector('img');
-        if (!img) return;
         
         const marker = document.createElement('div');
         marker.className = 'hotspot-marker';
         marker.textContent = hotspotMarkers.length + 1;
-        marker.dataset.annotationId = annotationId;
+        marker.dataset.annotationId = annotationKey;
         
         const x = posX !== null && posX !== undefined ? posX : 20 + Math.random() * 60;
         const y = posY !== null && posY !== undefined ? posY : 20 + Math.random() * 60;
@@ -965,12 +1082,12 @@ function displayAnnotations(annotations) {
         };
         
         container.appendChild(marker);
-        hotspotMarkers.push({ annotationId, annotationName, marker, x, y });
+        hotspotMarkers.push({ annotationId: annotationKey, annotationName, marker, x, y });
     }
 
     // 14. 移除热点标记
-    function removeHotspotMarker(annotationId) {
-        const index = hotspotMarkers.findIndex(h => h.annotationId === annotationId);
+    function removeHotspotMarker(annotationKey) {
+        const index = hotspotMarkers.findIndex(h => h.annotationId === annotationKey);
         if (index !== -1) {
             const { marker } = hotspotMarkers[index];
             marker.remove();
@@ -992,7 +1109,7 @@ function displayAnnotations(annotations) {
     function clearRightPanels() {
         document.getElementById('detailList').innerHTML = '';
         document.getElementById('annotationList').innerHTML = '';
-        document.getElementById('imageContainer').innerHTML = '<div class="placeholder">← 选择产品后显示图片</div>';
+        showCanvasPlaceholder('← 选择产品后显示图片');
         clearHotspots();
     }
 
@@ -1077,3 +1194,4 @@ function displayAnnotations(annotations) {
 </script>
 </body>
 </html>
+

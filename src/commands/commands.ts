@@ -1,14 +1,14 @@
-console.log("🚨 commands.ts 加载");
+﻿console.log("🚨 commands.ts 加载");
 
 function openDialog(event: Office.AddinCommands.Event) {
     console.log("🎯 openDialog被调用");
     
     try {
         Office.context.ui.displayDialogAsync(
-            'https://localhost:3000/dialog.html',
+            './src/dialog/dialog.html',
             {
-                width: 50,
-                height: 62,
+                width: 60,
+                height: 65,
                 displayInIframe: true
             },
             function(result) {

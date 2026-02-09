@@ -1,0 +1,1269 @@
+
+'UserForm
+'│
+'├─【初始化】
+'│   ├─ 加载系统 → 根分类 → 子分类
+'│   └─ 初始化 HTML（仅一次）
+'│
+'├─【VBA → JS】
+'│   └─ execScript 控制图层显示
+'│
+'├─【JS → VBA】
+'│   └─ document.title 通讯（安全时间戳）
+'│
+'├─【业务层】
+'│   ├─ 必选项控制
+'│   ├─ 可选件控制
+'│   ├─ 标准件 / 工艺价格合并
+'│   └─ 插入工作表
+'│
+'└─【统一消息调度中心】
+'    └─ HandleJsCommand()
+
+Option Explicit
+
+' 公共变量
+Public foundCell As Range
+Public g_WhatKind As String
+
+' 存储根分类和子分类的数据
+Private rootData As Collection ' 存储ID和名称的映射
+Private selectedRootID As String
+
+Private requiredIndices() As Long  ' 存储必选项索引的数组变量
+Private originalItems() As String  ' 存储原始文本（不带[必选]标记）
+
+
+' =============================================================================
+' 函数名称：SonListBox_Click
+' 功能描述：处理子分类列表框点击事件
+'           获取选中的根分类和子分类，加载对应数据，过滤并显示组件列表
+' 输入参数：无
+' 返回结果：无
+' =============================================================================
+Private Sub SonListBox_Click()
+    ' --- 验证选择 ---
+    If Me.RootListBox.ListIndex = -1 Then
+        MsgBox "请先选择根分类", vbExclamation
+        Exit Sub
+    End If
+    
+    ' --- 获取选中项 ---
+    Dim selectedRootName As String, selectedSonName As String
+    selectedRootName = Me.RootListBox.List(Me.RootListBox.ListIndex)
+    selectedSonName = Me.SonListBox.List(Me.SonListBox.ListIndex)
+    
+    ' --- 清空列表 ---
+    Me.lstComponents.Clear
+    Me.lstOptional.Clear
+    
+    ' --- 加载数据 ---
+    Set g_SubCategoryData = GetSubCategoryDataFromDefaultTabel(selectedRootName, selectedSonName)
+    If g_SubCategoryData Is Nothing Or g_SubCategoryData.count = 0 Then Exit Sub
+    
+    ' --- 调用数据处理函数 ---
+    ProcessComponentData
+    
+    ' --- 后续处理 ---
+    SetOpticalItems g_SubCategoryData
+ 
+    ' 获取所有组件（不仅仅是选中的）
+    Dim allComponents As Collection
+    Set allComponents = GetAllComponents(g_SubCategoryData)
+    
+    ' 获取当前选中的组件（用于初始显示）
+    Dim initialSelected As Collection
+    Set initialSelected = GetSelectedComponents()
+    
+    Dim base64Data As Dictionary
+    Set base64Data = GetAllComponentImages_Cached(allComponents)
+
+    UpdateLayerDisplay allComponents, base64Data, initialSelected
+End Sub
+
+
+' ============================================================
+' 函数名称：ProcessComponentData
+' 功能描述：处理组件数据并显示到列表
+'           新增whatkind过滤：工艺和标准件不显示
+' 输入参数：无（使用模块级变量g_SubCategoryData）
+' 返回结果：无
+' ============================================================
+Private Sub ProcessComponentData()
+    Dim componentList() As String
+    Dim itemCount As Long, requiredCount As Long
+    Dim dataItem As Variant
+    Dim componentName As String
+    Dim isAssembly As Long, isActive As Long
+    Dim whatKind As String
+    
+    ' 预分配数组
+    ReDim componentList(0 To g_SubCategoryData.count - 1) As String
+    ReDim originalItems(0 To g_SubCategoryData.count - 1) As String
+    ReDim requiredIndices(0 To g_SubCategoryData.count - 1) As Long
+    
+    itemCount = 0
+    requiredCount = 0
+    
+    ' 存储标准件总价，用于后续合并
+    Dim standardPartsTotalPrice As Currency
+    standardPartsTotalPrice = 0
+    
+    ' 遍历处理
+    For Each dataItem In g_SubCategoryData
+        ' 检查是否为数组且长度足够
+        If Not IsArray(dataItem) Then GoTo ContinueLoop
+        If UBound(dataItem) < IDX_IS_ASSEMBLY Then GoTo ContinueLoop
+        
+        ' 获取组件名称
+        componentName = Trim(CStr(dataItem(IDX_COMPONENT_NAME)))
+        
+        ' 获取组件种类（新增）
+        whatKind = Trim(CStr(dataItem(IDX_WHATKIND)))
+        
+        ' 过滤条件1：whatkind为"工艺"或"标准件"的不显示
+        If whatKind = COMPONENT_KIND_PROCESS Or whatKind = COMPONENT_KIND_STANDARD_PART Then
+            ' 如果是标准件，记录价格用于后续合并
+            If whatKind = COMPONENT_KIND_STANDARD_PART Then
+                ' 安全获取标准件价格
+                On Error Resume Next
+                standardPartsTotalPrice = standardPartsTotalPrice + CCur(dataItem(IDX_COMPONENT_TOTALPRICE))
+                On Error GoTo 0
+            End If
+            GoTo ContinueLoop  ' 跳过不显示
+        End If
+        
+        ' 获取是否可选配件（IDX_IS_ASSEMBLY）
+        On Error Resume Next
+        isAssembly = CLng(dataItem(IDX_IS_ASSEMBLY))
+        On Error GoTo 0
+        
+        ' 过滤条件2：只处理非可选配件（isAssembly = 0）
+        If Not (isAssembly = 0 And Len(componentName) > 0) Then GoTo ContinueLoop
+        
+        ' 获取是否必选（IDX_IS_ACTIVE）
+        On Error Resume Next
+        isActive = CLng(dataItem(IDX_IS_ACTIVE))
+        On Error GoTo 0
+        
+        ' 保存数据
+        originalItems(itemCount) = componentName
+        componentList(itemCount) = componentName
+        
+        ' 记录必选项（isActive = 1）
+        If isActive = 1 Then
+            requiredIndices(requiredCount) = itemCount
+            requiredCount = requiredCount + 1
+        End If
+        
+        itemCount = itemCount + 1
+        
+ContinueLoop:
+    Next dataItem
+    
+    ' 如果有标准件价格，合并到component_sn=1的组件（第二阶段实现）
+    If standardPartsTotalPrice > 0 Then
+        ' 这里可以调用合并价格的函数
+        ' MergeStandardPartsPrice componentList, itemCount, standardPartsTotalPrice
+    End If
+    
+    ' --- 显示结果 ---
+    If itemCount > 0 Then
+        ReDim Preserve componentList(0 To itemCount - 1) As String
+        ReDim Preserve originalItems(0 To itemCount - 1) As String
+        
+        Me.lstComponents.List = componentList
+        
+        If requiredCount > 0 Then
+            ReDim Preserve requiredIndices(0 To requiredCount - 1) As Long
+            Call SetRequiredItems(requiredCount)
+        Else
+            Erase requiredIndices
+        End If
+    Else
+        MsgBox "没有符合条件的组件", vbInformation
+    End If
+End Sub
+
+
+' 窗体初始化
+Private Sub UserForm_Initialize()
+
+    ' 初始化ListBox
+    InitializeListBoxes
+    
+    ' 设置默认选择
+    selectedRootID = ""
+    
+    Set g_ActiveComponentForm = Me
+
+    Me.wbShowPNG.Navigate2 "about:blank"
+End Sub
+
+
+' 在窗体关闭时清理
+Private Sub UserForm_Terminate()
+    Set g_ActiveComponentForm = Nothing
+End Sub
+
+
+' 初始化ListBox
+Private Sub InitializeListBoxes()
+    ' 清空ListBox
+    Me.RootListBox.Clear
+    Me.SonListBox.Clear
+    Me.lstComponents.Clear
+    Me.lstOptional.Clear
+    
+    ' 在窗体初始化时设置
+    Me.lstComponents.IntegralHeight = False
+    Me.lstOptional.IntegralHeight = False
+    
+    ' 然后设置固定高度
+    Me.lstComponents.Height = 150  ' 设计时的高度
+    Me.lstOptional.Height = 82
+End Sub
+
+
+' 窗体激活事件 - 在窗体显示时触发
+Private Sub UserForm_Activate()
+    On Error GoTo ErrorHandler
+
+    ' 检查 FoundCell 是否已设置
+    If foundCell Is Nothing Then
+        MsgBox "错误：FoundCell未设置", vbExclamation
+        Exit Sub
+    End If
+
+    ' --- 修改部分：使用新的公共函数获取系统标识 ---
+    Dim hanziChar As String
+    Dim systemIdentifier As String ' 使用 String 类型接收返回值
+
+    hanziChar = Nz(foundCell.value, "未知")
+
+    ' 调用公共函数
+    systemIdentifier = GetSystemFromHanzi(hanziChar)
+
+    ' 检查是否成功获取到标识符
+    If Len(systemIdentifier) = 0 Then ' 如果返回空字符串，表示未找到
+        ' 处理未找到的情况
+        MsgBox "警告：未找到 '" & hanziChar & "' 对应的系统标识。", vbExclamation
+        systemIdentifier = "未找到" ' 设置一个默认显示值
+    End If
+    ' --- 修改部分结束 ---
+
+    ' 加载根数据 (如果 LoadRootClassifications 需要 systemIdentifier，可以传递)
+    LoadRootClassifications ' 或 LoadRootClassifications systemIdentifier
+
+    ' --- 关键修改部分：在根数据加载后，设置默认选中并加载对应的子分类 ---
+    ' 默认选择第一项（如果有数据）
+    If Me.RootListBox.ListCount > 0 Then
+        Me.RootListBox.ListIndex = 0
+        ' 直接从 ListBox 的 List 属性中获取第一个项目的文本。
+        ' 这个项目是 LoadRootClassifications 添加进去的 ID (字段名)，正是 LoadSonClassifications 需要的。
+        Dim initialRootID As String
+        initialRootID = Me.RootListBox.List(0) ' <--- 关键：直接从 List(0) 获取 ID/字段名
+'        Debug.Print "Initial Root ID from List(0): >" & initialRootID & "<"
+        
+        ' 显式调用加载子分类过程，传入获取到的根分类 ID (字段名)
+        LoadSonClassifications initialRootID ' <--- 传递正确的 ID/字段名
+    End If
+    ' --- 关键修改部分结束 ---
+ 
+    ' 确保只有一个按钮设置为 Default=True，通常不是 OK 按钮
+    Me.cmdCancel.Default = True ' 推荐这样设置
+    Me.cmdOK.Default = False
+    Me.cmdCancel.SetFocus
+    
+    InitializeHTML
+
+    Exit Sub
+
+ErrorHandler:
+    MsgBox "UserForm_Activate 错误: " & Err.Description, vbCritical
+    ' 可能需要 Unload Me 或其他清理操作
+End Sub
+
+
+' RootListBox选择改变事件
+Private Sub RootListBox_Change()
+    On Error GoTo ErrorHandler
+
+    ' 检查是否有选中项
+    If Me.RootListBox.ListIndex = -1 Then
+        Me.SonListBox.Clear
+        Exit Sub
+    End If
+
+    ' 获取选中的根分类ID
+    selectedRootID = Me.RootListBox.value
+
+'    Debug.Print "selectedRootID: >" & selectedRootID & "<"
+
+    ' 加载对应的子分类
+    LoadSonClassifications (selectedRootID)
+
+    Exit Sub
+    
+ErrorHandler:
+    MsgBox "选择根分类时错误: " & Err.Description, vbExclamation
+End Sub
+
+
+' 加载子分类数据
+Private Sub LoadSonClassifications(ByVal rootID As String)
+    On Error GoTo ErrorHandler
+    
+    If rootID = "" Then
+        Exit Sub
+    End If
+    
+    ' 通过得到产品大类获取属于该大类的产品明细列表
+    ' --- 使用 systemName 从缓存中获取 Device Names ---
+    ' 注意：GetValues 返回的是 Collection 对象
+    Dim deviceListCollection As Collection
+    Set deviceListCollection = g_cacheTypeNameToModels.GetValues(rootID)
+
+    ' 清空SonListBox
+    Me.SonListBox.Clear
+    
+    ' --- 检查是否有返回的 Device Names ---
+    If deviceListCollection Is Nothing Or deviceListCollection.count = 0 Then
+        ' 如果没有找到对应的设备名称，可以选择提示用户或保持 ListBox 为空
+        Debug.Print "警告：未找到与 Deive Type Name '" & rootID & "' 关联的 Device Names。"
+        ' 可以选择添加一个提示项
+        Me.SonListBox.AddItem "(无设备)"
+        Exit Sub ' 或者继续，ListBox 保持为空
+    End If
+
+    ' --- 遍历 Collection 并将 Device Names 添加到 ListBox ---
+    Dim deviceName As Variant ' Collection 中的元素通常用 Variant 遍历
+    For Each deviceName In deviceListCollection
+        ' 确保添加的是字符串
+        If Not IsNull(deviceName) And deviceName <> "" Then
+            Me.SonListBox.AddItem CStr(deviceName)
+        End If
+    Next deviceName
+
+'    Debug.Print "已根据 Deive Type Name '" & rootID & "' 成功填充 SontListBox。"
+    
+    ' 默认选择第一项（如果有数据）
+    If Me.SonListBox.ListCount > 0 Then
+        Me.SonListBox.ListIndex = 0
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    MsgBox "填充 SontListBox 时发生错误: " & Err.Description & " (" & Err.Number & ")", vbCritical
+    ' 可以选择清空 ListBox 以防状态不一致
+    On Error Resume Next
+    Me.SonListBox.Clear
+    On Error GoTo 0
+End Sub
+
+
+' 取消按钮
+Private Sub cmdCancel_Click()
+    Me.Hide
+End Sub
+
+
+' 加载根系统分类数据
+Private Sub LoadRootClassifications()
+    On Error GoTo ErrorHandler
+    
+    ' 这里会根据A列的查询情况分别显示各个系统的分类及子分类，目前一共是十二大类，
+    
+    ' 获取找到的单元格的值（汉字字符）
+    Dim hanziChar As String
+    
+    ' 这里要补上非空判断
+    hanziChar = foundCell.value
+    
+'    Debug.Print "汉字序列: >" & hanziChar & "<"
+    
+    ' 根据不同的汉字字符调用全局函数进行查询 GetSystemFromHanzi
+    Dim systemName As String ' 使用 String 类型接收返回值
+    systemName = GetSystemFromHanzi(hanziChar)
+    ' --- 检查获取到的 System Name 是否有效 ---
+    If systemName = "" Then
+        Exit Sub
+    End If
+    
+    ' 通过得到系统名称获取属于该系统的产品列表
+    ' --- 使用 systemName 从缓存中获取 Device Names ---
+    ' 注意：GetValues 返回的是 Collection 对象
+    Dim deviceNamesCollection As Collection
+    
+    If g_cacheSystemDevice Is Nothing Then
+        InitializeAllCaches
+    End If
+    
+    Set deviceNamesCollection = g_cacheSystemDevice.GetValues(systemName)
+    
+    ' --- 清空 ListBox ---
+    Me.RootListBox.Clear
+    
+    ' --- 检查是否有返回的 Device Names ---
+    If deviceNamesCollection Is Nothing Or deviceNamesCollection.count = 0 Then
+        ' 如果没有找到对应的设备名称，可以选择提示用户或保持 ListBox 为空
+        Debug.Print "警告：未找到与 System Name '" & systemName & "' 关联的 Device Names。"
+        ' 可以选择添加一个提示项
+        Me.RootListBox.AddItem "(无设备)"
+        Exit Sub ' 或者继续，ListBox 保持为空
+    End If
+
+    ' --- 遍历 Collection 并将 Device Names 添加到 ListBox ---
+    Dim deviceName As Variant ' Collection 中的元素通常用 Variant 遍历
+    For Each deviceName In deviceNamesCollection
+        ' 确保添加的是字符串
+        If Not IsNull(deviceName) And deviceName <> "" Then
+            Me.RootListBox.AddItem CStr(deviceName)
+        End If
+    Next deviceName
+
+'    Debug.Print "已根据 System Name '" & systemName & "' 成功填充 RootListBox。"
+    
+    ' 默认选择第一项（如果有数据）
+    If Me.RootListBox.ListCount > 0 Then
+        Me.RootListBox.ListIndex = 0
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    MsgBox "填充 RootListBox 时发生错误: " & Err.Description & " (" & Err.Number & ")", vbCritical
+    ' 可以选择清空 ListBox 以防状态不一致
+    On Error Resume Next
+    Me.RootListBox.Clear
+    On Error GoTo 0
+End Sub
+
+
+' 设置必选项的函数
+Private Sub SetRequiredItems(requiredCount As Long)
+    Dim i As Long, index As Long
+    
+    If requiredCount > 0 Then
+        ' 设置必选项的显示和选中状态
+        For i = 0 To requiredCount - 1
+            index = requiredIndices(i)
+            If index < Me.lstComponents.ListCount Then
+                ' 为必选项添加标记并设置为选中
+                Me.lstComponents.List(index) = originalItems(index)
+                Me.lstComponents.selected(index) = True
+            End If
+        Next i
+    End If
+End Sub
+
+
+' 设置可选配件列表
+' 功能：从子分类数据中筛选出可选配件（is_Assembly = 1）并添加到lstOptional列表框中
+' 参数：
+'   - subCategoryData: Collection类型，包含子分类数据的数据集合
+'                     每个元素是一个数组，包含组件的各个字段
+' 备注：此函数会清空lstOptional后重新填充
+Private Sub SetOpticalItems(ByRef subCategoryData As Collection)
+    On Error GoTo ErrorHandler
+    
+    ' 清空可选配件列表
+    Me.lstOptional.Clear
+    
+    ' 参数验证
+    If subCategoryData Is Nothing Then
+        Debug.Print "SetOpticalItems: 参数 subCategoryData 为 Nothing"
+        Exit Sub
+    End If
+    
+    If subCategoryData.count = 0 Then
+        Debug.Print "SetOpticalItems: 子分类数据为空"
+        Exit Sub
+    End If
+        
+    Dim itemCount As Long
+    itemCount = 0
+    Dim skippedCount As Long
+    skippedCount = 0
+    
+    Dim dataItem As Variant          ' 子分类数据中的单个项目
+    Dim isArrayValid As Boolean      ' 数组结构是否有效
+    Dim hasAssemblyField As Boolean  ' 是否有is_Assembly字段
+    Dim isAssembly As Boolean        ' 是否为可选配件
+    Dim componentName As String      ' 组件名称
+    Dim arrayUpperBound As Long      ' 数组上边界
+    
+    ' 遍历子分类数据集合
+    For Each dataItem In subCategoryData
+        ' 重置检查标志
+        isArrayValid = False
+        hasAssemblyField = False
+        isAssembly = False
+        
+        ' 检查数据项是否为数组
+        If IsArray(dataItem) Then
+            ' 获取数组边界
+            On Error Resume Next
+            arrayUpperBound = UBound(dataItem)
+            If Err.Number = 0 And arrayUpperBound >= 0 Then
+                isArrayValid = True
+            End If
+            On Error GoTo ErrorHandler
+            
+            If isArrayValid Then
+                ' 检查是否有足够的字段（至少需要is_Assembly字段）
+                If arrayUpperBound >= IDX_IS_ASSEMBLY Then
+                    hasAssemblyField = True
+                    
+                    ' 检查is_Assembly字段是否存在且不为空
+                    If Not IsEmpty(dataItem(IDX_IS_ASSEMBLY)) Then
+                        ' 尝试转换为长整型并检查是否为1
+                        On Error Resume Next
+                        If CLng(dataItem(IDX_IS_ASSEMBLY)) = 1 Then
+                            isAssembly = True
+                        End If
+                        On Error GoTo ErrorHandler
+                    End If
+                End If
+                
+                ' 如果这是一个可选配件
+                If hasAssemblyField And isAssembly Then
+                    ' 检查组件名称字段是否存在且不为空
+                    If arrayUpperBound >= IDX_COMPONENT_NAME Then
+                        If Not IsEmpty(dataItem(IDX_COMPONENT_NAME)) Then
+                            componentName = Trim(CStr(dataItem(IDX_COMPONENT_NAME)))
+                            
+                            ' 确保组件名称不为空
+                            If Len(componentName) > 0 Then
+                                ' 添加到可选配件列表
+                                Me.lstOptional.AddItem componentName
+                                itemCount = itemCount + 1
+                                
+                                ' 可选：记录添加的配件
+'                                Debug.Print "添加可选配件: " & componentName
+                            Else
+                                skippedCount = skippedCount + 1
+                                Debug.Print "跳过空组件名称的配件"
+                            End If
+                        Else
+                            skippedCount = skippedCount + 1
+                            Debug.Print "跳过组件名称为空的配件"
+                        End If
+                    Else
+                        skippedCount = skippedCount + 1
+                        Debug.Print "跳过缺少组件名称字段的数据项"
+                    End If
+                End If
+            Else
+                skippedCount = skippedCount + 1
+                Debug.Print "跳过无效数组结构的数据项"
+            End If
+        Else
+            skippedCount = skippedCount + 1
+            Debug.Print "跳过非数组类型的数据项"
+        End If
+    Next dataItem
+    
+'    ' 输出统计信息
+'    Debug.Print "======================================"
+'    Debug.Print "可选配件处理完成"
+'    Debug.Print "总数据项: " & subCategoryData.count
+'    Debug.Print "添加配件: " & itemCount
+'    Debug.Print "跳过项: " & skippedCount
+'    Debug.Print "可选配件列表项目数: " & Me.lstOptional.ListCount
+'    Debug.Print "======================================"
+    
+    ' 如果没有找到可选配件，可以添加提示信息
+    If itemCount = 0 Then
+        ' 可选：显示提示信息
+        ' Me.lstOptional.AddItem "(无可选配件)"
+'        Debug.Print "未找到可选配件"
+    End If
+        
+    Exit Sub
+    
+ErrorHandler:
+    ' 错误处理
+    Dim errorMsg As String
+    errorMsg = "SetOpticalItems 错误 [" & Err.Number & "]: " & Err.Description
+    Debug.Print errorMsg
+    
+    ' 可选：显示错误信息给用户
+    ' MsgBox "加载可选配件时发生错误：" & vbCrLf & Err.Description, vbExclamation
+    
+    ' 确保列表框至少是空的，而不是处于错误状态
+    On Error Resume Next
+    Me.lstOptional.Clear
+    On Error GoTo 0
+End Sub
+
+
+' 检查是否为必选项索引的辅助函数
+Private Function IsRequiredIndex(index As Long) As Boolean
+    Dim i As Long
+    IsRequiredIndex = False
+    
+    For i = 0 To UBound(requiredIndices)
+        If requiredIndices(i) = index Then
+            IsRequiredIndex = True
+            Exit Function
+        End If
+    Next i
+End Function
+
+
+' 检查数组是否已初始化的辅助函数
+Private Function IsArrayInitialized(arr As Variant) As Boolean
+    On Error Resume Next
+    Dim test As Long
+    test = UBound(arr)
+    IsArrayInitialized = (Err.Number = 0)
+    On Error GoTo 0
+End Function
+
+
+' =============================================================================
+' 函数名称：cmdOK_Click
+' 功能描述：处理确定按钮点击事件
+'           1. 验证用户选择
+'           2. 收集选中的组件
+'           3. 筛选数据并插入到工作表
+' 输入参数：无
+' 返回结果：无
+' 注意事项：需要先选择组件和分类
+' 修改历史：20260105 - 添加复选框支持
+' =============================================================================
+Private Sub cmdOK_Click()
+    On Error GoTo ErrorHandler
+
+    ' --- 1. 变量声明 ---
+    Dim selectedRootName As String      ' 选中的根分类名称
+    Dim selectedSonName As String       ' 选中的子分类名称
+    Dim subCategoryData As Collection   ' 子分类数据
+    Dim targetWs As Worksheet           ' 目标工作表
+    Dim targetCell As Range             ' 目标单元格
+    Dim targetRow As Long               ' 目标行号
+    Dim sourceRowRange As Range         ' 源行范围
+    
+    ' 复选框相关变量
+    Dim i As Long                       ' 循环计数器
+    Dim selectedCount As Long           ' 选中组件数量
+    Dim componentName As String         ' 组件名称
+    Dim selectedComponents As Collection ' 选中的组件集合
+    Dim missingRequired As Boolean      ' 是否缺失必选项
+    Dim requiredComponents As Collection ' 必选项集合（用于提示）
+    
+    ' --- 2. 初始化集合 ---
+    Set selectedComponents = New Collection
+    Set requiredComponents = New Collection
+    
+    ' --- 3. 检查组件列表是否为空 ---
+    If Me.lstComponents.ListCount = 0 Then
+        MsgBox "没有可选择的组件", vbExclamation
+        Exit Sub
+    End If
+    
+    ' --- 4. 检查必选项是否都已选中 ---
+    missingRequired = False
+    
+    ' 确保 requiredIndices 数组已初始化
+    If IsArrayInitialized(requiredIndices) Then
+        For i = LBound(requiredIndices) To UBound(requiredIndices)
+            Dim reqIndex As Long
+            reqIndex = requiredIndices(i)
+            
+            ' 检查索引是否有效
+            If reqIndex < Me.lstComponents.ListCount Then
+                ' 检查该必选项是否被选中
+                If Not Me.lstComponents.selected(reqIndex) Then
+                    missingRequired = True
+                    
+                    ' 获取组件名称
+                    componentName = Me.lstComponents.List(reqIndex)
+                    
+                    ' 添加到未选中必选项集合
+                    requiredComponents.Add componentName
+                End If
+            End If
+        Next i
+    End If
+    
+    ' --- 5. 如果有未选中的必选项，提示用户 ---
+    If missingRequired Then
+        Dim requiredMsg As String
+        requiredMsg = "以下必选项未选中，请先选中这些项目：" & vbCrLf & vbCrLf
+        
+        ' 构建提示信息
+        For i = 1 To requiredComponents.count
+            requiredMsg = requiredMsg & requiredComponents(i) & vbCrLf
+        Next i
+        
+        MsgBox requiredMsg, vbExclamation, "必选项未选中"
+        Exit Sub
+    End If
+    
+    ' --- 6. 收集主列表中选中的组件 ---
+    selectedCount = 0
+    For i = 0 To Me.lstComponents.ListCount - 1
+        If Me.lstComponents.selected(i) Then
+            componentName = Me.lstComponents.List(i)
+            
+            selectedComponents.Add componentName
+            selectedCount = selectedCount + 1
+        End If
+    Next i
+    
+    ' --- 7. 收集可选配件列表中选中的组件 ---
+    For i = 0 To Me.lstOptional.ListCount - 1
+        If Me.lstOptional.selected(i) Then
+            componentName = Me.lstOptional.List(i)
+            selectedComponents.Add componentName
+            selectedCount = selectedCount + 1
+        End If
+    Next i
+    
+    ' --- 8. 检查是否至少选择了一个组件 ---
+    If selectedCount = 0 Then
+        MsgBox "请至少选择一个组件", vbExclamation
+        Exit Sub
+    End If
+    
+    ' --- 9. 检查子分类选择 ---
+    If Me.SonListBox.ListIndex = -1 Then
+        MsgBox "请选择一个子分类", vbExclamation
+        Exit Sub
+    Else
+        selectedSonName = Me.SonListBox.List(Me.SonListBox.ListIndex)
+    End If
+    
+    ' --- 10. 检查根分类选择 ---
+    If Me.RootListBox.ListIndex <> -1 Then
+        selectedRootName = Me.RootListBox.List(Me.RootListBox.ListIndex)
+    Else
+        MsgBox "未选择根分类。", vbExclamation
+        Exit Sub
+    End If
+    
+    ' --- 11. 获取子分类数据 ---
+    Set subCategoryData = g_SubCategoryData
+    
+    ' 检查是否有数据
+    If subCategoryData Is Nothing Then
+        MsgBox "没有找到子分类数据", vbExclamation
+        Exit Sub
+    End If
+    
+    ' --- 12. 获取目标工作表和单元格 ---
+    If TypeName(Selection) <> "Range" Then
+        MsgBox "请先在工作表中选择一个单元格。", vbExclamation
+        Exit Sub
+    End If
+    
+    Set targetCell = Selection
+    Set targetWs = targetCell.Worksheet
+    
+    ' 计算目标行号
+    If targetCell.MergeCells Then
+        targetRow = targetCell.count + targetCell.row - 1
+    Else
+        targetRow = targetCell.row
+    End If
+    
+    Set sourceRowRange = targetWs.Rows(targetRow)
+    
+    ' --- 13. 筛选数据（只包含选中的组件） ---
+    Dim filteredData As Collection
+    Set filteredData = New Collection
+    
+    Dim dataItem As Variant
+    For Each dataItem In subCategoryData
+        If IsArray(dataItem) Then
+            ' 检查数组是否有足够元素
+            If UBound(dataItem) >= LBound(dataItem) Then
+                ' 获取组件名称（根据索引常量）
+                If UBound(dataItem) >= IDX_COMPONENT_NAME Then
+                    componentName = CStr(dataItem(IDX_COMPONENT_NAME))
+                    
+                    ' 检查该组件是否被选中
+                    If IsComponentSelected(componentName, selectedComponents) Then
+                        filteredData.Add dataItem
+                    End If
+                End If
+            End If
+        End If
+    Next dataItem
+    
+    ' --- 13.5. 将标准件的价格和表面处理的价格计入主体价格 ---
+    Dim standardPriceSum As Double ' 标准件价格总和
+    Dim processPriceSum As Double  ' 表面处理（工艺）价格总和
+    
+    ' 计算标准件和表面处理的单价总和（从subCategoryData）
+    standardPriceSum = 0
+    processPriceSum = 0
+    
+    For i = 1 To subCategoryData.count
+        If IsArray(subCategoryData(i)) Then
+            Dim subItem As Variant
+            subItem = subCategoryData(i)
+            
+            ' 判断标准件
+            If subItem(IDX_WHATKIND) = COMPONENT_KIND_STANDARD_PART Then
+                If IsNumeric(subItem(IDX_COMPONENT_UNITPRICE)) Then
+                    standardPriceSum = standardPriceSum + CDbl(subItem(IDX_COMPONENT_UNITPRICE))
+                End If
+            ' 判断表面处理（工艺）
+            ElseIf subItem(IDX_WHATKIND) = COMPONENT_KIND_PROCESS Then
+                If IsNumeric(subItem(IDX_COMPONENT_UNITPRICE)) Then
+                    processPriceSum = processPriceSum + CDbl(subItem(IDX_COMPONENT_UNITPRICE))
+                End If
+            End If
+        End If
+    Next i
+    
+    ' 计算总累加价格
+    Dim totalAddition As Double
+    totalAddition = standardPriceSum + processPriceSum
+    
+    ' 如果有需要累加的价格，更新filteredData中的主体组件
+    If totalAddition > 0 Then
+        For i = 1 To filteredData.count
+            If IsArray(filteredData(i)) Then
+                ' 直接检查filteredData中的数组元素
+                If filteredData(i)(IDX_COMPONENT_SN) = 1 Then
+                    ' 取出数组副本
+                    Dim mainItemArray As Variant
+                    mainItemArray = filteredData(i)
+                    
+                    ' 修改副本：累加标准件和表面处理的价格
+                    If IsNumeric(mainItemArray(IDX_COMPONENT_UNITPRICE)) Then
+                        mainItemArray(IDX_COMPONENT_UNITPRICE) = CDbl(mainItemArray(IDX_COMPONENT_UNITPRICE)) + totalAddition
+                    Else
+                        mainItemArray(IDX_COMPONENT_UNITPRICE) = totalAddition
+                    End If
+                    
+                    ' 重新计算总价
+                    If IsNumeric(mainItemArray(IDX_COMPONENT_QUANTITY)) And mainItemArray(IDX_COMPONENT_QUANTITY) > 0 Then
+                        mainItemArray(IDX_COMPONENT_TOTALPRICE) = CDbl(mainItemArray(IDX_COMPONENT_UNITPRICE)) * CDbl(mainItemArray(IDX_COMPONENT_QUANTITY))
+                    End If
+                    
+                    ' 重要：将修改后的数组放回集合
+                    ' 根据数据条数选择不同的更新方式
+                    If filteredData.count = 1 Then
+                        ' 只有一条数据：先移除再添加（默认位置）
+                        filteredData.Remove i
+                        filteredData.Add mainItemArray  ' 不加位置参数
+                    Else
+                        ' 多条数据：替换原有位置
+                        filteredData.Remove i
+                        filteredData.Add mainItemArray, , i
+                    End If
+                
+                    ' 可选：记录价格累加明细（调试用）
+                    Debug.Print "价格累加明细："
+                    Debug.Print "  标准件总价：" & standardPriceSum
+                    Debug.Print "  表面处理总价：" & processPriceSum
+                    Debug.Print "  累加到主体组件后单价：" & mainItemArray(IDX_COMPONENT_UNITPRICE)
+                    
+                    Exit For
+                End If
+            End If
+        Next i
+    End If
+    
+    ' --- 14. 调用插入函数 ---
+    Call InsertComponentsAndFormat(ws:=targetWs, _
+                                 targetRow:=targetRow, _
+                                 sourceRowRange:=sourceRowRange, _
+                                 targetCell:=targetCell, _
+                                 rootName:=selectedRootName, _
+                                 sonName:=selectedSonName, _
+                                 subCategoryData:=filteredData, _
+                                 firstDataCol:=3)
+    
+    ' --- 15. 清理和隐藏 ---
+Cleanup:
+    Set subCategoryData = Nothing
+    Set filteredData = Nothing
+    Set selectedComponents = Nothing
+    Set requiredComponents = Nothing
+    Set targetWs = Nothing
+    Set targetCell = Nothing
+    Set sourceRowRange = Nothing
+    
+    Me.Hide
+    Exit Sub
+
+ErrorHandler:
+    ' 错误处理
+    MsgBox "确定操作时错误: " & Err.Description & " (" & Err.Number & ")", vbExclamation
+    GoTo Cleanup
+End Sub
+
+
+' 辅助函数：检查组件是否在选中的集合中
+Private Function IsComponentSelected(componentName As String, selectedComponents As Collection) As Boolean
+    Dim comp As Variant
+    IsComponentSelected = False
+    
+    For Each comp In selectedComponents
+        If Trim(componentName) = Trim(comp) Then
+            IsComponentSelected = True
+            Exit Function
+        End If
+    Next comp
+End Function
+
+
+' 添加MouseUp事件
+Private Sub lstComponents_MouseUp(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    ' 只在鼠标左键释放时更新
+    If Button = 1 Then  ' 1表示左键
+        UpdateLayerDisplay
+    End If
+End Sub
+
+
+' 添加MouseUp事件
+Private Sub lstOptional_MouseUp(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    ' 只在鼠标左键释放时更新
+    If Button = 1 Then  ' 1表示左键
+        UpdateLayerDisplay
+    End If
+End Sub
+
+
+Private Sub InitializeHTML()
+'    On Error GoTo ErrorHandler
+    
+    ' 调用现有的生成HTML逻辑，但只做一次
+    Dim wb As Object
+    Set wb = Me.Controls("wbShowPNG").Object
+    
+    If g_SubCategoryData Is Nothing Then
+        Set g_SubCategoryData = New Collection
+    End If
+    
+    ' 获取所有组件（不仅仅是选中的）
+    Dim allComponents As Collection
+    Set allComponents = GetAllComponents(g_SubCategoryData)
+    
+    ' 获取当前选中的组件（用于初始显示）
+    Dim initialSelected As Collection
+    Set initialSelected = GetSelectedComponents()
+    
+    Dim base64Data As Dictionary
+    Set base64Data = GetAllComponentImages(allComponents)
+    
+    ' 修改后的HTML构建函数，传入初始选中状态
+    Dim html As String
+    html = BuildHTMLContent(allComponents, base64Data, wb.Width, wb.Height, initialSelected)
+    
+'    SaveGeneratedHTML html
+    
+    LoadHTMLToWebBrowser wb, html
+    
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "InitializeHTML 错误: " & Err.Description
+    MsgBox "初始化图片预览时发生错误", vbExclamation
+End Sub
+
+
+Private Function GetAllComponentsFromListBox() As Collection
+    Dim allComps As New Collection
+    Dim i As Long
+    
+    For i = 0 To Me.lstComponents.ListCount - 1
+        ' 假设ListBox中存储的是组件ID或名称
+        allComps.Add Me.lstComponents.List(i)
+    Next i
+    
+    Set GetAllComponentsFromListBox = allComps
+End Function
+
+
+' 修改函数签名，添加三个参数
+Private Sub UpdateLayerDisplay( _
+    Optional allComponents As Collection = Nothing, _
+    Optional base64Data As Dictionary = Nothing, _
+    Optional selectedComponents As Collection = Nothing)
+    
+    ' 兼容旧调用：如果没有传入三个参数，使用原来的逻辑
+    If allComponents Is Nothing Or base64Data Is Nothing Or selectedComponents Is Nothing Then
+        ' 获取当前选择状态（原来的逻辑）
+        Dim oldSelectedComponents As Collection
+        Set oldSelectedComponents = GetSelectedComponents()
+
+        ' 调用原来的JavaScript更新
+        UpdateDisplayViaJavaScript oldSelectedComponents
+        Exit Sub
+    End If
+    
+    ' === 新逻辑：三个参数都传入了 ===
+    Dim wb As Object
+    Set wb = Me.Controls("wbShowPNG").Object
+    
+    If wb.Document Is Nothing Then Exit Sub
+    
+    ' 生成JS更新代码
+    Dim jsCode As String
+    
+    ' 1. 替换components对象（重用现有函数）
+    jsCode = GetDynamicComponentsDeclaration(allComponents)
+    
+    ' 修改生成的JS代码：
+    ' 把 "var components = {" 替换成 "components = {"
+    ' 这样就是赋值而不是重新声明
+    jsCode = Replace(jsCode, "var components = {", "components = {", 1, 1, vbTextCompare)
+    
+    ' 2. 加载所有图像（重用现有逻辑）
+    jsCode = jsCode & GetDynamicInitializationCode(base64Data)
+    
+    ' 3. 更新选中状态
+    jsCode = jsCode & GenerateSelectionUpdateJS(selectedComponents)
+    
+    ' 4. 重绘
+    jsCode = jsCode & "if (typeof drawImages === 'function') drawImages();"
+
+    ' 执行
+    On Error Resume Next
+    wb.Document.parentWindow.execScript jsCode, "JavaScript"
+    
+    If Err.Number <> 0 Then
+        Debug.Print "UpdateLayerDisplay 执行错误: " & Err.Description
+    End If
+End Sub
+
+
+' 修改为私有函数，只被UpdateLayerDisplay调用
+Private Sub UpdateDisplayViaJavaScript(selectedComponents As Collection)
+    Dim wb As Object
+    Set wb = Me.Controls("wbShowPNG").Object
+    If wb.Document Is Nothing Then Exit Sub
+    
+    Dim jsCode As String
+    
+    ' 构建JavaScript代码（原来的逻辑）
+    jsCode = "console.log('开始更新显示');"
+    
+    ' 1. 隐藏所有非基础层
+    jsCode = jsCode & "Object.keys(components).forEach(function(id) {"
+    jsCode = jsCode & "  if (components[id].toggleable !== false) {"
+    jsCode = jsCode & "    components[id].visible = false;"
+    jsCode = jsCode & "  }"
+    jsCode = jsCode & "});"
+    
+    ' 2. 显示选中的
+    Dim comp As Variant
+    For Each comp In selectedComponents
+        jsCode = jsCode & "if (components['" & comp & "']) {"
+        jsCode = jsCode & "  components['" & comp & "'].visible = true;"
+        jsCode = jsCode & "}"
+    Next comp
+    
+    ' 3. 重绘
+    jsCode = jsCode & "if (typeof drawImages === 'function') drawImages();"
+    
+    ' 4. 执行
+    On Error Resume Next
+    wb.Document.parentWindow.execScript jsCode, "JavaScript"
+    
+    If Err.Number <> 0 Then
+        Debug.Print "执行错误: " & Err.Description
+    End If
+End Sub
+
+
+' 新增辅助函数：生成选中状态更新的JS代码
+Private Function GenerateSelectionUpdateJS(selectedComponents As Collection) As String
+    Dim jsCode As String
+    
+    ' 构建选中组件数组
+    Dim compList As String
+    compList = "["
+    Dim comp As Variant
+    For Each comp In selectedComponents
+        compList = compList & "'" & comp & "',"
+    Next comp
+    If Len(compList) > 1 Then compList = left(compList, Len(compList) - 1)
+    compList = compList & "]"
+    
+    jsCode = "console.log('更新选中状态');" & vbCrLf
+    jsCode = jsCode & "var selectedIds = " & compList & ";" & vbCrLf
+    
+    ' 更新可见性
+    jsCode = jsCode & "Object.keys(components).forEach(function(id) {" & vbCrLf
+    jsCode = jsCode & "  var shouldBeVisible = false;" & vbCrLf
+    jsCode = jsCode & "  for (var i = 0; i < selectedIds.length; i++) {" & vbCrLf
+    jsCode = jsCode & "    if (id === selectedIds[i]) { shouldBeVisible = true; break; }" & vbCrLf
+    jsCode = jsCode & "  }" & vbCrLf
+    jsCode = jsCode & "  if (components[id].toggleable === false) shouldBeVisible = true;" & vbCrLf
+    jsCode = jsCode & "  components[id].visible = shouldBeVisible;" & vbCrLf
+    jsCode = jsCode & "});" & vbCrLf
+    
+    GenerateSelectionUpdateJS = jsCode
+End Function
+
+
+' 辅助函数：获取当前选中的组件列表
+Private Function GetSelectedComponents() As Collection
+    Dim selected As New Collection
+    Dim i As Integer
+    
+    With Me.lstComponents
+        For i = 0 To .ListCount - 1
+            If .selected(i) Then
+                ' 直接使用ListBox中显示的文本作为组件ID
+                ' 假设ListBox中每一行的内容就是最终需要的component_id
+                Dim componentID As String
+                componentID = .List(i) ' 或者使用 .Text if only one item can be selected and you want the focused one
+                
+                ' 只添加非空的组件ID
+                If Len(Trim(componentID)) > 0 Then
+                    selected.Add Trim(componentID) ' Trim to remove any accidental leading/trailing spaces
+                End If
+            End If
+        Next i
+    End With
+   
+    With Me.lstOptional
+        For i = 0 To .ListCount - 1
+            If .selected(i) Then
+                ' 直接使用ListBox中显示的文本作为组件ID
+                ' 假设ListBox中每一行的内容就是最终需要的component_id
+                Dim optionalId As String
+                optionalId = .List(i) ' 或者使用 .Text if only one item can be selected and you want the focused one
+                
+                ' 只添加非空的组件ID
+                If Len(Trim(optionalId)) > 0 Then
+                    selected.Add Trim(optionalId) ' Trim to remove any accidental leading/trailing spaces
+                End If
+            End If
+        Next i
+    End With
+   
+    Set GetSelectedComponents = selected
+End Function
+
+
+' lstComponents_Change事件 - 使用IsRequiredIndex确保必选项始终选中
+Private Sub lstComponents_Change()
+    On Error GoTo ErrorHandler
+    
+    ' 如果必选项被取消选中，重新选中它们
+    Dim i As Long
+    For i = 0 To Me.lstComponents.ListCount - 1
+        If IsRequiredIndex(i) Then
+            ' 确保必选项被选中
+            If Not Me.lstComponents.selected(i) Then
+                Me.lstComponents.selected(i) = True
+            End If
+        End If
+    Next i
+    
+    Exit Sub
+    
+ErrorHandler:
+    ' 处理错误，例如列表为空时
+    If Err.Number = 380 Then ' 无效的属性值
+        ' 列表可能为空，无需处理
+    Else
+        MsgBox "错误 " & Err.Number & ": " & Err.Description, vbExclamation
+    End If
+End Sub
+
+
+Private Sub wbShowPNG_TitleChange(ByVal Text As String)
+    ' 检查是否是我们定义的通讯消息
+    If InStr(Text, "VBA_CMD|") <> 1 Then Exit Sub
+
+    ' --- 变量声明 ---
+    Dim parts() As String
+    Dim action As String
+    
+    ' --- 解析消息 ---
+    ' 格式: "VBA_CMD|Action|Param1|Param2|Random"
+    parts = Split(Text, "|")
+    
+    ' 至少需要 "VBA_CMD" 和 "Action" 两个部分
+    If UBound(parts) < 1 Then Exit Sub
+    
+    action = parts(1) ' 获取动作指令
+    
+    ' --- 根据动作执行不同逻辑 ---
+    Select Case action
+    
+        Case "RENDER_COMPLETE"
+            ' 收到 JS 通知：网页内容已渲染完成
+            
+        Case "DETAIL"
+            ' 收到 JS 通知：用户点击了“查看详情”
+            ' 至少需要 Action, ID, Name 三个参数
+            If UBound(parts) >= 3 Then
+                Dim id As String
+                Dim name As String
+                
+                id = parts(2)   ' 组件ID
+                name = parts(3) ' 组件名
+                
+                ' 执行您的业务逻辑
+                MsgBox "【VBA收到消息】" & vbCrLf & _
+                       "用户想要查看组件详情：" & vbCrLf & _
+                       "ID: " & id & vbCrLf & _
+                       "名称: " & name, vbInformation, "通讯成功"
+            End If
+            
+        Case "GLOBAL_SETTING"
+            ' 收到 JS 通知：用户点击了“系统设置”
+            ' 执行您的业务逻辑
+            MsgBox "打开系统设置窗口...", vbInformation
+            
+        ' 可在此处添加更多 Case 来处理其他动作
+        ' Case "ANOTHER_ACTION"
+        '     ...
+            
+    End Select
+End Sub
+
+
+' 3. 显示右键菜单的函数 (保持不变)
+Public Sub ShowContextMenu(x As Long, y As Long, compId As String, compName As String)
+    On Error Resume Next
+    Dim cBar As CommandBar
+    Dim btn As CommandBarButton
+    
+    ' 删除旧的（以防万一）
+    On Error Resume Next
+    Application.CommandBars("TempContext").Delete
+    On Error GoTo 0
+    
+    Set cBar = Application.CommandBars.Add("TempContext", msoBarPopup, , True)
+    
+    If compId <> "" Then
+        ' 显示组件名
+        Set btn = cBar.Controls.Add(msoControlButton)
+        btn.Caption = "组件: " & compName
+        btn.Enabled = False
+        
+        ' 示例功能
+        Set btn = cBar.Controls.Add(msoControlButton)
+        btn.Caption = "查看详情"
+        btn.FaceId = 487
+        btn.OnAction = "'MyMacro_Detail """ & compId & """'"
+        
+        Set btn = cBar.Controls.Add(msoControlButton)
+        btn.Caption = "隐藏组件"
+        btn.FaceId = 1074
+        btn.OnAction = "'MyMacro_Hide """ & compId & """'"
+    Else
+        Set btn = cBar.Controls.Add(msoControlButton)
+        btn.Caption = "重置视图"
+        btn.FaceId = 455
+        btn.OnAction = "MyMacro_ResetAll"
+    End If
+    
+    cBar.ShowPopup x, y
+    cBar.Delete
+End Sub

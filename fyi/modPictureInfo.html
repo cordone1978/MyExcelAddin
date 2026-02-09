@@ -1,0 +1,266 @@
+Option Explicit
+
+Public g_ComponentImageCache As Object   ' key=组件名, value=base64
+
+
+Private Sub InitCacheManager()
+    If g_ComponentImageCache Is Nothing Then
+        Set g_ComponentImageCache = CreateObject("Scripting.Dictionary")
+    End If
+End Sub
+
+
+Public Function GetAllComponents(ByVal subCategoryData As Collection) As Collection
+    Dim allComps As New Collection
+    Dim componentName As String
+    Dim dataItem As Variant
+   
+    ' 筛选 subCategoryData
+    For Each dataItem In subCategoryData
+        ' 检查数组是否有效，并且长度足够容纳 IDX_COMPONENT_NAME 索引
+        If IsArray(dataItem) And UBound(dataItem) >= IDX_COMPONENT_NAME Then
+            ' 使用常量索引获取组件名称
+            componentName = CStr(dataItem(IDX_COMPONENT_NAME))
+            
+            ' 可选：检查名称是否为空，避免添加空字符串
+            If Len(Trim(componentName)) > 0 Then
+                allComps.Add componentName
+            End If
+        End If
+    Next dataItem
+
+    Set GetAllComponents = allComps
+End Function
+
+
+Public Function GetAllComponentImages(selectedComponents As Collection) As Dictionary
+    Dim dict As New Dictionary
+    Dim compId As Variant
+    
+    For Each compId In selectedComponents
+        If dict.Exists(compId) Then
+            GoTo SkipIteration ' 跳转到 SkipIteration 标签处
+        End If
+        
+        ' 获取组件数据
+        Dim compData As Dictionary
+        Set compData = GetComponentDataById(CStr(compId))
+        
+        If Not compData Is Nothing Then
+            ' 获取图片文件名
+            Dim imageName As String
+            imageName = compData("fileName") & ".png"
+            
+            ' 获取图片的Base64数据
+            Dim base64 As String
+            base64 = GetImageFromPack(imageName)
+            
+            If Len(base64) > 0 Then
+                ' 使用组件ID作为key，Base64数据作为value
+                dict.Add compId, base64
+'                Debug.Print "成功获取图片: " & imageName & " (组件: " & compId & ")"
+            Else
+'                Debug.Print "无法获取图片: " & imageName & " (组件: " & compId & ")"
+            End If
+        End If
+SkipIteration: ' 定义一个标签，GoTo 会跳到这里
+    Next compId
+    
+    Set GetAllComponentImages = dict
+End Function
+
+
+Public Function GetAllComponentImages_Cached(ByVal selectedComponents As Collection) As Object
+    InitCacheManager
+
+    Dim result As Object
+    Set result = CreateObject("Scripting.Dictionary")
+
+    Dim missing As New Collection
+    Dim compId As Variant
+    Dim id As String
+
+    ' 1) 先从缓存取（只返回有内容的）
+    For Each compId In selectedComponents
+        id = CStr(compId)
+
+        If g_ComponentImageCache.Exists(id) Then
+            If Len(g_ComponentImageCache(id)) > 0 Then
+                result(id) = g_ComponentImageCache(id)
+            End If
+        Else
+            missing.Add id
+        End If
+    Next compId
+
+    ' 2) 缺失项批量生成
+    If missing.count > 0 Then
+        Dim newDict As Dictionary
+        Set newDict = GetAllComponentImages(missing)
+
+        Dim k As Variant
+        For Each k In newDict.keys
+            id = CStr(k)
+
+            ' 写入缓存
+            g_ComponentImageCache(id) = newDict(k)
+
+            ' 只返回有内容的（保持和你原函数一致）
+            If Len(newDict(k)) > 0 Then
+                result(id) = newDict(k)
+            End If
+        Next k
+
+        ' 3) 对于生成失败的：只写缓存为 ""，但不放进 result
+        For Each compId In missing
+            id = CStr(compId)
+            If Not g_ComponentImageCache.Exists(id) Then
+                g_ComponentImageCache(id) = ""
+            End If
+        Next compId
+    End If
+
+    Set GetAllComponentImages_Cached = result
+End Function
+
+
+Private Function SingleComponentCollection(ByVal compName As String) As Collection
+    Dim c As New Collection
+    c.Add compName
+    Set SingleComponentCollection = c
+End Function
+
+
+' 修改 GetComponentDataById 函数，添加 is_active 字段
+Public Function GetComponentDataById(compId As String) As Dictionary
+    On Error GoTo ErrorHandler
+    
+    If g_SubCategoryData Is Nothing Then
+        Exit Function
+    End If
+    
+    Dim dict As New Dictionary
+    Dim i As Long
+    
+    ' 遍历g_SubCategoryData查找匹配的组件
+    For i = 1 To g_SubCategoryData.count
+        Dim rowData As Variant
+        rowData = g_SubCategoryData(i)
+        
+        If IsArray(rowData) And UBound(rowData) >= 0 Then
+            ' component_name在索引0
+            Dim dbCompId As String
+            dbCompId = CStr(rowData(IDX_COMPONENT_NAME))
+            
+            If dbCompId = compId Then
+                ' 找到匹配的组件
+                dict("id") = compId
+                dict("name") = compId  ' 使用component_name作为显示名称
+                
+                ' component_pic在索引IDX_COMPONENT_PIC
+                If UBound(rowData) >= IDX_COMPONENT_PIC And Not IsEmpty(rowData(IDX_COMPONENT_PIC)) Then
+                    dict("fileName") = CStr(rowData(IDX_COMPONENT_PIC))
+                Else
+                    dict("fileName") = compId & ".png"
+                End If
+                
+                ' pic_level在索引IDX_PIC_LEVEL
+                If UBound(rowData) >= IDX_PIC_LEVEL And Not IsEmpty(rowData(IDX_PIC_LEVEL)) Then
+                    dict("layer") = CLng(rowData(IDX_PIC_LEVEL))
+                Else
+                    dict("layer") = 100  ' 默认值
+                End If
+                
+                ' ============= 新增：获取 is_active 字段 =============
+                ' is_active在索引IDX_IS_ACTIVE
+                If UBound(rowData) >= IDX_IS_ACTIVE And Not IsEmpty(rowData(IDX_IS_ACTIVE)) Then
+                    dict("is_active") = CLng(rowData(IDX_IS_ACTIVE))
+                Else
+                    dict("is_active") = 0  ' 默认是可选的
+                End If
+                ' ===================================================
+                
+                ' 调试输出
+'                Debug.Print "找到组件: " & compId & ", 文件: " & dict("fileName") & _
+'                           ", 层级: " & dict("layer") & ", is_active: " & dict("is_active")
+                
+                Set GetComponentDataById = dict
+                Exit Function
+            End If
+        End If
+    Next i
+    
+    Debug.Print "未找到组件: " & compId
+    
+ErrorHandler:
+    ' 如果出错或没找到，返回Nothing
+    Set GetComponentDataById = Nothing
+End Function
+
+
+Public Sub SetComponentsOutlineAlwaysHighlight(wb As Object, componentIds As Collection)
+    On Error Resume Next
+    
+    ' 构建JS数组字符串
+    Dim jsArray As String
+    jsArray = "["
+    
+    If Not componentIds Is Nothing Then
+        Dim i As Long
+        For i = 1 To componentIds.count
+            If i > 1 Then jsArray = jsArray & ", "
+            jsArray = jsArray & "'" & componentIds(i) & "'"
+        Next i
+    End If
+    jsArray = jsArray & "]"
+    
+    ' 执行JavaScript
+    wb.Document.parentWindow.execScript "vbaSetAlwaysHighlightedComponents(" & jsArray & ")", "JavaScript"
+    
+    If Err.Number = 0 Then
+        wb.Document.parentWindow.execScript "vbaSetOutlineMode('always')", "JavaScript"
+'        Debug.Print "描边设置成功: " & jsArray
+    Else
+        Err.Clear
+        wb.Document.parentWindow.eval "vbaSetAlwaysHighlightedComponents(" & jsArray & ")"
+        wb.Document.parentWindow.eval "vbaSetOutlineMode('always')"
+        
+        If Err.Number = 0 Then
+            Debug.Print "通过eval设置成功: " & jsArray
+        Else
+            Debug.Print "失败: " & Err.Description
+        End If
+    End If
+End Sub
+
+
+Public Sub ClearAllOutlineAlwaysHighlight(wb As Object)
+    ' 清除所有常亮描边
+    On Error GoTo ErrorHandler
+    
+    Dim result As String
+    result = wb.Object.Document.parentWindow.vbaClearAlwaysHighlightedComponents()
+    
+    ' 切回悬停模式
+    result = result & vbCrLf & wb.Object.Document.parentWindow.vbaSetOutlineMode("hover")
+    
+    Debug.Print "ClearAllOutlineAlwaysHighlight: " & result
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "ClearAllOutlineAlwaysHighlight Error: " & Err.Description
+End Sub
+
+
+Public Function GetOutlineAlwaysHighlightedComponents(wb As Object) As String
+    ' 获取当前常亮描边的组件
+    On Error GoTo ErrorHandler
+    
+    GetOutlineAlwaysHighlightedComponents = wb.Object.Document.parentWindow.vbaGetAlwaysHighlightedComponents()
+    Exit Function
+    
+ErrorHandler:
+    GetOutlineAlwaysHighlightedComponents = "Error: " & Err.Description
+End Function
+
+

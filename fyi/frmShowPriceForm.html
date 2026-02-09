@@ -1,0 +1,357 @@
+
+' --- ShowPriceForm.frm ---
+Option Explicit
+
+' 定义一个公共变量，用来接收触发的单元格
+' 公共变量
+Public foundCell As Range
+Public g_WhatKind As String
+
+Public g_FromWhere As String
+
+
+Private Sub cmdOK_Click()
+    ' 2. 获取搜索关键词 (这部分沿用你原来的逻辑)
+    Dim CColumnKeyword As String
+    Dim SlaveKeys As String
+    
+    CColumnKeyword = Trim(txtMainKey.value)
+    SlaveKeys = txtSlaveKey.value
+    
+    ' 组合列
+    Dim sDesc As String
+    Dim sType As String
+    Dim sMate As String
+    Dim sBrand As String
+    sDesc = ""
+    sType = ""
+    sMate = ""
+    sBrand = ""
+
+    If CColumnKeyword = "" Then
+        MsgBox "查询信息不能为空", vbExclamation, "提示"
+        Exit Sub
+    End If
+
+    ' 3. 构造 SQL 查询语句 (这部分也沿用你原来的逻辑)
+    Dim sql As String
+    
+    If SlaveKeys <> "" Then
+        sql = "SELECT DISTINCT ItemName, ItemDesc, ItemType, ItemPrice, ItemUnit, OrderDate " & _
+              "FROM (SELECT *, " & _
+                    "ROW_NUMBER() OVER (PARTITION BY ItemName ORDER BY OrderDate DESC) as rn " & _
+                    "FROM ht_sales_price_list " & _
+                    "WHERE MATCH(ItemName) AGAINST('" & CColumnKeyword & "' IN NATURAL LANGUAGE MODE) " & _
+                    "AND MATCH(ItemDesc) AGAINST('" & SlaveKeys & "' IN BOOLEAN MODE)" & _
+                    ") as subquery " & _
+              "WHERE rn = 1 " & _
+              "LIMIT 100;"
+    Else
+        sql = "SELECT DISTINCT ItemName, ItemDesc, ItemType, ItemPrice, ItemUnit, OrderDate " & _
+              "FROM (SELECT *, " & _
+                    "ROW_NUMBER() OVER (PARTITION BY ItemName ORDER BY OrderDate DESC) as rn " & _
+                    "FROM ht_sales_price_list " & _
+                    "WHERE MATCH(ItemName) AGAINST('" & CColumnKeyword & "' IN NATURAL LANGUAGE MODE) " & _
+                    ") as subquery " & _
+              "WHERE rn = 1 " & _
+              "LIMIT 100;"
+    End If
+
+    Debug.Print vbCrLf & "SQL:   " & sql & vbCrLf
+
+    ' 4. 执行数据库查询 (这部分也沿用你原来的逻辑)
+    Dim conn As Object, rs As Object
+    Set conn = GetConnection() ' 假设你的 GetConnection 函数是正确的
+    If conn Is Nothing Then
+        MsgBox "无法连接到数据库", vbExclamation
+        Exit Sub
+    End If
+
+    On Error GoTo QueryError
+    Set rs = conn.Execute(sql)
+    On Error GoTo 0
+
+    If rs.EOF And rs.BOF Then
+        MsgBox "未找到匹配的数据", vbInformation, "提示"
+        GoTo Cleanup
+    End If
+
+    ' **************************************************************************
+    ' ********************** 核心：显示 ListView 窗体 *************************
+    ' **************************************************************************
+    ' 7. 把查询到的数据 (rs) 填充到窗体的 ListView 里
+    rs.MoveFirst
+    Me.ShowItemListView.ListItems.Clear
+    Do While Not rs.EOF
+        With Me.ShowItemListView.ListItems.Add(, , Nz(rs("ItemName"), ""))
+            .SubItems(1) = Nz(rs("ItemDesc"), "")
+            .SubItems(2) = Nz(rs("ItemType"), "")
+            .SubItems(3) = Nz(rs("ItemPrice"), "")
+            
+            ' 将其他字段数据存储到 Tag 属性中
+            ' 可以使用分隔符组合多个字段
+            .tag = Nz(rs("ItemUnit"), "")
+        End With
+        rs.MoveNext
+    Loop
+    
+Cleanup:
+    On Error Resume Next
+    rs.Close
+    Set rs = Nothing
+    Exit Sub
+
+QueryError:
+    MsgBox "查询数据库时出错: " & Err.Description, vbCritical
+    Resume Cleanup
+
+End Sub
+
+
+Private Sub UserForm_Activate()
+    If g_FromWhere = "" Then
+        g_FromWhere = WHERE_CHANGEPRICEWEB
+    End If
+End Sub
+
+
+' === 初始化窗体 ===
+Private Sub UserForm_Initialize()
+    g_FromWhere = WHERE_EXCEL
+    
+    ' 2. 设置 ListView 的列
+    With Me.ShowItemListView
+        .ColumnHeaders.Clear
+        .ColumnHeaders.Add , , "物料名称", 120
+        .ColumnHeaders.Add , , "规格描述", 585
+        .ColumnHeaders.Add , , "型号", 200
+        .ColumnHeaders.Add , , "价格", 80
+        
+        .View = lvwReport          ' 必须设置为报表视图才能生效
+        .FullRowSelect = True      ' 点击时整行高亮，更符合现代习惯
+        .Gridlines = True          ' 显示网格线，提升数据可读性
+        .HideSelection = False     ' 失去焦点时，已选项仍保持高亮
+        .BackColor = &HFFFFFF      ' 设置背景色为白色
+        .ForeColor = &H0           ' 设置文字颜色为黑色
+        .Font.name = "微软雅黑"    ' 使用更清晰的非衬线字体
+        .Font.size = 11
+        
+        .LabelEdit = 1 ' lvwManual
+        .LabelWrap = True
+        .ColumnHeaders.item(4).Alignment = lvwColumnRight
+        .AllowColumnReorder = True
+        .FullRowSelect = True
+        .HotTracking = True
+    End With
+    
+    With Me.cmdCancel
+        .Caption = ""
+        .Height = 0
+        .Width = 0
+        .TabStop = False
+    End With
+End Sub
+
+
+' === 当用户双击 ListView 中的某一行时 ===
+Private Sub ShowItemListView_DblClick()
+    On Error GoTo ErrorHandler
+
+    ' 检查是否真的选中了一行
+    If Not ShowItemListView.selectedItem Is Nothing Then
+        Dim selectedItem As listItem
+        Set selectedItem = ShowItemListView.selectedItem
+
+        ' 1. 提取选中行的数据到全局变量
+        With modPublicSequence.g_CallbackData
+            .name = selectedItem.Text                 ' 第1列
+            .Desc = selectedItem.SubItems(1)          ' 第2列
+            .Type = selectedItem.SubItems(2)          ' 第3列
+            .Price = selectedItem.SubItems(3)         ' 第4列
+            .Unit = selectedItem.tag                   ' Tag属性存储单位
+            
+            ' 从产品描述中提取品牌和材质
+            .Brand = GetBrand(.Desc)
+            .Material = GetMaterial(.Desc)
+        End With
+        
+        ' 2. 检查来源判断是否需要退出
+        If g_FromWhere = WHERE_CHANGEPRICEWEB Then
+            g_IsPriceChanged = True
+            Me.Hide
+            Exit Sub
+        End If
+        
+        ' 3. 获取目标单元格
+        Dim tmpCell As Range
+        Select Case foundCell.Column
+            Case 3 ' C列：通常用于填写"标准物料名称"
+                Set tmpCell = foundCell
+            Case 4 ' D列：通常用于填写"工艺"或"规格"
+                Set tmpCell = foundCell.Offset(0, -1)
+        End Select
+        
+        ' 4. 清空目标区域
+        ClearTargetCells tmpCell
+        
+        ' 5. 使用全局变量中的数据写入单元格
+        If Not tmpCell Is Nothing Then
+            Application.EnableEvents = False
+            FillCellsWithData tmpCell, g_CallbackData  ' 传递全局变量
+            Application.EnableEvents = True
+        End If
+
+        ' 6. 关闭窗体
+        Me.Hide
+    End If
+    Exit Sub
+
+ErrorHandler:
+    Application.EnableEvents = True
+    MsgBox "处理选择时出错: " & Err.Description, vbCritical
+End Sub
+
+
+' === 清空目标单元格 ===
+Private Sub ClearTargetCells(ByVal targetCell As Range)
+    If targetCell Is Nothing Then Exit Sub
+    
+    With targetCell
+        .Offset(0, 1).value = ""  ' C列
+        .Offset(0, 2).value = ""  ' E列
+        .Offset(0, 3).value = ""  ' F列，材质列
+        .Offset(0, 4).value = ""  ' G列，品牌列
+    End With
+    
+    If targetCell.Worksheet.name = "易损件表" Then
+        targetCell.Offset(0, 9).value = ""  ' L列，单价列
+    Else
+        targetCell.Offset(0, 11).value = ""  ' N列，单价列
+    End If
+End Sub
+
+
+' === 点击窗体右上角 X 关闭时 ===
+Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
+    If CloseMode = vbFormControlMenu Then
+        Cancel = True
+        Me.Hide
+    End If
+End Sub
+' --- ShowPriceForm.frm 结束 ---
+
+
+Private Sub cmdCancel_Click()
+    g_IsPriceChanged = False
+    Me.Hide
+End Sub
+
+    
+' 完全相同的逻辑
+Function GetBrand(Text As String) As String
+    GetBrand = GetInfo(Text, Array("品牌/制造商", "品牌", "制造商"))
+End Function
+
+
+Function GetMaterial(Text As String) As String
+    GetMaterial = GetInfo(Text, Array("材质"))
+End Function
+
+
+' 统一的关键字提取函数 - 简化稳定版
+Private Function GetInfo(Text As String, keywords As Variant) As String
+    Dim keyword As Variant
+    Dim keywordStr As String
+    Dim pos As Long
+    Dim startPos As Long
+    Dim tempText As String
+    Dim result As String
+    
+    ' 确保文本不为空
+    If Text = "" Then
+        GetInfo = ""
+        Exit Function
+    End If
+    
+    ' 转换为小写用于比较（不改变原文本）
+    Dim lowerText As String
+    lowerText = LCase(Text)
+    
+    For Each keyword In keywords
+        keywordStr = LCase(CStr(keyword))
+        
+        ' 查找关键字位置
+        pos = InStr(1, lowerText, keywordStr, vbTextCompare)
+        If pos > 0 Then
+            ' 找到关键字后的文本
+            tempText = Mid(Text, pos + Len(keywordStr))
+            
+            ' 跳过开头的分隔符
+            tempText = SkipChars(tempText, ": ： 　 ")
+            
+            ' 找到结束位置（遇到分隔符或文本结束）
+            result = GetUntilSeparator(tempText)
+            
+            ' 清理并返回结果
+            result = CleanText(result)
+            
+            If result <> "" Then
+                GetInfo = result
+                Exit Function
+            End If
+        End If
+    Next keyword
+    
+    GetInfo = ""
+End Function
+
+
+' 跳过指定字符
+Private Function SkipChars(Text As String, charsToSkip As String) As String
+    Dim i As Long
+    For i = 1 To Len(Text)
+        Dim ch As String
+        ch = Mid(Text, i, 1)
+        
+        If InStr(1, charsToSkip, ch) = 0 Then
+            SkipChars = Mid(Text, i)
+            Exit Function
+        End If
+    Next i
+    
+    SkipChars = ""
+End Function
+
+
+' 获取直到分隔符的内容
+Private Function GetUntilSeparator(Text As String) As String
+    Dim separators As String
+    separators = "；;，,.。、/ "
+    
+    Dim i As Long
+    For i = 1 To Len(Text)
+        Dim ch As String
+        ch = Mid(Text, i, 1)
+        
+        If InStr(1, separators, ch) > 0 Then
+            GetUntilSeparator = left(Text, i - 1)
+            Exit Function
+        End If
+    Next i
+    
+    GetUntilSeparator = Text
+End Function
+
+
+' 清理文本
+Private Function CleanText(Text As String) As String
+    CleanText = Trim(Text)
+    
+    ' 去掉开头和结尾可能的多余标点
+    If Len(CleanText) > 0 Then
+        If InStr(1, ":：,，;；.。", Right(CleanText, 1)) > 0 Then
+            CleanText = left(CleanText, Len(CleanText) - 1)
+            CleanText = Trim(CleanText)
+        End If
+    End If
+End Function

@@ -1,0 +1,653 @@
+' modDatabaseQueries - 根据汉字字符分类的查询函数
+Option Explicit
+
+
+Public g_SubCategoryData As Collection
+Public g_CraftingConfigData As Collection
+Public g_MaterialsConfigData As Collection
+
+
+' ============================================
+' ht_sales_config_materials 表字段索引常量
+' ============================================
+Public Const MAT_IDX_MATERIAL_ID As Long = 0    ' material_id - 材料配置ID
+Public Const MAT_IDX_PRODUCT_ID As Long = 1     ' product_id - 产品ID
+Public Const MAT_IDX_COMPONENT_ID As Long = 2   ' component_id - 组件ID
+Public Const MAT_IDX_MATERIAL_TYPE As Long = 3  ' material_type - 材料类型
+Public Const MAT_IDX_TOTALPRICE As Long = 4     ' totalprice - 总价
+
+' 材料类型常量
+Public Const MATERIAL_S304 As String = "S304"
+Public Const MATERIAL_Q235 As String = "Q235"
+
+' 特殊字段索引常量（GetSubCategoryDataFromDefaultTabel函数返回的数组结构）
+' 这些字段来自ht_sales_product_default_config表的所有字段
+' 注意：is_active 和 is_Assembly 字段的值已被 CAST(is_... AS SIGNED) 转换
+' 字段顺序严格按照 DESC ht_sales_product_default_config 的顺序
+Public Const IDX_CONFIG_ID As Long = 0           ' config_id (INT, 主键，自增)
+Public Const IDX_PRODUCT_ID As Long = 1          ' product_id (INT, 外键)
+Public Const IDX_COMPONENT_SN As Long = 2        ' component_sn (INT, 排序用)
+Public Const IDX_COMPONENT_NAME As Long = 3      ' component_name (VARCHAR, NOT NULL) - 组件名称
+Public Const IDX_COMPONENT_DESC As Long = 4      ' component_desc (VARCHAR) - 组件描述
+Public Const IDX_COMPONENT_TYPE As Long = 5      ' component_type (VARCHAR) - 组件类型
+Public Const IDX_COMPONENT_MATERIAL As Long = 6  ' component_material (VARCHAR) - 组件材质
+Public Const IDX_COMPONENT_BRAND As Long = 7     ' component_brand (VARCHAR) - 组件品牌
+Public Const IDX_COMPONENT_QUANTITY As Long = 8  ' component_quantity (INT) - 组件数量
+Public Const IDX_COMPONENT_UNIT As Long = 9      ' component_unit (VARCHAR) - 计量单位
+Public Const IDX_COMPONENT_UNITPRICE As Long = 10 ' component_unitprice (DECIMAL) - 单价
+Public Const IDX_COMPONENT_TOTALPRICE As Long = 11 ' component_totalprice (DECIMAL) - 总价
+Public Const IDX_COMPONENT_PIC As Long = 12      ' component_pic (VARCHAR) - 组件图片文件名
+Public Const IDX_PIC_LEVEL As Long = 13          ' pic_level (INT) - 图片显示层级
+Public Const IDX_CREATED_AT As Long = 14         ' created_at (TIMESTAMP) - 创建时间
+Public Const IDX_BACKUP As Long = 15             ' backup (VARCHAR) - 备用字段
+Public Const IDX_WHATKIND As Long = 16           ' whatkind (SET) - 组件种类
+' is_active 和 is_Assembly 的值已经是 CAST 转换后的结果 (SIGNED INT)
+Public Const IDX_IS_ACTIVE As Long = 17          ' is_active (CAST as SIGNED INT) - 是否必选 (转换后)
+Public Const IDX_IS_ASSEMBLY As Long = 18        ' is_Assembly (CAST as SIGNED INT) - 是否为可选配件 (转换后)
+
+' 组件种类常量 (对应 whatkind 字段的 SET 值)
+Public Const COMPONENT_KIND_OUTSOURCED As String = "外购件" ' 外购件
+Public Const COMPONENT_KIND_COMPONENT As String = "组件"     ' 组件
+Public Const COMPONENT_KIND_PROCESS As String = "工艺"       ' 工艺
+Public Const COMPONENT_KIND_STANDARD_PART As String = "标准件" ' 标准件
+
+
+' 表面处理配置表字段索引常量（GetCraftingConfigDataByComponentName函数返回的数组结构）
+' 这些字段来自ht_sales_config_crafting表的所有字段
+' 字段顺序严格按照 DESC ht_sales_config_crafting 的顺序
+Public Const IDX_CRFT_CRAFTING_ID As Long = 0          ' crafting_id (INT, 主键，自增)
+Public Const IDX_CRFT_PRODUCT_ID As Long = 1           ' product_id (INT) - 产品ID
+Public Const IDX_CRFT_COMPONENT_ID As Long = 2         ' component_id (INT) - 组件ID
+Public Const IDX_CRFT_MATERIALS_PRICE As Long = 3      ' MaterialsPrice (DECIMAL(10,2)) - 材料价格
+Public Const IDX_CRFT_INNER_AREA1 As Long = 4          ' InnerArea1 (DECIMAL(10,2)) - 内表面区域1面积
+Public Const IDX_CRFT_INNER_AREA2 As Long = 5          ' InnerArea2 (DECIMAL(10,2)) - 内表面区域2面积
+Public Const IDX_CRFT_INNER_AREA3 As Long = 6          ' InnerArea3 (DECIMAL(10,2)) - 内表面区域3面积
+Public Const IDX_CRFT_OUTTER_AREA1 As Long = 7         ' OutterArea1 (DECIMAL(10,2)) - 外表面区域1面积
+Public Const IDX_CRFT_OUTTER_AREA2 As Long = 8         ' OutterArea2 (DECIMAL(10,2)) - 外表面区域2面积
+Public Const IDX_CRFT_OUTTER_AREA3 As Long = 9         ' OutterArea3 (DECIMAL(10,2)) - 外表面区域3面积
+Public Const IDX_CRFT_INNER_UNITPRICE1 As Long = 10    ' InnerUnitPrice1 (INT) - 内表面区域1单价
+Public Const IDX_CRFT_INNER_UNITPRICE2 As Long = 11    ' InnerUnitPrice2 (INT) - 内表面区域2单价
+Public Const IDX_CRFT_INNER_UNITPRICE3 As Long = 12    ' InnerUnitPrice3 (INT) - 内表面区域3单价
+Public Const IDX_CRFT_OUTTER_UNITPRICE1 As Long = 13   ' OutterUnitPrice1 (INT) - 外表面区域1单价
+Public Const IDX_CRFT_OUTTER_UNITPRICE2 As Long = 14   ' OutterUnitPrice2 (INT) - 外表面区域2单价
+Public Const IDX_CRFT_OUTTER_UNITPRICE3 As Long = 15   ' OutterUnitPrice3 (INT) - 外表面区域3单价
+Public Const IDX_CRFT_INNER_TOTALPRICE1 As Long = 16   ' InnerTotalPrice1 (INT) - 内表面区域1总价
+Public Const IDX_CRFT_INNER_TOTALPRICE2 As Long = 17   ' InnerTotalPrice2 (INT) - 内表面区域2总价
+Public Const IDX_CRFT_INNER_TOTALPRICE3 As Long = 18   ' InnerTotalPrice3 (INT) - 内表面区域3总价
+Public Const IDX_CRFT_OUTTER_TOTALPRICE1 As Long = 19  ' OutterTotalPrice1 (INT) - 外表面区域1总价
+Public Const IDX_CRFT_OUTTER_TOTALPRICE2 As Long = 20  ' OutterTotalPrice2 (INT) - 外表面区域2总价
+Public Const IDX_CRFT_OUTTER_TOTALPRICE3 As Long = 21  ' OutterTotalPrice3 (INT) - 外表面区域3总价
+Public Const IDX_CRFT_INNER_CRAFTTYPE1 As Long = 22    ' InnerCraftType1 (SET) - 内表面区域1工艺类型 ('ETFE','镜面')
+Public Const IDX_CRFT_INNER_CRAFTTYPE2 As Long = 23    ' InnerCraftType2 (SET) - 内表面区域2工艺类型 ('ETFE','镜面')
+Public Const IDX_CRFT_INNER_CRAFTTYPE3 As Long = 24    ' InnerCraftType3 (SET) - 内表面区域3工艺类型 ('ETFE','镜面')
+Public Const IDX_CRFT_OUTTER_CRAFTTYPE1 As Long = 25   ' OutterCraftType1 (SET) - 外表面区域1工艺类型 ('ETFE','拉丝')
+Public Const IDX_CRFT_OUTTER_CRAFTTYPE2 As Long = 26   ' OutterCraftType2 (SET) - 外表面区域2工艺类型 ('ETFE','拉丝')
+Public Const IDX_CRFT_OUTTER_CRAFTTYPE3 As Long = 27   ' OutterCraftType3 (SET) - 外表面区域3工艺类型 ('ETFE','拉丝')
+
+' 工艺类型常量（不变）
+Public Const CRAFT_TYPE_ETFE As String = "ETFE"        ' ETFE工艺
+Public Const CRAFT_TYPE_MIRROR As String = "镜面"      ' 镜面工艺
+Public Const CRAFT_TYPE_BRUSHED As String = "拉丝"     ' 拉丝工艺
+
+' 表面类型常量（不变）
+Public Const SURFACE_TYPE_INNER As String = "内表面"   ' 内表面
+Public Const SURFACE_TYPE_OUTTER As String = "外表面"  ' 外表面
+
+' 区域索引常量（不变）
+Public Const AREA_1 As Long = 1    ' 区域1
+Public Const AREA_2 As Long = 2    ' 区域2
+Public Const AREA_3 As Long = 3    ' 区域3
+
+
+
+' 函数：GetSubCategoryDataFromDefaultTabel
+' 功能：根据选中的产品型号名称，查询产品默认配置表中的所有组件信息 (所有字段)
+'
+' 工作流程：
+' 1. 根据 selectedSonName（产品型号）查询产品ID
+' 2. 根据产品ID查询该产品的所有默认配置组件 (所有字段)
+' 3. 返回包含组件所有信息的 Collection 对象
+'
+' 参数：
+'   selectedrootName - String，选中的根分类名称（暂时未使用，保留参数）
+'   selectedSonName  - String，选中的产品型号名称，用于查询产品ID
+'
+' 返回值：
+'   Collection 对象，每个元素是一个数组，包含 ht_sales_product_default_config 表的所有字段
+'   数组索引与表字段对应关系 (根据 DESC ht_sales_product_default_config 的顺序，is_* 字段值已转换):
+'     [0]  - config_id              (INT, NOT NULL) - 配置ID (主键，自增)
+'     [1]  - product_id             (INT, NOT NULL) - 产品ID (外键)
+'     [2]  - component_sn           (INT, YES)      - 组件序号 (排序用)
+'     [3]  - component_name         (VARCHAR(255), NOT NULL) - 组件名称
+'     [4]  - component_desc         (VARCHAR(255), YES) - 组件描述
+'     [5]  - component_type         (VARCHAR(255), YES) - 组件类型
+'     [6]  - component_material     (VARCHAR(255), YES) - 组件材质
+'     [7]  - component_brand        (VARCHAR(255), YES) - 组件品牌
+'     [8]  - component_quantity     (INT, YES)      - 组件数量
+'     [9]  - component_unit         (VARCHAR(10), YES) - 计量单位
+'     [10] - component_unitprice    (DECIMAL(10,2), YES) - 单价
+'     [11] - component_totalprice   (DECIMAL(10,2), YES) - 总价（数量 × 单价）
+'     [12] - component_pic          (VARCHAR(255), YES) - 组件图片文件名
+'     [13] - pic_level              (INT, YES)      - 图片显示层级
+'     [14] - created_at             (TIMESTAMP, YES) - 创建时间
+'     [15] - backup                 (VARCHAR(255), YES) - 备用字段
+'     [16] - whatkind               (SET, YES)      - 组件种类 ('外购件','组件','工艺','标准件')
+'     [17] - is_active              (SIGNED INT, via CAST) - 是否激活 (已转换为 SIGNED)
+'     [18] - is_Assembly            (SIGNED INT, via CAST) - 是否为可选配件 (已转换为 SIGNED)
+'
+' 数据库表结构说明：
+'   ht_sales_products表：存储产品基本信息
+'     - product_id: 产品ID（主键）
+'     - product_model: 产品型号（用于查询）
+'
+'   ht_sales_product_default_config表：存储产品默认配置
+'     - config_id: 配置ID（主键，自增）
+'     - product_id: 关联的产品ID（外键）
+'     - component_sn: 组件序号（排序用）
+'     - ... (其他字段见上方数组索引说明)
+'
+' 注意：
+'   1. 查询结果按 component_sn 排序，确保组件显示顺序正确
+'   2. CAST(is_active AS SIGNED), CAST(is_Assembly AS SIGNED) 确保布尔值正确转换为数字
+'   3. 空值处理为 Empty，后续代码需要处理可能的空值情况
+'   4. 由于使用 SELECT *, 字段顺序严格遵循数据库表结构定义的顺序
+'   5. is_active 和 is_Assembly 字段的值在返回的数组中已是转换后的 SIGNED 整型
+'
+' 错误处理：
+'   1. 数据库连接失败时返回空集合
+'   2. 查询失败时返回空集合
+'   3. 记录错误日志以便排查问题
+Public Function GetSubCategoryDataFromDefaultTabel(ByVal selectedRootName As String, ByVal selectedSonName As String) As Collection
+    On Error GoTo ErrorHandler
+
+    ' --- 声明变量 ---
+    Dim sql As String                  ' SQL查询语句
+    Dim rs As ADODB.Recordset          ' 记录集对象
+    Dim fieldValues As Collection      ' 返回的数据集合
+    Dim fieldValue As Variant          ' 单行数据数组
+    Dim productID As Long              ' 产品ID
+
+    ' --- 初始化返回集合 ---
+    Set fieldValues = New Collection
+
+    ' --- 步骤1：根据产品型号查询产品ID ---
+    sql = "SELECT product_id FROM ht_sales_products WHERE product_model = '" & selectedSonName & "'"
+    Set rs = ExecuteQuery(sql)
+
+    If Not (rs Is Nothing) Then
+        If Not (rs.EOF And rs.BOF) Then
+            productID = rs.Fields(0).value
+'            Debug.Print "找到产品型号 '" & selectedSonName & "' 的产品ID: " & productID
+        Else
+            ' 未找到对应的产品型号
+            Debug.Print "错误：未找到产品型号 '" & selectedSonName & "'"
+            Set GetSubCategoryDataFromDefaultTabel = fieldValues  ' 返回空集合
+            Exit Function
+        End If
+        rs.Close
+    End If
+
+    ' --- 步骤2：根据产品ID查询所有默认配置组件 (所有字段) ---
+    ' SQL说明：
+    ' 1. 查询指定product_id的所有组件 (所有字段，使用 SELECT *)
+    ' 2. 按component_sn排序确保显示顺序
+    ' 3. 使用CAST将布尔字段转换为数字，并用 AS 覆盖原字段名
+    '    这样返回的 is_active 和 is_Assembly 字段值就是转换后的 SIGNED INT
+    '
+    sql = "SELECT config_id, " & _
+          "product_id, " & _
+          "component_sn, " & _
+          "component_name, " & _
+          "component_desc, " & _
+          "component_type, " & _
+          "component_material, " & _
+          "component_brand, " & _
+          "component_quantity, " & _
+          "component_unit, " & _
+          "component_unitprice, " & _
+          "component_totalprice, " & _
+          "component_pic, " & _
+          "pic_level, " & _
+          "created_at, " & _
+          "backup, " & _
+          "whatkind, " & _
+          "CAST(is_active AS SIGNED) AS is_active_converted, " & _
+          "CAST(is_Assembly AS SIGNED) AS is_Assembly_converted " & _
+          "FROM ht_sales_product_default_config " & _
+          "WHERE product_id = " & productID & " " & _
+          "ORDER BY component_sn"
+      
+'    Debug.Print "执行查询ht_sales_product_default_config (所有字段): " & sql
+    
+    Set rs = ExecuteQuery(sql)
+
+    ' --- 步骤3：处理查询结果 ---
+    If Not (rs Is Nothing) Then
+        If Not (rs.EOF And rs.BOF) Then
+            Dim recordCount As Long
+            recordCount = 0
+
+            ' 遍历所有记录
+            Do While Not rs.EOF
+                Dim i As Integer
+                Dim fieldCount As Integer
+                ' 由于 SELECT * 加上 2 个 CAST 别名，但别名覆盖了原字段，所以总数仍是 19
+                ' 总字段数 (从 0 开始索引) 应该是 rs.Fields.count - 1
+                fieldCount = rs.Fields.count - 1
+
+                ' 创建数组存储单行数据 (大小由实际字段数决定)
+                ReDim fieldValue(0 To fieldCount) As Variant
+
+                ' 复制每个字段的值到数组
+                For i = 0 To fieldCount
+                    If IsNull(rs.Fields(i).value) Then
+                        ' 空值处理为Empty，后续代码需要处理
+                        fieldValue(i) = Empty
+                    Else
+                        fieldValue(i) = rs.Fields(i).value
+                    End If
+                Next i
+
+                ' 将整行数据添加到集合
+                fieldValues.Add fieldValue
+                recordCount = recordCount + 1
+
+                ' 调试信息：显示前几条记录的名称
+                ' If recordCount <= 3 Then
+                '     ' component_name 是索引 [3]
+                '     Debug.Print "记录 " & recordCount & ": " & CStr(fieldValue(3))
+                ' End If
+
+                rs.MoveNext
+            Loop
+
+            'Debug.Print "成功加载 " & recordCount & " 个组件记录 (所有字段)"
+        Else
+            ' 查询成功但没有数据
+            'Debug.Print "产品ID " & productID & " 没有配置组件数据"
+        End If
+
+        ' 关闭记录集
+        If rs.State = adStateOpen Then rs.Close
+    Else
+        ' 查询失败
+        Debug.Print "错误：查询返回空记录集"
+    End If
+
+    ' --- 清理资源 ---
+    Set rs = Nothing
+
+    ' --- 返回结果 ---
+    Set GetSubCategoryDataFromDefaultTabel = fieldValues
+
+    ' 调试信息
+    'Debug.Print "函数返回集合大小: " & fieldValues.count
+
+    Exit Function
+
+ErrorHandler:
+    ' --- 错误处理 ---
+    Dim errorMsg As String
+    errorMsg = "GetSubCategoryDataFromDefaultTabel 函数错误 [" & Err.Number & "]: " & Err.Description
+
+    ' 记录错误日志
+    LogError "GetSubCategoryDataFromDefaultTabel", errorMsg & " (产品型号: " & selectedSonName & ")"
+
+    ' 确保资源被释放
+    If Not rs Is Nothing Then
+        If rs.State = adStateOpen Then rs.Close
+    End If
+    Set rs = Nothing
+
+    ' 返回空集合表示失败或无数据
+    Set GetSubCategoryDataFromDefaultTabel = New Collection
+    Debug.Print errorMsg
+End Function
+
+
+' 函数：GetCraftingConfigDataByComponentName
+' 功能：根据组件名称查询表面处理配置数据
+'
+' 参数：
+'   componentName - String，组件名称
+'
+' 返回值：
+'   Collection 对象，每个元素是一个数组，包含 ht_sales_config_crafting 表的所有字段
+'   如果找不到对应的组件或表面处理配置，返回空集合
+Public Function GetCraftingConfigDataByComponentName(ByVal componentName As String) As Collection
+    On Error GoTo ErrorHandler
+
+    ' --- 声明变量 ---
+    Dim sql As String                  ' SQL查询语句
+    Dim rs As ADODB.Recordset          ' 记录集对象
+    Dim fieldValues As Collection      ' 返回的数据集合
+    Dim fieldValue As Variant          ' 单行数据数组
+    Dim componentID As Long            ' 组件ID
+    Dim foundComponent As Boolean      ' 是否找到组件
+
+    ' --- 初始化返回集合 ---
+    Set fieldValues = New Collection
+    componentID = 0
+    foundComponent = False
+
+    Dim i As Long
+    ' --- 步骤1：从 g_SubCategoryData 查找组件ID ---
+    If Not g_SubCategoryData Is Nothing Then
+        For i = 1 To g_SubCategoryData.count
+            If IsArray(g_SubCategoryData(i)) Then
+                ' 获取组件名称（索引 3）
+                Dim currentComponentName As String
+                currentComponentName = CStr(g_SubCategoryData(i)(IDX_COMPONENT_NAME))
+                
+                ' 比较组件名称
+                If StrComp(currentComponentName, componentName, vbTextCompare) = 0 Then
+                    ' 找到匹配的组件，获取config_id作为component_id
+                    componentID = CLng(g_SubCategoryData(i)(IDX_CONFIG_ID))
+                    foundComponent = True
+                    
+                    Debug.Print "找到组件 '" & componentName & "' - ConfigID: " & componentID
+                    Exit For
+                End If
+            End If
+        Next i
+    End If
+
+    ' 如果没有找到组件，返回空集合
+    If Not foundComponent Then
+        Debug.Print "错误：在g_SubCategoryData中未找到组件 '" & componentName & "'"
+        Set GetCraftingConfigDataByComponentName = fieldValues
+        Exit Function
+    End If
+
+    ' --- 步骤2：构建SQL查询 ---
+    ' 根据找到的component_id查询表面处理配置
+    sql = "SELECT * FROM ht_sales_config_crafting " & _
+          "WHERE component_id = " & componentID
+    
+    Debug.Print "执行查询表面处理配置: " & sql
+    
+    ' --- 步骤3：执行查询 ---
+    Set rs = ExecuteQuery(sql)
+
+    ' --- 步骤4：处理查询结果 ---
+    If Not (rs Is Nothing) Then
+        If Not (rs.EOF And rs.BOF) Then
+            Dim recordCount As Long
+            recordCount = 0
+
+            ' 遍历所有记录
+            Do While Not rs.EOF
+                Dim j As Integer
+                Dim fieldCount As Integer
+                
+                ' 总字段数 (从 0 开始索引) 应该是 rs.Fields.count - 1
+                fieldCount = rs.Fields.count - 1
+
+                ' 创建数组存储单行数据
+                ReDim fieldValue(0 To fieldCount) As Variant
+
+                ' 复制每个字段的值到数组
+                For j = 0 To fieldCount
+                    If IsNull(rs.Fields(j).value) Then
+                        ' 空值处理为Empty，后续代码需要处理
+                        fieldValue(j) = Empty
+                    Else
+                        fieldValue(j) = rs.Fields(j).value
+                    End If
+                Next j
+
+                ' 将整行数据添加到集合
+                fieldValues.Add fieldValue
+                recordCount = recordCount + 1
+
+                ' 调试信息
+                If recordCount <= 3 Then
+                    Debug.Print "表面处理配置记录 " & recordCount & ": 组件ID=" & fieldValue(2)
+                End If
+
+                rs.MoveNext
+            Loop
+
+            Debug.Print "成功加载 " & recordCount & " 条表面处理配置记录"
+        Else
+            ' 查询成功但没有数据
+            Debug.Print "组件 '" & componentName & "' (ID: " & componentID & ") 没有表面处理配置数据"
+        End If
+
+        ' 关闭记录集
+        If rs.State = adStateOpen Then rs.Close
+    Else
+        ' 查询失败
+        Debug.Print "错误：查询返回空记录集"
+    End If
+
+    ' --- 清理资源 ---
+    Set rs = Nothing
+
+    ' --- 返回结果 ---
+    Set GetCraftingConfigDataByComponentName = fieldValues
+
+    Exit Function
+
+ErrorHandler:
+    ' --- 错误处理 ---
+    Dim errorMsg As String
+    errorMsg = "GetCraftingConfigDataByComponentName 函数错误 [" & Err.Number & "]: " & Err.Description
+
+    ' 记录错误日志
+    LogError "GetCraftingConfigDataByComponentName", errorMsg & " (组件名称: " & componentName & ")"
+
+    ' 确保资源被释放
+    If Not rs Is Nothing Then
+        If rs.State = adStateOpen Then rs.Close
+    End If
+    Set rs = Nothing
+
+    ' 返回空集合表示失败或无数据
+    Set GetCraftingConfigDataByComponentName = New Collection
+    Debug.Print errorMsg
+End Function
+
+
+' 函数：GetComponentFieldValueAsString
+' 功能：根据查询条件从g_SubCategoryData获取指定字段的值（字符串版本）
+'
+' 参数：
+'   searchFieldIndex - Long，查询条件的字段索引（如IDX_COMPONENT_NAME）
+'   searchValue      - String，查询条件的值
+'   targetFieldIndex - Long，要获取的目标字段索引
+'   matchType        - String，匹配类型："exact"精确匹配，"like"模糊匹配，"startswith"开头匹配
+'
+' 返回值：
+'   String，目标字段的值转换为字符串。如果未找到返回空字符串""
+'
+' 示例：
+'   1. 根据组件名称获取组件描述
+'      desc = GetComponentFieldValueAsString(IDX_COMPONENT_NAME, "面板", IDX_COMPONENT_DESC, "exact")
+'
+'   2. 根据组件描述模糊查找获取组件名称
+'      name = GetComponentFieldValueAsString(IDX_COMPONENT_DESC, "铝材", IDX_COMPONENT_NAME, "like")
+Public Function GetComponentFieldValueAsString(ByVal searchFieldIndex As Long, _
+                                              ByVal searchValue As String, _
+                                              ByVal targetFieldIndex As Long, _
+                                              Optional ByVal matchType As String = "exact") As String
+    On Error GoTo ErrorHandler
+    
+    GetComponentFieldValueAsString = ""
+    
+    If g_SubCategoryData Is Nothing Then
+        Debug.Print "错误：g_SubCategoryData未初始化"
+        Exit Function
+    End If
+    
+    Dim i As Long
+    For i = 1 To g_SubCategoryData.count
+        If IsArray(g_SubCategoryData(i)) Then
+            Dim currentItem As Variant
+            currentItem = g_SubCategoryData(i)
+            
+            ' 检查查询字段是否存在
+            If UBound(currentItem) >= searchFieldIndex Then
+                Dim fieldValue As Variant
+                fieldValue = currentItem(searchFieldIndex)
+                
+                ' 根据匹配类型检查
+                Dim isMatch As Boolean
+                isMatch = False
+                
+                ' 将查询字段值转换为字符串进行比较
+                Dim fieldValueStr As String
+                fieldValueStr = CStr(fieldValue)
+                
+                Select Case LCase(matchType)
+                    Case "exact"
+                        isMatch = (StrComp(fieldValueStr, searchValue, vbTextCompare) = 0)
+                    Case "like"
+                        isMatch = (InStr(1, fieldValueStr, searchValue, vbTextCompare) > 0)
+                    Case "startswith"
+                        isMatch = (InStr(1, fieldValueStr, searchValue, vbTextCompare) = 1)
+                    Case Else
+                        isMatch = (StrComp(fieldValueStr, searchValue, vbTextCompare) = 0)
+                End Select
+                
+                ' 如果匹配成功，返回目标字段
+                If isMatch Then
+                    If UBound(currentItem) >= targetFieldIndex Then
+                        Dim targetValue As Variant
+                        targetValue = currentItem(targetFieldIndex)
+                        
+                        ' 将目标值转换为字符串
+                        If IsEmpty(targetValue) Or IsNull(targetValue) Then
+                            GetComponentFieldValueAsString = ""
+                        Else
+                            GetComponentFieldValueAsString = CStr(targetValue)
+                        End If
+                    Else
+                        Debug.Print "错误：目标字段索引超出范围"
+                    End If
+                    Exit Function
+                End If
+            End If
+        End If
+    Next i
+    
+    ' 未找到匹配项
+    Debug.Print "未找到匹配项：searchField=" & searchFieldIndex & ", searchValue=" & searchValue
+    Exit Function
+    
+ErrorHandler:
+    Debug.Print "GetComponentFieldValueAsString 错误: " & Err.Description
+    GetComponentFieldValueAsString = ""
+End Function
+
+
+' 函数：GetMaterialConfigDataByComponentName
+' 功能：根据组件名称查询材料配置数据
+'
+' 工作流程：
+' 1. 根据 componentName 在 g_SubCategoryData 中查找对应的 config_id (作为 component_id 使用)
+' 2. 根据找到的 component_id 查询 ht_sales_config_materials 表
+' 3. 返回查询到的材料配置信息集合
+'
+' 参数：
+'   componentName - String，组件名称，用于在 g_SubCategoryData 中定位组件
+'
+' 返回值：
+'   Collection 对象，每个元素是一个数组，包含 ht_sales_config_materials 表的所有字段
+'   数组索引与表字段对应关系 (根据 DESC ht_sales_config_materials 的顺序):
+'     [0] - material_id    (INT, NOT NULL) - 材料配置ID (主键，自增)
+'     [1] - product_id     (INT, YES)      - 产品ID
+'     [2] - component_id   (INT, YES)      - 组件ID (关联到 g_SubCategoryData 的 config_id)
+'     [3] - material_type  (SET, YES)      - 材料类型 ('S304','Q235')
+'     [4] - totalprice     (DECIMAL(10,2), YES) - 总价
+'   如果找不到对应的组件或材料配置，返回空集合
+Public Function GetMaterialConfigDataByComponentName(ByVal componentName As String) As Collection
+    On Error GoTo ErrorHandler
+
+    Dim sql As String
+    Dim rs As ADODB.Recordset
+    Dim fieldValues As Collection
+    Dim fieldValue As Variant
+    Dim componentID As Long
+    Dim foundComponent As Boolean
+    Dim i As Long
+    Dim recordCount As Long
+    Dim j As Integer
+    
+    Set fieldValues = New Collection
+    componentID = 0
+    foundComponent = False
+    recordCount = 0
+
+    ' --- 步骤1：从 g_SubCategoryData 查找组件ID ---
+    If Not g_SubCategoryData Is Nothing Then
+        For i = 1 To g_SubCategoryData.count
+            If IsArray(g_SubCategoryData(i)) Then
+                If StrComp(CStr(g_SubCategoryData(i)(IDX_COMPONENT_NAME)), componentName, vbTextCompare) = 0 Then
+                    componentID = CLng(g_SubCategoryData(i)(IDX_CONFIG_ID))
+                    foundComponent = True
+                    Exit For
+                End If
+            End If
+        Next i
+    End If
+
+    If Not foundComponent Then
+        Debug.Print "错误：未找到组件 '" & componentName & "'"
+        Set GetMaterialConfigDataByComponentName = fieldValues
+        Exit Function
+    End If
+
+    ' --- 步骤2：查询材料配置 ---
+    sql = "SELECT material_id, product_id, component_id, material_type, totalprice " & _
+          "FROM ht_sales_config_materials " & _
+          "WHERE component_id = " & componentID
+    
+    Set rs = ExecuteQuery(sql)
+    
+    If Not rs Is Nothing Then
+        If Not (rs.EOF And rs.BOF) Then
+            Do While Not rs.EOF
+                ' 使用常量确定数组大小
+                ReDim fieldValue(MAT_IDX_MATERIAL_ID To MAT_IDX_TOTALPRICE) As Variant
+                
+                ' 使用常量索引填充数组
+                For j = MAT_IDX_MATERIAL_ID To MAT_IDX_TOTALPRICE
+                    If IsNull(rs.Fields(j).value) Then
+                        fieldValue(j) = Empty
+                    Else
+                        fieldValue(j) = rs.Fields(j).value
+                    End If
+                Next j
+                
+                fieldValues.Add fieldValue
+                recordCount = recordCount + 1
+                
+'                Debug.Print "材料配置[" & recordCount & "]: ID=" & fieldValue(MAT_IDX_MATERIAL_ID) & _
+'                            ", 组件ID=" & fieldValue(MAT_IDX_COMPONENT_ID) & _
+'                            ", 类型=" & fieldValue(MAT_IDX_MATERIAL_TYPE) & _
+'                            ", 总价=" & fieldValue(MAT_IDX_TOTALPRICE)
+                
+                rs.MoveNext
+            Loop
+        Else
+            Debug.Print "组件 '" & componentName & "' (ID: " & componentID & ") 无材料配置"
+        End If
+        
+        If rs.State = adStateOpen Then rs.Close
+    End If
+
+    Set GetMaterialConfigDataByComponentName = fieldValues
+    Exit Function
+
+ErrorHandler:
+    Debug.Print "GetMaterialConfigDataByComponentName 错误: " & Err.Number & " - " & Err.Description
+    
+    If Not rs Is Nothing Then
+        If rs.State = adStateOpen Then rs.Close
+    End If
+    
+    Set GetMaterialConfigDataByComponentName = New Collection
+End Function
+
+

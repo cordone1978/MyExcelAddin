@@ -1,0 +1,219 @@
+'-----------------------------------------------------------------------------
+' 模块: modDataCacheManager
+' 目的: 集中管理和初始化所有数据缓存。
+'-----------------------------------------------------------------------------
+Option Explicit
+
+' --- 声明所有全局缓存实例 ---
+Public g_cacheSystemNames As clsCache_ProductCatalog ' System_name
+Public g_cacheMaterials As clsCache_ProductCatalog ' material_name
+Public g_cacheTypeNameToModels As clsCache_ProductCatalog ' type_name -> product_model
+Public g_cacheSystemDevice As clsCache_ProductCatalog   ' system_name -> type_name
+
+' 工艺含价格
+Public g_cacheCraftWithPrice As clsCache_ProductCatalog ' material_name -> material_price
+
+
+' --- 初始化所有缓存或指定的单个缓存 ---
+' @param targetCache Optional clsCache_ProductCatalog 如果提供，则只初始化此缓存；否则初始化所有缓存
+Public Sub InitializeAllCaches(Optional targetCache As clsCache_ProductCatalog)
+    On Error GoTo ErrorHandler
+    
+    Dim shouldInitAll As Boolean
+    shouldInitAll = (targetCache Is Nothing)
+    
+    Debug.Print "开始初始化缓存... (全部: " & shouldInitAll & ")"
+    
+    ' --- 1. 初始化 system_name -> type_name 缓存 ---
+    If shouldInitAll Or targetCache Is g_cacheSystemDevice Then ' 检查是否需要初始化此缓存
+        If g_cacheSystemDevice Is Nothing Then
+            Set g_cacheSystemDevice = New clsCache_ProductCatalog
+        End If
+
+        With g_cacheSystemDevice
+            .Config_Name = "SystemNameToTypeName"
+            .Config_SQL = "SELECT system_name, type_name FROM v_system_config_simple" ' 1. 明确 SELECT 列
+            .Config_KeyFieldName = "system_name"     ' 2. 指定 Key 字段
+            .Config_ValueFieldName = "type_name"     ' 3. 指定 Value 字段
+            .Load
+        End With
+        Debug.Print "已初始化 g_cacheSystemDevice"
+    End If
+
+    ' --- 2. 初始化 type_name -> product_model 缓存 ---
+    If shouldInitAll Or targetCache Is g_cacheTypeNameToModels Then ' 检查是否需要初始化此缓存
+        If g_cacheTypeNameToModels Is Nothing Then
+            Set g_cacheTypeNameToModels = New clsCache_ProductCatalog
+        End If
+
+        With g_cacheTypeNameToModels
+            .Config_Name = "TypeNameToProductModels"
+            .Config_SQL = "SELECT pt.type_name, p.product_model " & _
+                          "FROM ht_sales_product_types pt " & _
+                          "INNER JOIN ht_sales_products p ON pt.product_type_id = p.product_type_id " & _
+                          "WHERE pt.is_active = 1 AND p.is_active = 1 " & _
+                          "ORDER BY pt.type_name, p.product_model;"
+            .Config_KeyFieldName = "type_name"
+            .Config_ValueFieldName = "product_model"
+            .Load
+        End With
+        Debug.Print "已初始化 g_cacheTypeNameToModels"
+    End If
+   
+    ' --- 3. 初始化 material_name 缓存 ---
+    If shouldInitAll Or targetCache Is g_cacheMaterials Then ' 检查是否需要初始化此缓存
+        If g_cacheMaterials Is Nothing Then
+            Set g_cacheMaterials = New clsCache_ProductCatalog
+        End If
+
+        With g_cacheMaterials
+            .Config_Name = "MaterialName"
+            .Config_SQL = "SELECT material_name, material_type FROM ht_sales_materials"
+            .Config_KeyFieldName = "material_name"
+            .Config_ValueFieldName = "material_type"
+            .Load
+        End With
+        Debug.Print "已初始化 g_cacheMaterials"
+    End If
+
+    ' --- 4. 初始化 System_name 缓存 ---
+    If shouldInitAll Or targetCache Is g_cacheSystemNames Then ' 检查是否需要初始化此缓存
+        If g_cacheSystemNames Is Nothing Then
+            Set g_cacheSystemNames = New clsCache_ProductCatalog
+        End If
+        
+        With g_cacheSystemNames
+            .Config_Name = "SystemName"
+            .Config_SQL = "SELECT system_id, system_name FROM ht_sales_systems"
+            .Config_KeyFieldName = "system_id"
+            .Config_ValueFieldName = "system_name"
+            .Load
+        End With
+        Debug.Print "已初始化 g_cacheSystemNames"
+    End If
+  
+    ' --- 5. 初始化 工艺表面处理 + 单价 缓存（用于 ComboBox）---
+    If shouldInitAll Or targetCache Is g_cacheCraftWithPrice Then ' 检查是否需要初始化此缓存
+        If g_cacheCraftWithPrice Is Nothing Then
+            Set g_cacheCraftWithPrice = New clsCache_ProductCatalog
+        End If
+        
+        With g_cacheCraftWithPrice
+            .Config_Name = "CraftDisplayText" ' 改个名字更准确
+            .Config_SQL = "SELECT DISTINCT " & _
+                          "CONCAT(" & _
+                              "COALESCE(material_name, '未知工艺'), " & _
+                              "' -- ￥', " & _
+                              "COALESCE(CAST(material_unitprice AS CHAR), '0')" & _
+                          ") AS display_text " & _
+                          "FROM ht_sales_materials " & _
+                          "WHERE material_type = '工艺'"
+            .Config_KeyFieldName = "display_text"
+            .Config_ValueFieldName = "display_text"
+            .Load
+        End With
+        Debug.Print "已初始化 g_cacheCraftWithPrice"
+    End If
+
+    ' -------------------------------
+    ' --- 在初始化完成后进行调试检查 (仅在初始化全部时) ---
+    ' -------------------------------
+    If shouldInitAll Then ' 只有在初始化全部缓存时才进行详细检查
+        Debug.Print "---------- 初始化完成，开始调试输出 ----------"
+
+        ' --- 检查 g_cacheTypeNameToModels ---
+        If Not g_cacheTypeNameToModels Is Nothing Then
+            Debug.Print "g_cacheTypeNameToModels 数据:"
+            Debug.Print g_cacheTypeNameToModels.GetAllCachedDataAsString
+        Else
+            Debug.Print "g_cacheTypeNameToModels --> (未初始化)"
+        End If
+        Debug.Print
+        
+        ' --- 检查 g_cacheSystemNames ---
+        If Not g_cacheSystemNames Is Nothing Then
+            Debug.Print "g_cacheSystemNames 数据:"
+            Debug.Print g_cacheSystemNames.GetAllCachedDataAsString
+        Else
+            Debug.Print "g_cacheSystemNames --> (未初始化)"
+        End If
+        Debug.Print
+        
+        ' --- 检查 g_cacheMaterials ---
+        If Not g_cacheMaterials Is Nothing Then
+            Debug.Print "g_cacheMaterials 数据:"
+            Debug.Print g_cacheMaterials.GetAllCachedDataAsString
+        Else
+            Debug.Print "g_cacheMaterials --> (未初始化)"
+        End If
+        Debug.Print
+       
+        ' --- 检查 g_cacheCraftWithPrice ---
+        If Not g_cacheCraftWithPrice Is Nothing Then
+            Debug.Print "g_cacheCraftWithPrice 数据:"
+            Debug.Print g_cacheCraftWithPrice.GetAllCachedDataAsString
+        Else
+            Debug.Print "g_cacheCraftWithPrice --> (未初始化)"
+        End If
+        Debug.Print
+       
+        Debug.Print "---------- 调试输出结束 ----------"
+    Else
+        Debug.Print "单个缓存更新完成。"
+    End If
+
+    Debug.Print "缓存初始化/更新完成。"
+    Exit Sub
+
+ErrorHandler:
+    Debug.Print "初始化缓存时发生错误: " & Err.Description
+    ' 可以选择在此处停止加载或记录日志
+End Sub
+
+
+' --- 清理所有缓存 ---
+Public Sub ClearAllCaches()
+    On Error Resume Next
+    Debug.Print "开始清理所有数据缓存..."
+    
+    If Not g_cacheSystemNames Is Nothing Then
+        g_cacheSystemNames.Clear
+        Set g_cacheSystemNames = Nothing
+    End If
+    
+    If Not g_cacheMaterials Is Nothing Then
+        g_cacheMaterials.Clear
+        Set g_cacheMaterials = Nothing
+    End If
+    
+    If Not g_cacheTypeNameToModels Is Nothing Then
+        g_cacheTypeNameToModels.Clear
+        Set g_cacheTypeNameToModels = Nothing
+    End If
+    
+    If Not g_cacheSystemDevice Is Nothing Then
+        g_cacheSystemDevice.Clear
+        Set g_cacheSystemDevice = Nothing
+    End If
+    
+    If Not g_cacheCraftWithPrice Is Nothing Then
+        g_cacheCraftWithPrice.Clear
+        Set g_cacheCraftWithPrice = Nothing
+    End If
+    
+    Debug.Print "所有数据缓存已清理。"
+    On Error GoTo 0
+End Sub
+
+
+' --- (可选) 强制刷新所有缓存 ---
+Public Sub RefreshAllCaches()
+    If Not g_cacheSystemNames Is Nothing Then g_cacheSystemNames.Refresh
+    If Not g_cacheMaterials Is Nothing Then g_cacheMaterials.Refresh
+    If Not g_cacheTypeNameToModels Is Nothing Then g_cacheTypeNameToModels.Refresh
+    If Not g_cacheSystemNames Is Nothing Then g_cacheSystemNames.Refresh
+    If Not g_cacheCraftWithPrice Is Nothing Then g_cacheCraftWithPrice.Refresh
+    Debug.Print "所有数据缓存已标记为需刷新。"
+End Sub
+
+
