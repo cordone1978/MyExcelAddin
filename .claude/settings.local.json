@@ -13,7 +13,17 @@
       "Bash(dir:*)",
       "Bash(node:*)",
       "Bash(npm run build:dev:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(powershell:*)",
+      "Bash(wmic:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(reg query:*)",
+      "Bash(cmd /c \"reg query HKCU\\\\Control Panel\\\\Desktop /v LogPixels\")",
+      "Bash(cmd:*)",
+      "Bash(del:*)",
+      "Bash(git -C \"D:\\\\project\\\\excel-addin-project\\\\MyExcelAddin\" diff:*)",
+      "Bash(git -C \"D:\\\\project\\\\excel-addin-project\\\\MyExcelAddin\" checkout:*)",
+      "WebSearch"
     ]
   }
 }

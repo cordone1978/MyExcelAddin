@@ -22,7 +22,6 @@
     let currentProjectName = null;
     let selectedDetails = new Map(); // 改用 Map，key=id, value={name, imageUrl, layer}
     let selectedAnnotations = new Map(); // 改用 Map，key=id, value={name, posX, posY, imageUrl}
-    let hotspotMarkers = [];
 
     // Canvas 相关变量
     let canvas = null;
@@ -36,8 +35,6 @@
     let outlineCache = {};
     let outlineEnabled = true;
     let outlineMode = 'hover';
-    let isDraggingHotspot = false;
-    let draggedHotspot = null;
     let currentBaseImageUrl = '';
     let mouseEventsBound = false;
 
@@ -228,7 +225,6 @@
         document.getElementById('detailList').innerHTML = '<div class="loading">加载中...</div>';
         document.getElementById('annotationList').innerHTML = '<div class="loading">加载中...</div>';
         showCanvasPlaceholder('← 选择产品后显示图片');
-        clearHotspots();
         Object.keys(components).forEach(id => removeComponentFromCanvas(id));
         selectedDetails.clear();
         selectedAnnotations.clear();
@@ -755,7 +751,6 @@ function normalizeAnnotations(annotations) {
         previewImage.crossOrigin = "anonymous";
         previewImage.src = imageUrl;
         previewImage.style.display = 'block';
-        clearHotspots();
     }
 
     // 10. 显示 Canvas 占位符
@@ -777,7 +772,6 @@ function normalizeAnnotations(annotations) {
             placeholder.textContent = message;
             placeholder.style.display = 'flex';
         }
-        clearHotspots();
     }
 
     // 11. 显示占位图片
@@ -802,7 +796,6 @@ function normalizeAnnotations(annotations) {
             `;
             placeholder.style.display = 'flex';
         }
-        clearHotspots();
     }
 
     // 12. 显示图片（用于产品主图）
@@ -818,14 +811,7 @@ function normalizeAnnotations(annotations) {
         if (placeholder) placeholder.style.display = 'none';
         if (!previewImage) return;
 
-        previewImage.onload = () => {
-            // 自动为已选的标注添加热点
-            setTimeout(() => {
-                selectedAnnotations.forEach((data, annotationId) => {
-                    addHotspotMarker(annotationId, data.name, data.posX, data.posY);
-                });
-            }, 100);
-        };
+        previewImage.onload = () => {};
         previewImage.onerror = () => {
             console.error("图片加载失败:", imageUrl);
             if (placeholder) {
@@ -837,7 +823,6 @@ function normalizeAnnotations(annotations) {
         previewImage.crossOrigin = "anonymous";
         previewImage.src = imageUrl;
         previewImage.style.display = 'block';
-        clearHotspots();
     }
 
     // 12. 切换标注选项
@@ -851,11 +836,8 @@ function normalizeAnnotations(annotations) {
             });
             // 可选配件同样叠加到 Canvas
             addComponentToCanvas(annotationKey, annotationName, imageUrl, posX || 0);
-            // 同时保留热点
-            addHotspotMarker(annotationKey, annotationName, posX, posY);
         } else {
             selectedAnnotations.delete(annotationKey);
-            removeHotspotMarker(annotationKey);
             removeComponentFromCanvas(annotationKey);
         }
 
@@ -863,55 +845,11 @@ function normalizeAnnotations(annotations) {
         scheduleRender(currentHighlightedComponentId);
     }
 
-    // 13. 添加热点标记
-    function addHotspotMarker(annotationKey, annotationName, posX, posY) {
-        const container = document.getElementById('imageContainer');
-        
-        const marker = document.createElement('div');
-        marker.className = 'hotspot-marker';
-        marker.textContent = hotspotMarkers.length + 1;
-        marker.dataset.annotationId = annotationKey;
-        
-        const x = posX !== null && posX !== undefined ? posX : 20 + Math.random() * 60;
-        const y = posY !== null && posY !== undefined ? posY : 20 + Math.random() * 60;
-        
-        marker.style.left = x + '%';
-        marker.style.top = y + '%';
-        
-        marker.onclick = () => {
-            alert(`配件: ${annotationName}\n位置: (${x.toFixed(1)}%, ${y.toFixed(1)}%)`);
-        };
-        
-        container.appendChild(marker);
-        hotspotMarkers.push({ annotationId: annotationKey, annotationName, marker, x, y });
-    }
-
-    // 14. 移除热点标记
-    function removeHotspotMarker(annotationKey) {
-        const index = hotspotMarkers.findIndex(h => h.annotationId === annotationKey);
-        if (index !== -1) {
-            const { marker } = hotspotMarkers[index];
-            marker.remove();
-            hotspotMarkers.splice(index, 1);
-            
-            hotspotMarkers.forEach((h, i) => {
-                h.marker.textContent = i + 1;
-            });
-        }
-    }
-
-    // 15. 清除所有热点
-    function clearHotspots() {
-        hotspotMarkers.forEach(h => h.marker.remove());
-        hotspotMarkers = [];
-    }
-
-    // 16. 清空右侧面板
+    // 13. 清空右侧面板
     function clearRightPanels() {
         document.getElementById('detailList').innerHTML = '';
         document.getElementById('annotationList').innerHTML = '';
         showCanvasPlaceholder('← 选择产品后显示图片');
-        clearHotspots();
     }
 
     // 17. 清除全部
@@ -973,11 +911,6 @@ function normalizeAnnotations(annotations) {
             project: currentProjectName,
             details: Array.from(selectedDetails.entries()).map(([id, data]) => ({ id, name: data.name })),
             annotations: Array.from(selectedAnnotations.entries()).map(([id, data]) => ({id, name: data.name})),
-            hotspots: hotspotMarkers.map(h => ({
-                annotationId: h.annotationId,
-                annotation: h.annotationName,
-                position: { x: h.x, y: h.y }
-            })),
             compositeImage: compositeImageBase64  // 添加合成图片
         };
 
@@ -986,7 +919,6 @@ function normalizeAnnotations(annotations) {
             产品型号: result.project,
             选中组件: result.details.length + ' 个',
             可选配件: result.annotations.length + ' 个',
-            热点标记: result.hotspots.length + ' 个',
             包含合成图片: !!compositeImageBase64
         });
 

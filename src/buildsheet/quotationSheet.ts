@@ -238,8 +238,8 @@ const sections = [
   sheet.getRange(`A1:S${lastRow}`).format.font.name = "Microsoft YaHei";
   sheet.getRange(`A1:S${lastRow}`).format.font.size = 11;
 
-  // 绿色成本区：N-R（成本单价/成本合计/合计/系数/备注）
-  sheet.getRange(`N1:R${lastRow}`).format.fill.color = "#cfe8b9";
+  // 绿色成本区：N-R（成本单价/成本合计/合计/系数/备注）- 整列设置
+  sheet.getRange("N:R").format.fill.color = "#cfe8b9";
 
   // 设置框线：横框线加粗，竖框线普通
   const borders = sheet.getRange(`A1:S${lastRow}`).format.borders;
@@ -290,6 +290,9 @@ const sections = [
   sheet.getRange("Q:Q").format.columnWidth = 50;
   sheet.getRange("R:R").format.columnWidth = 120;
   sheet.getRange("S:S").format.columnWidth = 120;
+
+  // 预设足够大的行高，避免插入后落入默认行高区域
+  sheet.getRange("A1:S2000").format.rowHeight = 30;
 
   // 同步所有格式设置到 Excel
   await context.sync();

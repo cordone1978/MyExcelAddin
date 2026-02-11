@@ -7,20 +7,42 @@ const path = require('path');
 
 const app = express();
 
+// ==================== 数据库配置 ====================
+const DATABASE_CONFIG = {
+  // 本机数据库
+  localhost: {
+    host: 'localhost',
+    user: 'root',
+    password: 'Livsun24',
+    database: 'quotation'
+  },
+  // 公司数据库
+  company: {
+    host: '192.168.1.79',
+    user: 'root',
+    password: 'ipanel',
+    database: 'quotation'
+  }
+};
+
+// 选择要使用的数据库配置：'localhost' 或 'company'
+const ACTIVE_DB = 'localhost';
+
 // ==================== 中间件配置 ====================
 app.use(cors());
 app.use(express.json());
 
 // MySQL 连接池
 const pool = mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  password: 'Livsun24',
-  database: 'quotation',
+  ...DATABASE_CONFIG[ACTIVE_DB],
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
 });
+
+// 导出配置供其他模块使用
+module.exports.DATABASE_CONFIG = DATABASE_CONFIG;
+module.exports.ACTIVE_DB = ACTIVE_DB;
 
 // ==================== API 路由（必须在静态文件之前）====================
 

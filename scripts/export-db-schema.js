@@ -8,25 +8,8 @@ const fs = require('fs');
 const path = require('path');
 
 // ==================== 数据库配置 ====================
-const DATABASE_CONFIG = {
-  // 本机数据库
-  localhost: {
-    host: 'localhost',
-    user: 'root',
-    password: 'Livsun24',
-    database: 'quotation'
-  },
-  // 公司数据库
-  company: {
-    host: '192.168.1.79',
-    user: 'root',
-    password: 'ipanel',
-    database: 'quotation'
-  }
-};
-
-// 选择要使用的数据库配置：'localhost' 或 'company'
-const ACTIVE_DB = 'company';
+// 从 server.js 导入统一的数据库配置
+const { DATABASE_CONFIG, ACTIVE_DB } = require('../server.js');
 
 // ==================== 文档输出目录 ====================
 const DOCS_DIR = path.join(__dirname, '../docs/database');
