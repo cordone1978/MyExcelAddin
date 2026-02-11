@@ -6,11 +6,10 @@ const cors = require('cors');
 const path = require('path');
 
 const app = express();
+
+// ==================== 中间件配置 ====================
 app.use(cors());
 app.use(express.json());
-app.use('/public', express.static(path.join(__dirname, 'public')));
-// 提供 dist 目录（Webpack 编译后的文件）
-app.use(express.static(path.join(__dirname, 'dist')));
 
 // MySQL 连接池
 const pool = mysql.createPool({
@@ -23,12 +22,15 @@ const pool = mysql.createPool({
   queueLimit: 0
 });
 
-// 测试连接
+// ==================== API 路由（必须在静态文件之前）====================
+
+// 0. 测试连接
 app.get('/api/test', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT 1 + 1 AS result');
     res.json({ success: true, data: rows });
   } catch (error) {
+    console.error('❌ 测试连接失败:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -47,6 +49,7 @@ app.get('/api/categories', async (req, res) => {
     
     res.json({ success: true, data: rows });
   } catch (error) {
+    console.error('❌ 获取产品类型失败:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -68,11 +71,12 @@ app.get('/api/projects/:categoryId', async (req, res) => {
     
     res.json({ success: true, data: rows });
   } catch (error) {
+    console.error('❌ 获取产品型号失败:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 3. 获取组件详细信息（添加 component_pic 和 image_url）
+// 3. 获取组件详细信息
 app.get('/api/details/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
@@ -98,11 +102,12 @@ app.get('/api/details/:projectId', async (req, res) => {
     
     res.json({ success: true, data: rows });
   } catch (error) {
+    console.error('❌ 获取组件详细信息失败:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 4. 获取标注选项（添加 component_pic 和 image_url）
+// 4. 获取标注选项
 app.get('/api/annotations/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
@@ -127,6 +132,7 @@ app.get('/api/annotations/:projectId', async (req, res) => {
     
     res.json({ success: true, data: rows });
   } catch (error) {
+    console.error('❌ 获取标注选项失败:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -162,6 +168,7 @@ app.get('/api/config/:projectId', async (req, res) => {
     
     res.json({ success: true, data: rows });
   } catch (error) {
+    console.error('❌ 获取完整配置数据失败:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -178,6 +185,7 @@ app.get('/api/crafting/:componentId', async (req, res) => {
     
     res.json({ success: true, data: rows });
   } catch (error) {
+    console.error('❌ 获取表面处理配置失败:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -186,9 +194,9 @@ app.get('/api/crafting/:componentId', async (req, res) => {
 app.get('/api/materials/:componentId', async (req, res) => {
   try {
     const { componentId } = req.params;
-    
+
     const [rows] = await pool.query(`
-      SELECT 
+      SELECT
         material_id,
         product_id,
         component_id,
@@ -197,22 +205,87 @@ app.get('/api/materials/:componentId', async (req, res) => {
       FROM ht_sales_config_materials
       WHERE component_id = ?
     `, [componentId]);
-    
+
     res.json({ success: true, data: rows });
   } catch (error) {
+    console.error('❌ 获取材料配置失败:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
+// 8. 获取系统列表（用于报价汇总表）
+app.get('/api/systems', async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT
+        system_id as id,
+        system_name as name,
+        system_order as \`order\`
+      FROM ht_sales_systems
+      WHERE is_active = 1
+      ORDER BY system_order ASC, system_id ASC
+    `);
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('❌ 获取系统列表失败:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 9. 获取产品类型到系统的映射关系
+app.get('/api/system-mapping/:typeName', async (req, res) => {
+  try {
+    const { typeName } = req.params;
+
+    console.log('🔍 查询系统映射 - 产品类型:', typeName);
+
+    const [rows] = await pool.query(`
+      SELECT DISTINCT
+        system_name,
+        type_name
+      FROM v_system_config_simple
+      WHERE type_name = ?
+      LIMIT 1
+    `, [typeName]);
+
+    console.log('📋 查询结果:', rows);
+
+    if (rows.length > 0) {
+      console.log('✅ 找到映射:', rows[0].system_name);
+      res.json({
+        success: true,
+        data: {
+          typeName: rows[0].type_name,
+          systemName: rows[0].system_name
+        }
+      });
+    } else {
+      console.log('⚠️ 未找到映射');
+      res.json({
+        success: false,
+        message: '未找到对应的系统映射'
+      });
+    }
+  } catch (error) {
+    console.error('❌ 查询系统映射失败:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ==================== 静态文件服务（必须在 API 之后）====================
+app.use('/public', express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'dist')));
+
 // ==================== HTTPS 服务器 ====================
 
-// 读取证书
+// 读取 SSL 证书
 const httpsOptions = {
-    key: fs.readFileSync('./localhost+2-key.pem'),
-    cert: fs.readFileSync('./localhost+2.pem')
+  key: fs.readFileSync('./localhost+2-key.pem'),
+  cert: fs.readFileSync('./localhost+2.pem')
 };
 
-// 启动 HTTPS 服务器（← 这里是关键修改）
+// 启动 HTTPS 服务器
 const PORT = 3001;
 https.createServer(httpsOptions, app).listen(PORT, () => {
   console.log('========================================');
@@ -220,8 +293,14 @@ https.createServer(httpsOptions, app).listen(PORT, () => {
   console.log('🔒 SSL 证书已加载');
   console.log('========================================');
   console.log('📍 API 端点:');
-  console.log(`   测试: https://localhost:${PORT}/api/test`);
-  console.log(`   分类: https://localhost:${PORT}/api/categories`);
-  console.log(`   图片: https://localhost:${PORT}/public/images/`);
+  console.log(`   测试:       https://localhost:${PORT}/api/test`);
+  console.log(`   分类:       https://localhost:${PORT}/api/categories`);
+  console.log(`   配置数据:   https://localhost:${PORT}/api/config/:projectId`);
+  console.log(`   系统映射:   https://localhost:${PORT}/api/system-mapping/:productModel`);
+  console.log(`   图片服务:   https://localhost:${PORT}/public/images/`);
+  console.log(`   静态文件:   https://localhost:${PORT}/`);
+  console.log('========================================');
+  console.log('💡 示例:');
+  console.log(`   https://localhost:${PORT}/api/system-mapping/暂存仓（2000L）`);
   console.log('========================================');
 });

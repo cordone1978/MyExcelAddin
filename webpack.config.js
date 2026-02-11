@@ -1,4 +1,4 @@
-/* eslint-disable no-undef */
+﻿/* eslint-disable no-undef */
 
 const devCerts = require("office-addin-dev-certs");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
@@ -19,6 +19,7 @@ module.exports = async (env, options) => {
     entry: {
       polyfill: ["core-js/stable", "regenerator-runtime/runtime"],
       taskpane: ["./src/taskpane/taskpane.ts", "./src/taskpane/taskpane.html"],
+      dialog: ["./src/dialog/dialog.ts", "./src/dialog/dialog.html"],
       commands: "./src/commands/commands.ts",
     },
     output: {
@@ -60,7 +61,7 @@ module.exports = async (env, options) => {
       new HtmlWebpackPlugin({
         filename: "dialog.html",
         template: "./src/dialog/dialog.html",
-        chunks: [],  // 对话框不需要任何 JavaScript chunk
+        chunks: ["dialog"],
       }),
       new HtmlWebpackPlugin({
         filename: "commands.html",
@@ -73,6 +74,18 @@ module.exports = async (env, options) => {
           {
             from: "assets/*",
             to: "assets/[name][ext][query]",
+          },
+          {
+            from: "public/form2.html",
+            to: "form2.html",
+          },
+          {
+            from: "public/form3.html",
+            to: "form3.html",
+          },
+          {
+            from: "src/dialog/dialog.css",
+            to: "dialog.css",
           },
           {
             from: "manifest*.xml",
@@ -97,6 +110,9 @@ module.exports = async (env, options) => {
         options: env.WEBPACK_BUILD || options.https !== undefined ? options.https : await getHttpsOptions(),
       },
       port: process.env.npm_package_config_dev_server_port || 3000,
+      client: {
+        webSocketURL: "auto://0.0.0.0:0/ws",  // 自动检测正确的协议和主机
+      },
     },
   };
 

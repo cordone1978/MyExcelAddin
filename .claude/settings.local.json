@@ -9,7 +9,11 @@
       "Bash(netstat -ano)",
       "Bash(findstr :3000)",
       "Bash(taskkill /F /PID 5208)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(dir:*)",
+      "Bash(node:*)",
+      "Bash(npm run build:dev:*)",
+      "Bash(curl:*)"
     ]
   }
 }

@@ -1,0 +1,156 @@
+﻿<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>组件内容变更</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: #f5f5f5;
+        padding: 12px;
+      }
+
+      .panel {
+        background: #fff;
+        border-radius: 8px;
+        padding: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .header {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 12px;
+        border-bottom: 2px solid #0078d4;
+        padding-bottom: 6px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .label {
+        font-size: 13px;
+        color: #333;
+      }
+
+      .value,
+      .input,
+      select {
+        font-size: 13px;
+        padding: 6px 8px;
+        border: 1px solid #d1d1d1;
+        border-radius: 4px;
+        width: 100%;
+        background: #fff;
+      }
+
+      .value {
+        background: #fafafa;
+      }
+
+      .hint {
+        font-size: 12px;
+        color: #888;
+      }
+
+      .actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+
+      .btn-primary {
+        background: #0078d4;
+        color: #fff;
+      }
+
+      .btn-secondary {
+        background: #f0f0f0;
+        color: #333;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <div class="header">组件内容变更</div>
+
+      <div class="row">
+        <div class="label">设备组件</div>
+        <div id="DeviceModel" class="value">-</div>
+      </div>
+
+      <div class="row">
+        <div class="label">当前价格</div>
+        <div id="lblCurrentPriceShow" class="value">-</div>
+      </div>
+
+      <div class="row">
+        <div class="label">材料</div>
+        <select id="ComboBoxMetiral">
+          <option>请选择...</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <div class="label">材料价格</div>
+        <div id="lblMaterialsShow" class="value">-</div>
+      </div>
+
+      <div class="row">
+        <div class="label">表面处理</div>
+        <div id="lblCraftChange" class="value">点击更改</div>
+      </div>
+
+      <div class="row">
+        <div class="label">最新价格</div>
+        <div id="lblRefreshedPriceShow" class="value">-</div>
+      </div>
+
+      <div class="hint">
+        此窗体基于 frmChangePriceWeb 的结构搭建，数据加载逻辑后续可接入。
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-secondary" onclick="closeDialog()">取消</button>
+        <button class="btn btn-primary" onclick="submitDialog()">确定</button>
+      </div>
+    </div>
+
+    <script>
+      Office.onReady(() => {
+        // TODO: 接入实际数据加载与交互
+      });
+
+      function submitDialog() {
+        Office.context.ui.messageParent(JSON.stringify({ action: "submit" }));
+      }
+
+      function closeDialog() {
+        Office.context.ui.messageParent(JSON.stringify({ action: "cancel" }));
+      }
+    </script>
+  </body>
+</html>
