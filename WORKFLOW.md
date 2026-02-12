@@ -1,4 +1,4 @@
-# Claude Code 工作准则
+﻿# Claude Code 工作准则
 
 > 本文件定义 Claude Code 在本项目中的工作职能、核心规则和沟通准则，将持续完善。
 
@@ -46,6 +46,11 @@ Claude Code 是一个帮助完成软件工程任务的 CLI 工具，具体协助
 - **文件编辑**：使用 Edit 而非 bash 的 sed/awk
 - **文件创建**：使用 Write 而非 bash 的 echo 重定向
 - **复杂任务**：使用 Task 工具启动专门的子代理
+
+### 2.6 编码处理
+- 涉及中文内容的文件，一律按 UTF-8 读取与写入
+- 读写时明确指定编码（例如 `-Encoding UTF8`），避免系统默认代码页导致乱码
+- 若不确定文件编码，先确认（如查看 git 原始内容或用字节级检测）再修改
 
 ### 2.5 沟通与决策
 - **需要澄清时**：使用 `AskUserQuestion` 工具询问用户
@@ -133,3 +138,51 @@ codex --dangerously-bypass-approvals-and-sandbox   # 跳过权限确认
 ## 7. 待完善项
 
 *（此处供用户后续添加更多工作准则）*
+
+---
+
+## 8. Repository Guidelines (Merged from AGENTS.md)
+
+### 8.1 Project Structure & Module Organization
+- `src/commands/`: command surface HTML/TS used by the add-in ribbon.
+- `src/taskpane/`: taskpane UI (`taskpane.html`, `taskpane.ts`, `taskpane.css`).
+- `src/dialog/`: dialog UI entry point (`dialog.html`).
+- `public/`: static assets copied into the bundle.
+- `assets/` and `images.pkd`: image assets and packed image bundle.
+- `server.js`: local Express server for API/dev support.
+- `manifest.xml`: Office Add-in manifest (entry point for sideloading).
+- `dist/`: webpack build output (generated; do not edit manually).
+
+### 8.2 Build, Test, and Development Commands
+Run commands from the repo root:
+- `npm run build`: production bundle via webpack.
+- `npm run build:dev`: development bundle (no dev server).
+- `npm run dev-server`: webpack dev server only.
+- `npm run start`: runs `server.js` and webpack dev server together.
+- `npm run start:excel`: sideload and launch Excel for debugging.
+- `npm run stop`: stop the add-in debugging session.
+- `npm run watch`: rebuild on file changes.
+- `npm run validate`: validate `manifest.xml`.
+- `npm run lint` / `npm run lint:fix`: Office Add-in ESLint rules.
+- `npm run prettier`: apply the Office Add-in Prettier config.
+
+### 8.3 Coding Style & Naming Conventions
+- TypeScript/JavaScript in `src/` with 2-space indentation and double quotes.
+- Keep module names aligned with folder purpose (e.g., `taskpane.ts` for task pane logic).
+- Prefer small functions and explicit Office.js async flows (`Excel.run`, `context.sync`).
+- Use `office-addin-lint` and `office-addin-prettier-config` before committing.
+
+### 8.4 Testing Guidelines
+There are no automated tests in this repo today.
+- If you add tests, document their location and add a script in `package.json`.
+- Prefer colocated tests like `src/**/__tests__/*.test.ts` or `*.spec.ts`.
+
+### 8.5 Commit & Pull Request Guidelines
+- Recent commits use short, descriptive messages (often Chinese) without a strict convention.
+- Keep commit subjects concise and imperative (e.g., "优化对话框布局").
+- PRs should include: a brief summary, testing steps (commands run), and screenshots for UI changes.
+- If `manifest.xml` changes, call it out explicitly and note how to sideload.
+
+### 8.6 Security & Configuration Tips
+- Do not commit secrets; configure API credentials via local environment or `.env` if introduced.
+- Ensure `manifest.xml` URLs match your dev server (`https://localhost:3000` by default).
