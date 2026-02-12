@@ -33,7 +33,7 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
   sheet.getRange("A1:D1").merge();
   sheet.getRange("A1").values = [["湖南华通众智科技有限公司"]];
   sheet.getRange("A1").format.font.bold = true;
-  sheet.getRange("A1").format.font.size = 16;
+  sheet.getRange("A1").format.font.size = 20;
   sheet.getRange("A1").format.horizontalAlignment = "Center";
   sheet.getRange("A1").format.verticalAlignment = "Center";
 
@@ -48,6 +48,7 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
 
   sheet.getRange("A7:D7").merge();
   sheet.getRange("A7").values = [["配置报价表"]];
+  sheet.getRange("A7").format.font.size = 16;
   sheet.getRange("A7").format.font.bold = true;
   sheet.getRange("A7").format.horizontalAlignment = "Center";
 
@@ -122,10 +123,8 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
   borderRange.getItem("EdgeLeft").style = "Continuous";
   borderRange.getItem("EdgeRight").style = "Continuous";
 
-  sheet.getRange("A1").rowHeight = 28;
-  sheet.getRange("A7").rowHeight = 22;
-  sheet.getRange("A8").rowHeight = 20;
-  sheet.getRange("A23").rowHeight = 80;
+  // 设置标题行行高为默认的2倍（默认约15，设置为30）
+  sheet.getRange("A:A").format.rowHeight = 30;
 
   // 设置列宽
   const colA = sheet.getRange("A:A");
@@ -136,10 +135,10 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
   // 先自动调整，然后再设置固定宽度
   sheet.getRange("A1:D29").format.autofitColumns();
 
-  colA.format.columnWidth = 50;
+  colA.format.columnWidth = 60;
   colB.format.columnWidth = 200;
   colC.format.columnWidth = 120;
-  colD.format.columnWidth = 150;
+  colD.format.columnWidth = 200;
 
   // 同步所有格式设置到 Excel
   await context.sync();
@@ -170,7 +169,7 @@ async function buildConfigSheet(context: Excel.RequestContext) {
     "品牌",
     "组件数量",
     "单位",
-    "设备数量",
+    "数量",
     "单位",
     "单价（万元）",
     "总价（万元）",
@@ -208,8 +207,6 @@ const sections = [
     sheet.getRange(`A${row}`).values = [[title]];
     sheet.getRange(`A${row}`).format.font.bold = true;
 
-    // 设置标题行行高为默认的2倍（默认约15，设置为30）
-    sheet.getRange(`A${row}`).format.rowHeight = 30;
 
     titleRows.push(row); // 记录标题行
 
@@ -271,7 +268,7 @@ const sections = [
   });
 
   // 设置列宽
-  sheet.getRange("A:A").format.columnWidth = 50;
+  sheet.getRange("A:A").format.columnWidth = 40;
   sheet.getRange("B:B").format.columnWidth = 120;
   sheet.getRange("C:C").format.columnWidth = 150;
   sheet.getRange("D:D").format.columnWidth = 220;
@@ -279,15 +276,15 @@ const sections = [
   sheet.getRange("F:F").format.columnWidth = 120;
   sheet.getRange("G:G").format.columnWidth = 90;
   sheet.getRange("H:H").format.columnWidth = 50;
-  sheet.getRange("I:I").format.columnWidth = 50;
-  sheet.getRange("J:J").format.columnWidth = 50;
-  sheet.getRange("K:K").format.columnWidth = 50;
+  sheet.getRange("I:I").format.columnWidth = 40;
+  sheet.getRange("J:J").format.columnWidth = 40;
+  sheet.getRange("K:K").format.columnWidth = 40;
   sheet.getRange("L:L").format.columnWidth = 90;
   sheet.getRange("M:M").format.columnWidth = 90;
   sheet.getRange("N:N").format.columnWidth = 90;
   sheet.getRange("O:O").format.columnWidth = 90;
   sheet.getRange("P:P").format.columnWidth = 90;
-  sheet.getRange("Q:Q").format.columnWidth = 50;
+  sheet.getRange("Q:Q").format.columnWidth = 40;
   sheet.getRange("R:R").format.columnWidth = 120;
   sheet.getRange("S:S").format.columnWidth = 120;
 

@@ -20,6 +20,8 @@ module.exports = async (env, options) => {
       polyfill: ["core-js/stable", "regenerator-runtime/runtime"],
       taskpane: ["./src/taskpane/taskpane.ts", "./src/taskpane/taskpane.html"],
       dialog: ["./src/dialog/dialog.ts", "./src/dialog/dialog.html"],
+      devmodify: ["./src/dialog/devmodify.ts", "./src/dialog/devmodify.html"],
+      craftmodify: ["./src/dialog/craftmodify.ts", "./src/dialog/craftmodify.html"],
       commands: "./src/commands/commands.ts",
     },
     output: {
@@ -64,6 +66,16 @@ module.exports = async (env, options) => {
         chunks: ["dialog"],
       }),
       new HtmlWebpackPlugin({
+        filename: "devmodify.html",
+        template: "./src/dialog/devmodify.html",
+        chunks: ["devmodify"],
+      }),
+      new HtmlWebpackPlugin({
+        filename: "craftmodify.html",
+        template: "./src/dialog/craftmodify.html",
+        chunks: ["craftmodify"],
+      }),
+      new HtmlWebpackPlugin({
         filename: "commands.html",
         template: "./src/commands/commands.html",
         chunks: ["polyfill", "commands"],
@@ -86,6 +98,14 @@ module.exports = async (env, options) => {
           {
             from: "src/dialog/dialog.css",
             to: "dialog.css",
+          },
+          {
+            from: "src/dialog/devmodify.css",
+            to: "devmodify.css",
+          },
+          {
+            from: "src/dialog/craftmodify.css",
+            to: "craftmodify.css",
           },
           {
             from: "manifest*.xml",

@@ -94,7 +94,7 @@
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with your sample add-in!"/>
         <bt:String id="CustomGroup.Label" DefaultValue="我的加载项"/>
-        <bt:String id="OpenDialogButton.Label" DefaultValue="打开对话框"/>
+        <bt:String id="OpenDialogButton.Label" DefaultValue="添加设备"/>
         <bt:String id="TaskpaneButton.Label" DefaultValue="显示任务窗格"/>
       </bt:ShortStrings>
       <bt:LongStrings>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>更改设备</title>
+    <script defer src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <link rel="stylesheet" href="devmodify.css" />
+  </head>
+  <body>
+    <div class="dialog-shell">
+      <div class="panel">
+        <div class="panel-header">
+          <h2 class="title">主体</h2>
+          <div class="device-name" id="deviceName">-</div>
+        </div>
+
+        <div class="form-grid">
+          <div class="label">当前价格</div>
+          <div class="value" id="currentPrice">-</div>
+
+          <div class="label" id="materialLabel">材质变更</div>
+          <select class="input" id="materialSelect">
+            <option value="">请选择...</option>
+          </select>
+
+          <div class="label" id="materialPriceLabel">材料价格</div>
+          <div class="value" id="materialPrice">-</div>
+
+          <div class="label" id="craftLabel">表面处理</div>
+          <button class="text-btn" id="craftChange">点击更改</button>
+
+          <div class="label" id="refreshedLabel">更新后价格</div>
+          <div class="value emphasis" id="refreshedPrice">-</div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-primary" id="submitBtn">更新价格</button>
+          <button class="btn btn-secondary" id="cancelBtn">取消</button>
+        </div>
+      </div>
+
+      <div class="preview">
+        <div class="preview-frame">
+          <img id="deviceImage" alt="" />
+          <div class="placeholder" id="imagePlaceholder">暂无图片</div>
+        </div>
+      </div>
+
+      <div class="craft-panel">
+        <div class="craft-title">表面工艺更新</div>
+        <div class="craft-table">
+          <div class="craft-row header">
+            <div class="craft-cell label"></div>
+            <div class="craft-cell">面积（㎡）</div>
+            <div class="craft-cell">工艺单价</div>
+            <div class="craft-cell total">总价（元）</div>
+          </div>
+
+          <div class="craft-row">
+            <div class="craft-cell label">内表面工艺一</div>
+            <div class="craft-cell"><input id="innerArea1" class="input" type="text" /></div>
+            <div class="craft-cell">
+              <select id="innerUnit1" class="input">
+                <option value="">请选择...</option>
+              </select>
+            </div>
+            <div class="craft-cell total" id="innerTotal1">0.00</div>
+          </div>
+
+          <div class="craft-row">
+            <div class="craft-cell label">内表面工艺二</div>
+            <div class="craft-cell"><input id="innerArea2" class="input" type="text" /></div>
+            <div class="craft-cell">
+              <select id="innerUnit2" class="input">
+                <option value="">请选择...</option>
+              </select>
+            </div>
+            <div class="craft-cell total" id="innerTotal2">0.00</div>
+          </div>
+
+          <div class="craft-row">
+            <div class="craft-cell label">内表面工艺三</div>
+            <div class="craft-cell"><input id="innerArea3" class="input" type="text" /></div>
+            <div class="craft-cell">
+              <select id="innerUnit3" class="input">
+                <option value="">请选择...</option>
+              </select>
+            </div>
+            <div class="craft-cell total" id="innerTotal3">0.00</div>
+          </div>
+
+          <div class="craft-row">
+            <div class="craft-cell label">外表面工艺一</div>
+            <div class="craft-cell"><input id="outerArea1" class="input" type="text" /></div>
+            <div class="craft-cell">
+              <select id="outerUnit1" class="input">
+                <option value="">请选择...</option>
+              </select>
+            </div>
+            <div class="craft-cell total" id="outerTotal1">0.00</div>
+          </div>
+
+          <div class="craft-row">
+            <div class="craft-cell label">外表面工艺二</div>
+            <div class="craft-cell"><input id="outerArea2" class="input" type="text" /></div>
+            <div class="craft-cell">
+              <select id="outerUnit2" class="input">
+                <option value="">请选择...</option>
+              </select>
+            </div>
+            <div class="craft-cell total" id="outerTotal2">0.00</div>
+          </div>
+
+          <div class="craft-row">
+            <div class="craft-cell label">外表面工艺三</div>
+            <div class="craft-cell"><input id="outerArea3" class="input" type="text" /></div>
+            <div class="craft-cell">
+              <select id="outerUnit3" class="input">
+                <option value="">请选择...</option>
+              </select>
+            </div>
+            <div class="craft-cell total" id="outerTotal3">0.00</div>
+          </div>
+        </div>
+
+        <div class="craft-summary">
+          <div>总计价（元）</div>
+          <div id="craftGrandTotal" class="craft-sum">0.00</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-mask hidden" id="priceModal">
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-title">外购件价格查询</div>
+          <button class="icon-btn" id="closePriceModal">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="search-row">
+            <input id="priceKeyword" class="input" type="text" placeholder="输入关键词..." />
+            <button class="btn btn-primary" id="searchPriceBtn">查询</button>
+          </div>
+          <div class="result-list" id="priceResultList"></div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -255,6 +255,93 @@ app.get('/api/systems', async (req, res) => {
   }
 });
 
+// 8.1 获取工艺单价列表（用于表面工艺下拉）
+app.get('/api/craft-prices', async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT DISTINCT
+        material_name,
+        material_unitprice
+      FROM ht_sales_materials
+      WHERE material_type = '工艺'
+      ORDER BY material_name
+    `);
+
+    const data = rows.map((row) => {
+      const name = row.material_name || "未知工艺";
+      const price = Number(row.material_unitprice || 0);
+      return {
+        craftType: name,
+        price,
+        label: `${name} -- ￥, ${price}`
+      };
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('获取工艺单价列表失败:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 8.2 根据产品型号获取产品ID（用于更改设备/工艺）
+app.get('/api/project-by-model/:productModel', async (req, res) => {
+  try {
+    const { productModel } = req.params;
+    const [rows] = await pool.query(`
+      SELECT product_id, product_model, product_type_id
+      FROM ht_sales_products
+      WHERE product_model = ?
+      LIMIT 1
+    `, [productModel]);
+
+    if (rows.length === 0) {
+      res.json({ success: false, message: '未找到对应产品型号' });
+      return;
+    }
+
+    res.json({ success: true, data: rows[0] });
+  } catch (error) {
+    console.error('获取产品ID失败:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 8.3 价格查询（用于外购件查询价格）
+app.get('/api/price-search', async (req, res) => {
+  try {
+    const keyword = (req.query.keyword || "").toString().trim();
+    if (!keyword) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const [rows] = await pool.query(`
+      SELECT
+        ItemName,
+        ItemDesc,
+        ItemType,
+        ItemPrice,
+        ItemUnit,
+        OrderDate
+      FROM (
+        SELECT
+          *,
+          ROW_NUMBER() OVER (PARTITION BY ItemName ORDER BY OrderDate DESC) AS rn
+        FROM ht_sales_price_list
+        WHERE ItemName LIKE ?
+      ) AS subquery
+      WHERE rn = 1
+      LIMIT 100
+    `, [`%${keyword}%`]);
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('价格查询失败:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 9. 获取产品类型到系统的映射关系
 app.get('/api/system-mapping/:typeName', async (req, res) => {
   try {

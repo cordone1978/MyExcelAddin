@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>表面工艺更新</title>
+    <script defer src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <link rel="stylesheet" href="craftmodify.css" />
+  </head>
+  <body>
+    <div class="panel">
+      <div class="panel-title">表面工艺更新</div>
+
+      <div class="table">
+        <div class="row header">
+          <div class="cell label"></div>
+          <div class="cell">面积（㎡）</div>
+          <div class="cell">工艺单价</div>
+          <div class="cell total">总价（元）</div>
+        </div>
+
+        <div class="row">
+          <div class="cell label">内表面工艺一</div>
+          <div class="cell"><input id="innerArea1" class="input" type="text" /></div>
+          <div class="cell">
+            <select id="innerUnit1" class="input">
+              <option value="">请选择...</option>
+            </select>
+          </div>
+          <div class="cell total" id="innerTotal1">0.00</div>
+        </div>
+
+        <div class="row">
+          <div class="cell label">内表面工艺二</div>
+          <div class="cell"><input id="innerArea2" class="input" type="text" /></div>
+          <div class="cell">
+            <select id="innerUnit2" class="input">
+              <option value="">请选择...</option>
+            </select>
+          </div>
+          <div class="cell total" id="innerTotal2">0.00</div>
+        </div>
+
+        <div class="row">
+          <div class="cell label">内表面工艺三</div>
+          <div class="cell"><input id="innerArea3" class="input" type="text" /></div>
+          <div class="cell">
+            <select id="innerUnit3" class="input">
+              <option value="">请选择...</option>
+            </select>
+          </div>
+          <div class="cell total" id="innerTotal3">0.00</div>
+        </div>
+
+        <div class="row">
+          <div class="cell label">外表面工艺一</div>
+          <div class="cell"><input id="outerArea1" class="input" type="text" /></div>
+          <div class="cell">
+            <select id="outerUnit1" class="input">
+              <option value="">请选择...</option>
+            </select>
+          </div>
+          <div class="cell total" id="outerTotal1">0.00</div>
+        </div>
+
+        <div class="row">
+          <div class="cell label">外表面工艺二</div>
+          <div class="cell"><input id="outerArea2" class="input" type="text" /></div>
+          <div class="cell">
+            <select id="outerUnit2" class="input">
+              <option value="">请选择...</option>
+            </select>
+          </div>
+          <div class="cell total" id="outerTotal2">0.00</div>
+        </div>
+
+        <div class="row">
+          <div class="cell label">外表面工艺三</div>
+          <div class="cell"><input id="outerArea3" class="input" type="text" /></div>
+          <div class="cell">
+            <select id="outerUnit3" class="input">
+              <option value="">请选择...</option>
+            </select>
+          </div>
+          <div class="cell total" id="outerTotal3">0.00</div>
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="summary-label">总计价（元）</div>
+        <div class="summary-value" id="grandTotal">0.00</div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="submitBtn">更新价格</button>
+        <button class="btn btn-secondary" id="cancelBtn">取消</button>
+      </div>
+    </div>
+  </body>
+</html>
