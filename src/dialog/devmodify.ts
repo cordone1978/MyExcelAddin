@@ -1,3 +1,4 @@
+﻿import { DIALOG_ACTIONS } from "../shared/dialogActions";
 /* global Office */
 
 type DevModifyInit = {
@@ -91,25 +92,25 @@ Office.onReady(() => {
   updateDisplay();
 
   try {
-    Office.context.ui.messageParent(JSON.stringify({ action: "devmodify_ready" }));
+    Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.DEVMODIFY_READY }));
     Office.context.ui.addHandlerAsync(
       Office.EventType.DialogParentMessageReceived,
       (args) => {
         try {
           const payload = JSON.parse(args.message);
-          if (payload?.action === "init" && payload.data) {
+          if (payload?.action === DIALOG_ACTIONS.INIT && payload.data) {
             applyInit(payload.data as DevModifyInit);
           }
-          if (payload?.action === "craftmodify_result" && payload.data) {
+          if (payload?.action === DIALOG_ACTIONS.CRAFTMODIFY_RESULT && payload.data) {
             applyCraftResult(payload.data);
           }
         } catch (error) {
-          console.error("处理初始化数据失败:", error);
+          console.error("澶勭悊鍒濆鍖栨暟鎹け璐?", error);
         }
       }
     );
   } catch (error) {
-    console.warn("未能注册父窗口消息处理:", error);
+    console.warn("鏈兘娉ㄥ唽鐖剁獥鍙ｆ秷鎭鐞?", error);
   }
 });
 
@@ -132,7 +133,7 @@ function bindEvents() {
       currentDesc = buildCraftingDescription();
     }
     const payload = {
-      action: "devmodify_submit",
+      action: DIALOG_ACTIONS.DEVMODIFY_SUBMIT,
       deviceName: deviceNameEl.textContent || "",
       currentPrice: basePrice,
       desc: currentDesc,
@@ -151,7 +152,7 @@ function bindEvents() {
   });
 
   cancelBtn.addEventListener("click", () => {
-    Office.context.ui.messageParent(JSON.stringify({ action: "devmodify_cancel" }));
+    Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.DEVMODIFY_CANCEL }));
   });
 
   closePriceModalBtn.addEventListener("click", closePriceModal);
@@ -192,7 +193,7 @@ function applyInit(data: DevModifyInit) {
     materialSelect.innerHTML = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "请选择...";
+    placeholder.textContent = "璇烽€夋嫨...";
     materialSelect.appendChild(placeholder);
 
     data.materials.forEach((item) => {
@@ -236,9 +237,9 @@ function updateMaterialPrice() {
 function updateDisplay() {
   currentPriceEl.textContent = formatPrice(basePrice);
   craftChangeBtn.textContent = isOutsourced()
-    ? "点击查询"
+    ? "鐐瑰嚮鏌ヨ"
     : craftPrice === null
-    ? "点击更改"
+    ? "鐐瑰嚮鏇存敼"
     : formatPrice(craftPrice);
   refreshedPriceEl.textContent = formatPrice(getRefreshedPrice());
 }
@@ -272,7 +273,7 @@ function applyModeUI() {
     materialPriceEl.style.display = "none";
     refreshedLabelEl.style.display = "none";
     refreshedPriceEl.style.display = "none";
-    craftLabelEl.textContent = "外购价格";
+    craftLabelEl.textContent = "澶栬喘浠锋牸";
     craftPanel.style.display = "none";
   } else {
     materialLabelEl.style.display = "";
@@ -281,7 +282,7 @@ function applyModeUI() {
     materialPriceEl.style.display = "";
     refreshedLabelEl.style.display = "";
     refreshedPriceEl.style.display = "";
-    craftLabelEl.textContent = "表面处理";
+    craftLabelEl.textContent = "琛ㄩ潰澶勭悊";
     craftPanel.style.display = "";
   }
 }
@@ -298,7 +299,7 @@ async function searchPriceList() {
     }
     renderPriceList(result.data || []);
   } catch (error) {
-    console.error("价格查询失败:", error);
+    console.error("浠锋牸鏌ヨ澶辫触:", error);
     renderPriceList([]);
   }
 }
@@ -307,7 +308,7 @@ function renderPriceList(rows: any[]) {
   priceResultList.innerHTML = "";
   const header = document.createElement("div");
   header.className = "result-item header";
-  header.innerHTML = "<div>物料名称</div><div>规格描述</div><div>型号</div><div>价格</div>";
+  header.innerHTML = "<div>鐗╂枡鍚嶇О</div><div>瑙勬牸鎻忚堪</div><div>鍨嬪彿</div><div>浠锋牸</div>";
   priceResultList.appendChild(header);
 
   rows.forEach((row) => {
@@ -348,11 +349,11 @@ function closePriceModal() {
 }
 
 function extractBrand(text: string): string {
-  return extractInfo(text, ["品牌/制造商", "品牌", "制造商"]);
+  return extractInfo(text, ["鍝佺墝/鍒堕€犲晢", "鍝佺墝", "鍒堕€犲晢"]);
 }
 
 function extractMaterial(text: string): string {
-  return extractInfo(text, ["材质"]);
+  return extractInfo(text, ["鏉愯川"]);
 }
 
 function extractInfo(text: string, keywords: string[]): string {
@@ -362,8 +363,8 @@ function extractInfo(text: string, keywords: string[]): string {
     const index = lowerText.indexOf(keyword.toLowerCase());
     if (index >= 0) {
       let result = text.slice(index + keyword.length);
-      result = result.replace(/^[:：\s]+/, "");
-      result = result.split(/[，,。.\s]/)[0] || "";
+      result = result.replace(/^[:锛歕s]+/, "");
+      result = result.split(/[锛?銆?\s]/)[0] || "";
       result = result.trim();
       if (result) return result;
     }
@@ -392,7 +393,7 @@ function applyCraftOptions(data: DevModifyInit) {
     select.innerHTML = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "请选择...";
+    placeholder.textContent = "璇烽€夋嫨...";
     select.appendChild(placeholder);
   });
 
@@ -438,13 +439,13 @@ function buildCraftingDescription(): string {
   const outerTypes = collectCraftTypes(3, 6);
   let result = removeSegment(baseDesc, "，内表面处理：");
   result = removeSegment(result, "，外表面处理：");
-  result = result.replace(/[；，]\s*$/, "").trim();
+  result = result.replace(/[锛涳紝]\s*$/, "").trim();
 
   if (innerTypes.length > 0) {
-    result = appendSegment(result, `内表面处理：${innerTypes.join("，")}`);
+    result = appendSegment(result, `内表面处理：${innerTypes.join("；")}`);
   }
   if (outerTypes.length > 0) {
-    result = appendSegment(result, `外表面处理：${outerTypes.join("，")}`);
+    result = appendSegment(result, `外表面处理：${outerTypes.join("；")}`);
   }
   return result;
 }
@@ -488,7 +489,9 @@ function removeSegment(text: string, key: string): string {
 
 function appendSegment(text: string, segment: string): string {
   if (!text) return segment;
-  return `${text}，${segment}`;
+  return `${text}锛?{segment}`;
 }
 
 let currentMaterial = "";
+
+

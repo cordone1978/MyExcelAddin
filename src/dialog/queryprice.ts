@@ -1,4 +1,5 @@
-﻿/* global Office, console, document, window, alert */
+﻿import { DIALOG_ACTIONS } from "../shared/dialogActions";
+/* global Office, console, document, window */
 
 const API_BASE = "https://localhost:3001/api";
 
@@ -14,6 +15,7 @@ type PriceResult = {
 Office.onReady(() => {
   document.getElementById("searchBtn")?.addEventListener("click", handleSearch);
   document.getElementById("cancelBtn")?.addEventListener("click", handleCancel);
+  document.getElementById("warningOkBtn")?.addEventListener("click", hideWarningModal);
 
   document.getElementById("mainKeyword")?.addEventListener("keypress", (e) => {
     if ((e as KeyboardEvent).key === "Enter") {
@@ -26,11 +28,11 @@ Office.onReady(() => {
     }
   });
 
-  Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: any) => {
+  Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: Office.DialogParentMessageReceivedEventArgs) => {
     try {
       const payload = JSON.parse(arg?.message || "{}");
-      if (payload?.action === "queryprice_warning") {
-        alert(payload.message || "当前位置不允许插入数据");
+      if (payload?.action === DIALOG_ACTIONS.QUERYPRICE_WARNING) {
+        showWarningModal(payload.message || "当前位置不允许插入数据");
       }
     } catch (error) {
       console.error("处理父窗口消息失败:", error);
@@ -113,7 +115,7 @@ function handleSelect(item: PriceResult) {
 
   Office.context.ui.messageParent(
     JSON.stringify({
-      action: "queryprice_select",
+      action: DIALOG_ACTIONS.QUERYPRICE_SELECT,
       data: {
         name: item.ItemName || "",
         desc: cleanedDesc,
@@ -174,7 +176,23 @@ function showPlaceholder(message: string) {
 }
 
 function handleCancel() {
-  Office.context.ui.messageParent(JSON.stringify({ action: "queryprice_cancel" }));
+  Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.QUERYPRICE_CANCEL }));
+}
+
+function showWarningModal(message: string) {
+  const text = document.getElementById("warningText");
+  const mask = document.getElementById("warningModal");
+  if (!text || !mask) return;
+
+  text.textContent = message;
+  mask.classList.remove("hidden");
+}
+
+function hideWarningModal() {
+  const mask = document.getElementById("warningModal");
+  if (!mask) return;
+
+  mask.classList.add("hidden");
 }
 
 function escapeHtml(value: string): string {
@@ -185,3 +203,4 @@ function escapeHtml(value: string): string {
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
+

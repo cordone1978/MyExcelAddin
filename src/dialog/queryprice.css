@@ -175,3 +175,46 @@ body {
   color: #999;
   font-size: 13px;
 }
+
+.warning-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99;
+}
+
+.warning-mask.hidden {
+  display: none;
+}
+
+.warning-card {
+  width: min(360px, calc(100vw - 32px));
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  padding: 14px 14px 12px;
+}
+
+.warning-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #222;
+  margin-bottom: 8px;
+}
+
+.warning-text {
+  font-size: 13px;
+  color: #333;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.warning-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}

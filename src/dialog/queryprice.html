@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
   <head>
     <meta charset="UTF-8" />
@@ -34,6 +34,16 @@
         <div class="actions">
           <button class="btn btn-secondary" id="cancelBtn">取消</button>
           <button class="btn btn-primary" id="searchBtn">查询</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="warningModal" class="warning-mask hidden" role="dialog" aria-modal="true">
+      <div class="warning-card">
+        <div class="warning-title">提示</div>
+        <div id="warningText" class="warning-text"></div>
+        <div class="warning-actions">
+          <button class="btn btn-primary" id="warningOkBtn">确定</button>
         </div>
       </div>
     </div>

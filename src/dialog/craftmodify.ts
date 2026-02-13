@@ -1,3 +1,4 @@
+﻿import { DIALOG_ACTIONS } from "../shared/dialogActions";
 /* global Office */
 
 type CraftItem = {
@@ -53,22 +54,22 @@ Office.onReady(() => {
   updateTotals();
 
   try {
-    Office.context.ui.messageParent(JSON.stringify({ action: "craftmodify_ready" }));
+    Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.CRAFTMODIFY_READY }));
     Office.context.ui.addHandlerAsync(
       Office.EventType.DialogParentMessageReceived,
       (args) => {
         try {
           const payload = JSON.parse(args.message);
-          if (payload?.action === "init" && payload.data) {
+          if (payload?.action === DIALOG_ACTIONS.INIT && payload.data) {
             applyInit(payload.data as CraftModifyInit);
           }
         } catch (error) {
-          console.error("处理初始化数据失败:", error);
+          console.error("澶勭悊鍒濆鍖栨暟鎹け璐?", error);
         }
       }
     );
   } catch (error) {
-    console.warn("未能注册父窗口消息处理:", error);
+    console.warn("鏈兘娉ㄥ唽鐖剁獥鍙ｆ秷鎭鐞?", error);
   }
 });
 
@@ -84,7 +85,7 @@ function bindEvents() {
   submitBtn.addEventListener("click", () => {
     Office.context.ui.messageParent(
       JSON.stringify({
-        action: "craftmodify_submit",
+        action: DIALOG_ACTIONS.CRAFTMODIFY_SUBMIT,
         data: {
           items: collectData(),
           craftPrice: parseNumber(grandTotalLabel.textContent) || 0,
@@ -95,7 +96,7 @@ function bindEvents() {
   });
 
   cancelBtn.addEventListener("click", () => {
-    Office.context.ui.messageParent(JSON.stringify({ action: "craftmodify_cancel" }));
+    Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.CRAFTMODIFY_CANCEL }));
   });
 }
 
@@ -108,7 +109,7 @@ function applyInit(data: CraftModifyInit) {
       select.innerHTML = "";
       const placeholder = document.createElement("option");
       placeholder.value = "";
-      placeholder.textContent = "请选择...";
+      placeholder.textContent = "璇烽€夋嫨...";
       select.appendChild(placeholder);
       data.unitOptions?.forEach((item) => {
         unitPriceMap.set(item.label, item.price);
@@ -178,13 +179,13 @@ function buildCraftingDescription(): string {
 
   let result = removeSegment(baseDesc, "，内表面处理：");
   result = removeSegment(result, "，外表面处理：");
-  result = result.replace(/[；，]\s*$/, "").trim();
+  result = result.replace(/[锛涳紝]\s*$/, "").trim();
 
   if (innerTypes.length > 0) {
-    result = appendSegment(result, `内表面处理：${innerTypes.join("，")}`);
+    result = appendSegment(result, `内表面处理：${innerTypes.join("；")}`);
   }
   if (outerTypes.length > 0) {
-    result = appendSegment(result, `外表面处理：${outerTypes.join("，")}`);
+    result = appendSegment(result, `外表面处理：${outerTypes.join("；")}`);
   }
 
   return result;
@@ -229,5 +230,7 @@ function removeSegment(text: string, key: string): string {
 
 function appendSegment(text: string, segment: string): string {
   if (!text) return segment;
-  return `${text}，${segment}`;
+  return `${text}锛?{segment}`;
 }
+
+
