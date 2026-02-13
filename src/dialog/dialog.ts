@@ -1,9 +1,11 @@
 ﻿/* global Office */
+import { API_PATHS, APP_URLS } from "../shared/appConstants";
+import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
 
 // API 配置
-    const API_BASE = 'https://localhost:3001/api';
+    const API_BASE = APP_URLS.apiBase;
     // 新增：图片基础路径
-    const IMAGE_BASE = 'https://localhost:3001/public/images/';
+    const IMAGE_BASE = APP_URLS.imageBase;
     const IMAGE_CACHE_BUSTER = Date.now().toString(36);
 
     // 简单缓存
@@ -78,7 +80,8 @@
 
     // 初始化
     Office.onReady(() => {
-        console.log("Dialog 已就绪");
+        applyStaticText();
+        console.log(DIALOG_TEXT.ready);
 
         // 初始化 Canvas
         canvas = document.getElementById('mainCanvas');
@@ -91,10 +94,27 @@
         window.addEventListener('resize', resizeImageArea);
 
         // 显示占位符
-        showCanvasPlaceholder('← 选择项目后显示图片');
+        showCanvasPlaceholder(DIALOG_TEXT.selectProjectPlaceholder);
 
         loadCategories();
     });
+
+    function applyStaticText() {
+        document.title = DIALOG_HTML_TEXT.title;
+        setText("categoryTitle", DIALOG_HTML_TEXT.categoryTitle);
+        setText("projectTitle", DIALOG_HTML_TEXT.projectTitle);
+        setText("detailTitle", DIALOG_HTML_TEXT.detailTitle);
+        setText("annotationTitle", DIALOG_HTML_TEXT.annotationTitle);
+        setText("previewTitle", DIALOG_HTML_TEXT.previewTitle);
+        setText("categoryLoadingText", DIALOG_TEXT.loading);
+        setText("clearAllBtn", DIALOG_HTML_TEXT.clearAll);
+        setText("confirmSubmitBtn", DIALOG_HTML_TEXT.confirmSubmit);
+    }
+
+    function setText(id: string, text: string) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+    }
 
     // 1. 加载产品类型（带缓存）
     async function loadCategories() {
@@ -105,19 +125,19 @@
         }
 
         try {
-            const response = await fetch(`${API_BASE}/categories`);
+            const response = await fetch(`${API_BASE}${API_PATHS.categories}`);
             const result = await response.json();
 
             if (result.success) {
                 cache.categories = result.data; // 缓存
                 displayCategories(result.data);
             } else {
-                console.error('加载产品类型失败:', result.error || result.message);
-                showError('加载产品类型失败: ' + (result.error || result.message || '未知错误'));
+                console.error(`${DIALOG_TEXT.loadCategoryFailed}:`, result.error || result.message);
+                showError(`${DIALOG_TEXT.loadCategoryFailed}: ` + (result.error || result.message || DIALOG_TEXT.unknownError));
             }
         } catch (error) {
-            console.error('加载产品类型失败:', error);
-            showError('无法连接到数据库服务器: ' + error.message);
+            console.error(`${DIALOG_TEXT.loadCategoryFailed}:`, error);
+            showError(`${DIALOG_TEXT.dbConnectFailed}: ` + error.message);
         }
     }
 
@@ -127,7 +147,7 @@
         categoryList.innerHTML = '';
 
         if (categories.length === 0) {
-            categoryList.innerHTML = '<div class="placeholder">暂无产品类型</div>';
+            categoryList.innerHTML = `<div class="placeholder">${DIALOG_TEXT.noCategoryData}</div>`;
             return;
         }
 
@@ -159,13 +179,13 @@
 
         // 加载产品型号列表（带缓存）
         const projectList = document.getElementById('projectList');
-        projectList.innerHTML = '<div class="loading">加载中...</div>';
+        projectList.innerHTML = `<div class="loading">${DIALOG_TEXT.loading}</div>`;
 
         try {
             // 检查缓存
             let result = cache.projects[categoryId];
             if (!result) {
-                const response = await fetch(`${API_BASE}/projects/${categoryId}`);
+                const response = await fetch(`${API_BASE}${API_PATHS.projects}/${categoryId}`);
                 const data = await response.json();
                 if (data.success) {
                     result = data;
@@ -176,12 +196,12 @@
             if (result && result.success) {
                 displayProjects(result.data);
             } else {
-                console.error('加载产品型号失败:', result?.error || result?.message);
-                projectList.innerHTML = `<div class="error">加载产品型号失败: ${result?.error || result?.message || '未知错误'}</div>`;
+                console.error(`${DIALOG_TEXT.loadProjectFailed}:`, result?.error || result?.message);
+                projectList.innerHTML = `<div class="error">${DIALOG_TEXT.loadProjectFailed}: ${result?.error || result?.message || DIALOG_TEXT.unknownError}</div>`;
             }
         } catch (error) {
-            console.error('加载产品型号失败:', error);
-            projectList.innerHTML = `<div class="error">加载失败: ${error.message}</div>`;
+            console.error(`${DIALOG_TEXT.loadProjectFailed}:`, error);
+            projectList.innerHTML = `<div class="error">${DIALOG_TEXT.loadFailed}: ${error.message}</div>`;
         }
 
         clearRightPanels();
@@ -193,7 +213,7 @@
         projectList.innerHTML = '';
         
         if (projects.length === 0) {
-            projectList.innerHTML = '<div class="placeholder">该类型下暂无产品</div>';
+            projectList.innerHTML = `<div class="placeholder">${DIALOG_TEXT.noProjectData}</div>`;
             return;
         }
         
@@ -222,9 +242,9 @@
         });
 
         // 显示加载状态
-        document.getElementById('detailList').innerHTML = '<div class="loading">加载中...</div>';
-        document.getElementById('annotationList').innerHTML = '<div class="loading">加载中...</div>';
-        showCanvasPlaceholder('← 选择产品后显示图片');
+        document.getElementById('detailList').innerHTML = `<div class="loading">${DIALOG_TEXT.loading}</div>`;
+        document.getElementById('annotationList').innerHTML = `<div class="loading">${DIALOG_TEXT.loading}</div>`;
+        showCanvasPlaceholder(DIALOG_TEXT.selectProductPlaceholder);
         Object.keys(components).forEach(id => removeComponentFromCanvas(id));
         selectedDetails.clear();
         selectedAnnotations.clear();
@@ -233,9 +253,9 @@
         try {
             // 并行加载详细信息和标注
             const [detailsRes, annotationsRes, configRes] = await Promise.all([
-                fetch(`${API_BASE}/details/${projectId}`),
-                fetch(`${API_BASE}/annotations/${projectId}`),
-                fetch(`${API_BASE}/config/${projectId}`)
+                fetch(`${API_BASE}${API_PATHS.details}/${projectId}`),
+                fetch(`${API_BASE}${API_PATHS.annotations}/${projectId}`),
+                fetch(`${API_BASE}${API_PATHS.config}/${projectId}`)
             ]);
 
             const detailsResult = await detailsRes.json();
@@ -245,15 +265,15 @@
             if (detailsResult.success) {
                 displayDetails(detailsResult.data);
             } else {
-                console.error('Details 加载失败:', detailsResult);
-                document.getElementById('detailList').innerHTML = '<div class="error">加载组件失败</div>';
+                console.error(`${DIALOG_TEXT.loadDetailsFailed}:`, detailsResult);
+                document.getElementById('detailList').innerHTML = `<div class="error">${DIALOG_TEXT.loadComponentFailed}</div>`;
             }
 
             if (annotationsResult.success) {
                 displayAnnotations(annotationsResult.data);
             } else {
-                console.error('Annotations 加载失败:', annotationsResult);
-                document.getElementById('annotationList').innerHTML = '<div class="error">加载配件失败</div>';
+                console.error(`${DIALOG_TEXT.loadAnnotationsFailed}:`, annotationsResult);
+                document.getElementById('annotationList').innerHTML = `<div class="error">${DIALOG_TEXT.loadAccessoryFailed}</div>`;
             }
 
             // 尝试从配置中获取图片
@@ -278,9 +298,9 @@
             }
 
         } catch (error) {
-            console.error('加载项目详情失败:', error);
-            document.getElementById('detailList').innerHTML = '<div class="error">加载失败</div>';
-            document.getElementById('annotationList').innerHTML = '<div class="error">加载失败</div>';
+            console.error(`${DIALOG_TEXT.loadProjectDetailFailed}:`, error);
+            document.getElementById('detailList').innerHTML = `<div class="error">${DIALOG_TEXT.loadFailed}</div>`;
+            document.getElementById('annotationList').innerHTML = `<div class="error">${DIALOG_TEXT.loadFailed}</div>`;
             displayPlaceholderImage(projectName);
         }
     }
@@ -335,7 +355,7 @@ function displayDetails(details) {
     detailList.innerHTML = '';
 
     if (details.length === 0) {
-        detailList.innerHTML = '<div class="placeholder">暂无组件信息</div>';
+        detailList.innerHTML = `<div class="placeholder">${DIALOG_TEXT.noDetailData}</div>`;
         return;
     }
 
@@ -373,7 +393,7 @@ function displayDetails(details) {
 
         const label = document.createElement('label');
         label.htmlFor = `detail-${index}`;
-        label.textContent = detail.name + (detail.is_required === 1 ? ' [必选]' : '');
+        label.textContent = detail.name + (detail.is_required === 1 ? DIALOG_TEXT.requiredSuffix : '');
         label.style.cursor = 'pointer';
         label.style.flex = '1';
 
@@ -401,14 +421,14 @@ function displayAnnotations(annotations) {
     annotationList.innerHTML = '';
 
     if (annotations.length === 0) {
-        annotationList.innerHTML = '<div class="placeholder">暂无可选配件</div>';
+        annotationList.innerHTML = `<div class="placeholder">${DIALOG_TEXT.noAnnotationData}</div>`;
         return;
     }
 
     const normalized = normalizeAnnotations(annotations);
 
     if (normalized.length === 0) {
-        annotationList.innerHTML = '<div class="placeholder">暂无可选配件</div>';
+        annotationList.innerHTML = `<div class="placeholder">${DIALOG_TEXT.noAnnotationData}</div>`;
         return;
     }
 
@@ -542,7 +562,7 @@ function normalizeAnnotations(annotations) {
             }
         };
         img.onerror = () => {
-            console.error('组件图片加载失败:', imageUrl);
+            console.error(`${DIALOG_TEXT.componentImageLoadFailed}:`, imageUrl);
         };
         img.src = imageUrl;
     }
@@ -561,7 +581,7 @@ function normalizeAnnotations(annotations) {
         const placeholder = document.getElementById('placeholder');
 
         if (!canvas) {
-            console.error('Canvas element not found');
+            console.error(DIALOG_TEXT.canvasNotFound);
             return;
         }
 
@@ -609,7 +629,7 @@ function normalizeAnnotations(annotations) {
             }
         }
 
-        console.log('Canvas 渲染完成，组件数量:', loadedComponents.length);
+        console.log(`${DIALOG_TEXT.canvasRendered}:`, loadedComponents.length);
         initAnalysisCanvases();
         setupMouseEvents();
     }
@@ -710,7 +730,7 @@ function normalizeAnnotations(annotations) {
             }
 
             if (hoveredId) {
-                tooltip.innerHTML = '组件: ' + (components[hoveredId] ? components[hoveredId].name : hoveredId);
+                tooltip.innerHTML = DIALOG_TEXT.tooltipPrefix + (components[hoveredId] ? components[hoveredId].name : hoveredId);
                 tooltip.style.display = 'block';
                 tooltip.style.left = (event.clientX + 15) + 'px';
                 tooltip.style.top = (event.clientY + 15) + 'px';
@@ -741,9 +761,9 @@ function normalizeAnnotations(annotations) {
         if (!previewImage) return;
 
         previewImage.onerror = () => {
-            console.error("图片加载失败:", imageUrl);
+            console.error(`${DIALOG_TEXT.imageLoadFailed}:`, imageUrl);
             if (placeholder) {
-                placeholder.textContent = "图片加载失败";
+                placeholder.textContent = DIALOG_TEXT.imageLoadFailed;
                 placeholder.style.display = 'flex';
             }
         };
@@ -792,7 +812,7 @@ function normalizeAnnotations(annotations) {
             placeholder.innerHTML = `
                 <div style="font-size: 24px; margin-bottom: 10px;">📦</div>
                 <div>${projectName}</div>
-                <div style="font-size: 12px; color: #999; margin-top: 5px;">暂无产品图片</div>
+                <div style="font-size: 12px; color: #999; margin-top: 5px;">${DIALOG_TEXT.noProductImage}</div>
             `;
             placeholder.style.display = 'flex';
         }
@@ -813,9 +833,9 @@ function normalizeAnnotations(annotations) {
 
         previewImage.onload = () => {};
         previewImage.onerror = () => {
-            console.error("图片加载失败:", imageUrl);
+            console.error(`${DIALOG_TEXT.imageLoadFailed}:`, imageUrl);
             if (placeholder) {
-                placeholder.textContent = "图片加载失败";
+                placeholder.textContent = DIALOG_TEXT.imageLoadFailed;
                 placeholder.style.display = 'flex';
             }
         };
@@ -841,7 +861,7 @@ function normalizeAnnotations(annotations) {
             removeComponentFromCanvas(annotationKey);
         }
 
-        console.log("当前选中的可选配件:", Array.from(selectedAnnotations.entries()).map(([id, data]) => ({id, ...data})));
+        console.log(`${DIALOG_TEXT.selectedAnnotations}:`, Array.from(selectedAnnotations.entries()).map(([id, data]) => ({id, ...data})));
         scheduleRender(currentHighlightedComponentId);
     }
 
@@ -849,7 +869,7 @@ function normalizeAnnotations(annotations) {
     function clearRightPanels() {
         document.getElementById('detailList').innerHTML = '';
         document.getElementById('annotationList').innerHTML = '';
-        showCanvasPlaceholder('← 选择产品后显示图片');
+        showCanvasPlaceholder(DIALOG_TEXT.selectProductPlaceholder);
     }
 
     // 17. 清除全部
@@ -883,12 +903,12 @@ function normalizeAnnotations(annotations) {
     // 19. 确认提交
     async function confirmData() {
         if (!currentCategoryId || !currentProjectId) {
-            console.warn('请先选择产品类型和产品型号');
+            console.warn(DIALOG_TEXT.needSelectCategoryAndProject);
             return;
         }
 
         if (selectedDetails.size === 0) {
-            console.warn('请至少选择一个组件');
+            console.warn(DIALOG_TEXT.needSelectAtLeastOneDetail);
             return;
         }
 
@@ -898,9 +918,9 @@ function normalizeAnnotations(annotations) {
         if (canvas && canvas.style.display !== 'none') {
             try {
                 compositeImageBase64 = canvas.toDataURL('image/png');
-                console.log("已导出合成图片，大小:", compositeImageBase64.length);
+                console.log(`${DIALOG_TEXT.exportedCompositeImage}:`, compositeImageBase64.length);
             } catch (error) {
-                console.error("导出合成图片失败:", error);
+                console.error(`${DIALOG_TEXT.exportCompositeImageFailed}:`, error);
             }
         }
 
@@ -914,12 +934,12 @@ function normalizeAnnotations(annotations) {
             compositeImage: compositeImageBase64  // 添加合成图片
         };
 
-        console.log("✅ 提交数据:", {
-            产品类型: result.category,
-            产品型号: result.project,
-            选中组件: result.details.length + ' 个',
-            可选配件: result.annotations.length + ' 个',
-            包含合成图片: !!compositeImageBase64
+        console.log(`${DIALOG_TEXT.submitData}:`, {
+            [DIALOG_TEXT.summaryCategory]: result.category,
+            [DIALOG_TEXT.summaryProject]: result.project,
+            [DIALOG_TEXT.summarySelectedDetailCount]: result.details.length + DIALOG_TEXT.countSuffix,
+            [DIALOG_TEXT.summarySelectedAnnotationCount]: result.annotations.length + DIALOG_TEXT.countSuffix,
+        [DIALOG_TEXT.summaryHasCompositeImage]: !!compositeImageBase64
         });
 
         // 发送给父窗口
@@ -929,5 +949,7 @@ function normalizeAnnotations(annotations) {
     // 暴露函数到全局作用域，供 HTML onclick 使用
     (window as any).confirmData = confirmData;
     (window as any).clearAll = clearAll;
+
+
 
 

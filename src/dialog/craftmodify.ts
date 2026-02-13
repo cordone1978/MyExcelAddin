@@ -1,4 +1,7 @@
 ﻿import { DIALOG_ACTIONS } from "../shared/dialogActions";
+import { CRAFTING_CONSTANTS } from "../shared/appConstants";
+import { CRAFTMODIFY_TEXT } from "../shared/businessTextConstants";
+import { CRAFTMODIFY_HTML_TEXT } from "../shared/dialogHtmlTextConstants";
 /* global Office */
 
 type CraftItem = {
@@ -50,6 +53,7 @@ const labelByType = new Map<string, string>();
 let baseDesc = "";
 
 Office.onReady(() => {
+  applyStaticText();
   bindEvents();
   updateTotals();
 
@@ -64,14 +68,42 @@ Office.onReady(() => {
             applyInit(payload.data as CraftModifyInit);
           }
         } catch (error) {
-          console.error("澶勭悊鍒濆鍖栨暟鎹け璐?", error);
+          console.error(CRAFTMODIFY_TEXT.initDataHandleFailed, error);
         }
       }
     );
   } catch (error) {
-    console.warn("鏈兘娉ㄥ唽鐖剁獥鍙ｆ秷鎭鐞?", error);
+    console.warn(CRAFTMODIFY_TEXT.registerParentMessageFailed, error);
   }
 });
+
+function applyStaticText() {
+  document.title = CRAFTMODIFY_HTML_TEXT.title;
+  setText("craftPanelTitle", CRAFTMODIFY_HTML_TEXT.panelTitle);
+  setText("areaHeader", CRAFTMODIFY_HTML_TEXT.areaHeader);
+  setText("unitPriceHeader", CRAFTMODIFY_HTML_TEXT.unitPriceHeader);
+  setText("totalHeader", CRAFTMODIFY_HTML_TEXT.totalHeader);
+  setText("innerLabel1", CRAFTMODIFY_HTML_TEXT.innerLabel1);
+  setText("innerLabel2", CRAFTMODIFY_HTML_TEXT.innerLabel2);
+  setText("innerLabel3", CRAFTMODIFY_HTML_TEXT.innerLabel3);
+  setText("outerLabel1", CRAFTMODIFY_HTML_TEXT.outerLabel1);
+  setText("outerLabel2", CRAFTMODIFY_HTML_TEXT.outerLabel2);
+  setText("outerLabel3", CRAFTMODIFY_HTML_TEXT.outerLabel3);
+  setText("summaryLabel", CRAFTMODIFY_HTML_TEXT.summaryLabel);
+  setText("submitBtn", CRAFTMODIFY_HTML_TEXT.submitBtn);
+  setText("cancelBtn", CRAFTMODIFY_HTML_TEXT.cancelBtn);
+  unitSelects.forEach((select) => {
+    const placeholder = select.querySelector('option[value=""]') as HTMLOptionElement | null;
+    if (placeholder) {
+      placeholder.textContent = CRAFTMODIFY_TEXT.selectPlaceholder;
+    }
+  });
+}
+
+function setText(id: string, text: string) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
 
 function bindEvents() {
   areaInputs.forEach((input) => {
@@ -109,7 +141,7 @@ function applyInit(data: CraftModifyInit) {
       select.innerHTML = "";
       const placeholder = document.createElement("option");
       placeholder.value = "";
-      placeholder.textContent = "璇烽€夋嫨...";
+      placeholder.textContent = CRAFTMODIFY_TEXT.selectPlaceholder;
       select.appendChild(placeholder);
       data.unitOptions?.forEach((item) => {
         unitPriceMap.set(item.label, item.price);
@@ -177,15 +209,15 @@ function buildCraftingDescription(): string {
   const innerTypes = collectCraftTypes(0, 3);
   const outerTypes = collectCraftTypes(3, 6);
 
-  let result = removeSegment(baseDesc, "，内表面处理：");
-  result = removeSegment(result, "，外表面处理：");
-  result = result.replace(/[锛涳紝]\s*$/, "").trim();
+  let result = removeSegment(baseDesc, CRAFTMODIFY_TEXT.innerPrefix);
+  result = removeSegment(result, CRAFTMODIFY_TEXT.outerPrefix);
+  result = result.replace(/[；，]\s*$/, "").trim();
 
   if (innerTypes.length > 0) {
-    result = appendSegment(result, `内表面处理：${innerTypes.join("；")}`);
+    result = appendSegment(result, `${CRAFTMODIFY_TEXT.innerLabel}${innerTypes.join(CRAFTMODIFY_TEXT.semicolon)}`);
   }
   if (outerTypes.length > 0) {
-    result = appendSegment(result, `外表面处理：${outerTypes.join("；")}`);
+    result = appendSegment(result, `${CRAFTMODIFY_TEXT.outerLabel}${outerTypes.join(CRAFTMODIFY_TEXT.semicolon)}`);
   }
 
   return result;
@@ -207,11 +239,11 @@ function collectCraftTypes(start: number, end: number): string[] {
 
 function extractCraftType(label: string): string {
   if (!label) return "";
-  const splitIndex = label.indexOf("--");
+  const splitIndex = label.indexOf(CRAFTING_CONSTANTS.craftTypeSeparator);
   if (splitIndex > 0) {
     return label.slice(0, splitIndex).trim();
   }
-  const priceIndex = label.indexOf("￥");
+  const priceIndex = label.indexOf(CRAFTING_CONSTANTS.rmbSymbol);
   if (priceIndex > 0) {
     return label.slice(0, priceIndex).trim();
   }
@@ -221,7 +253,7 @@ function extractCraftType(label: string): string {
 function removeSegment(text: string, key: string): string {
   const index = text.indexOf(key);
   if (index < 0) return text;
-  const endIndex = text.indexOf("；", index);
+  const endIndex = text.indexOf(CRAFTMODIFY_TEXT.semicolon, index);
   if (endIndex < 0) {
     return text.slice(0, index).trim();
   }
@@ -230,7 +262,10 @@ function removeSegment(text: string, key: string): string {
 
 function appendSegment(text: string, segment: string): string {
   if (!text) return segment;
-  return `${text}锛?{segment}`;
+  return `${text}${CRAFTMODIFY_TEXT.comma}${segment}`;
 }
+
+
+
 
 

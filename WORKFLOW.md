@@ -82,7 +82,24 @@ Claude Code 是一个帮助完成软件工程任务的 CLI 工具，具体协助
 
 ### 3.4 代码风格
 - TS/JS：2 空格缩进，双引号
+- **注释必须使用中文（强制）**
 - Office.js 统一用 `Excel.run` + `context.sync`
+
+### 3.4.1 禁止硬编码（强制）
+- **坚决杜绝硬编码。**
+- 所有可复用字面量必须提取为常量，禁止在业务代码中重复写死：
+  - URL / API 路径 / 端口
+  - 对话框路径与尺寸
+  - 业务文案、提示语、标题、表头
+  - 默认值、魔法数字、颜色、列宽、字号、正则规则
+- 常量统一存放到 `src/shared/`（按领域拆分）：
+  - `appConstants.ts`
+  - `buildsheetConstants.ts`
+  - `businessTextConstants.ts`
+- 后端常量统一存放到 `serverConstants.js`
+- 仅允许以下硬编码例外：
+  - 临时调试代码（提交前必须删除）
+  - 与 Office API 绑定的必要枚举字符串（无法抽象时）
 
 ### 3.5 运行约定
 - Ribbon 命令必须 `event.completed()`
@@ -132,6 +149,15 @@ codex --dangerously-bypass-approvals-and-sandbox   # 跳过权限确认
 - **图片不显示**：检查 3001 是否启用 HTTPS + CORS + `crossOrigin`
 - **Excel 卡死**：检查 `event.completed()`
 - **变更不生效**：确认 build 后刷新 Taskpane/对话框
+- **服务无法访问**：先查端口是否被占用
+  ```powershell
+  Get-NetTCPConnection -LocalPort 3001 | Select-Object LocalAddress,LocalPort,State,OwningProcess
+  Get-Process -Id (Get-NetTCPConnection -LocalPort 3001).OwningProcess
+  ```
+  ```powershell
+  netstat -ano | findstr :3001
+  tasklist /FI "PID eq <pid>"
+  ```
 
 ---
 

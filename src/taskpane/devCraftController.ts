@@ -16,6 +16,8 @@ import {
   MaterialOptionRecord,
 } from "./devCraftTypes";
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
+import { API_PATHS, CRAFTING_CONSTANTS, DIALOG_PATHS, DIALOG_SIZES } from "../shared/appConstants";
+import { FLOW_MESSAGES } from "../shared/businessTextConstants";
 
 /* global console, Office */
 
@@ -54,12 +56,12 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
       devModifyState = initData.state;
       await openDevModifyDialogWithData(initData.data, selection);
     } catch (error) {
-      console.error("打开更改设备窗口失败", error);
+      console.error(FLOW_MESSAGES.openDevDialogFailed, error);
     }
   }
 
   async function openDevModifyDialogWithData(initData: Record<string, unknown>, selection: SelectionContext) {
-    const dialog = await displayDialog("devmodify.html", { width: 70, height: 50 });
+    const dialog = await displayDialog(DIALOG_PATHS.devModify, DIALOG_SIZES.devModify);
 
     dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
       const payload = JSON.parse(args.message || "{}");
@@ -92,7 +94,7 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
 
     try {
       const initData = await buildCraftModifyInit(targetSelection);
-      const dialog = await displayDialog("craftmodify.html");
+      const dialog = await displayDialog(DIALOG_PATHS.craftModify);
       craftModifyState = initData.state;
 
       dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
@@ -115,19 +117,19 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
         }
       });
     } catch (error) {
-      console.error("打开工艺更改窗口失败:", error);
+      console.error(FLOW_MESSAGES.openCraftDialogFailed, error);
     }
   }
 
   async function handleDevModifySubmit(data: DevModifySubmitPayload) {
     if (!devModifyState) return;
 
-    if (data?.whatKind === "外购件" && !data?.isPriceChanged) {
-      console.warn("外购件未选择价格，跳过更新");
+    if (data?.whatKind === CRAFTING_CONSTANTS.outsourcedKind && !data?.isPriceChanged) {
+      console.warn(FLOW_MESSAGES.outsourcedPriceNotSelected);
       return;
     }
 
-    const price = data?.whatKind === "外购件" ? data?.currentPrice : data?.refreshedPrice;
+    const price = data?.whatKind === CRAFTING_CONSTANTS.outsourcedKind ? data?.currentPrice : data?.refreshedPrice;
 
     await writeToSheet(devModifyState.selection, {
       desc: data?.desc || devModifyState.selection.componentDesc,
@@ -170,18 +172,18 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
 
   async function buildDevModifyInit(selection: SelectionContext) {
     const projectId = await resolveProjectId(selection.categoryName, selection.projectModel);
-    const configData = await fetchJson<ComponentRecord[]>(`/config/${projectId}`);
+    const configData = await fetchJson<ComponentRecord[]>(`${API_PATHS.config}/${projectId}`);
     const component = findComponent(configData, selection.componentName);
 
     if (!component) {
-      throw new Error(`未找到对应组件配置: ${selection.componentName}`);
+      throw new Error(`${FLOW_MESSAGES.componentNotFoundPrefix}: ${selection.componentName}`);
     }
 
     const componentId = Number(component.config_id || component.component_id);
-    const materialOptions = await fetchJson<MaterialOptionRecord[]>(`/materials/${componentId}`);
-    const craftingConfigList = await fetchJson<Record<string, unknown>[]>(`/crafting/${componentId}`);
+    const materialOptions = await fetchJson<MaterialOptionRecord[]>(`${API_PATHS.materials}/${componentId}`);
+    const craftingConfigList = await fetchJson<Record<string, unknown>[]>(`${API_PATHS.crafting}/${componentId}`);
     const craftingConfig = craftingConfigList?.[0] || null;
-    const craftPrices = await fetchJson<CraftPriceRecord[]>(`/craft-prices`);
+    const craftPrices = await fetchJson<CraftPriceRecord[]>(API_PATHS.craftPrices);
 
     const materialPrice = getCraftFieldNumber(craftingConfig, "MaterialsPrice");
     const standardPrice = getStandardPartPrice(configData);
@@ -239,17 +241,17 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
 
   async function buildCraftModifyInit(selection: SelectionContext) {
     const projectId = await resolveProjectId(selection.categoryName, selection.projectModel);
-    const configData = await fetchJson<ComponentRecord[]>(`/config/${projectId}`);
+    const configData = await fetchJson<ComponentRecord[]>(`${API_PATHS.config}/${projectId}`);
     const component = findComponent(configData, selection.componentName);
 
     if (!component) {
-      throw new Error(`未找到对应组件配置: ${selection.componentName}`);
+      throw new Error(`${FLOW_MESSAGES.componentNotFoundPrefix}: ${selection.componentName}`);
     }
 
     const componentId = Number(component.config_id || component.component_id);
-    const craftingConfigList = await fetchJson<Record<string, unknown>[]>(`/crafting/${componentId}`);
+    const craftingConfigList = await fetchJson<Record<string, unknown>[]>(`${API_PATHS.crafting}/${componentId}`);
     const craftingConfig = craftingConfigList?.[0] || null;
-    const craftPrices = await fetchJson<CraftPriceRecord[]>(`/craft-prices`);
+    const craftPrices = await fetchJson<CraftPriceRecord[]>(API_PATHS.craftPrices);
 
     const data: Record<string, unknown> = {
       inner: buildCraftItems(craftingConfig, "Inner"),
@@ -278,3 +280,4 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
     openCraftModifyDialog,
   };
 }
+

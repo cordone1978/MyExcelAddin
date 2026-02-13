@@ -4,48 +4,48 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>数据输入对话框</title>
+    <title></title>
     <script defer src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
     <link rel="stylesheet" href="dialog.css" />
   </head>
   <body>
 <div class="container">
         <div class="left-panel">
-            <h3 class="panel-title">产品类型</h3>
+            <h3 class="panel-title" id="categoryTitle"></h3>
             <div class="listbox" id="categoryList">
-                <div class="loading">加载中...</div>
+                <div class="loading" id="categoryLoadingText"></div>
             </div>
         </div>
         
         <div class="middle-panel">
             <div class="middle-left">
-                <h3 class="panel-title">产品型号</h3>
+                <h3 class="panel-title" id="projectTitle"></h3>
                 <div class="listbox" id="projectList"></div>
             </div>
         </div>
 
         <div class="middle-right">
             <div>
-                <h3 class="panel-title">详细信息（多选）</h3>
+                <h3 class="panel-title" id="detailTitle"></h3>
                 <div class="listbox" id="detailList"></div>
             </div>
             <div>
-                <h3 class="panel-title">标注选项（多选）</h3>
+                <h3 class="panel-title" id="annotationTitle"></h3>
                 <div class="listbox" id="annotationList"></div>
             </div>
         </div>
         
         <div class="right-panel">
-            <h3 class="panel-title">图片预览与标注</h3>
+            <h3 class="panel-title" id="previewTitle"></h3>
             <div class="image-container" id="imageContainer">
                 <canvas id="mainCanvas"></canvas>
                 <img id="previewImage" alt="" />
-                <div id="placeholder" class="placeholder">← 选择产品后显示图片</div>
+                <div id="placeholder" class="placeholder"></div>
                 <div id="tooltip"></div>
             </div>
             <div class="action-buttons">
-                <button class="btn btn-secondary" onclick="clearAll()">清除全部</button>
-                <button class="btn btn-primary" onclick="confirmData()">确认提交</button>
+                <button class="btn btn-secondary" id="clearAllBtn" onclick="clearAll()"></button>
+                <button class="btn btn-primary" id="confirmSubmitBtn" onclick="confirmData()"></button>
             </div>
         </div>
     </div>

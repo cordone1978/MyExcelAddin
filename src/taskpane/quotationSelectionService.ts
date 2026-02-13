@@ -2,6 +2,9 @@
 
 import { parseNumber } from "./devCraftDataService";
 import { CellWritePayload } from "./devCraftTypes";
+import { SHEET_NAMES, SHEET_NAME_ALIASES } from "../shared/sheetNames";
+import { UI_DEFAULTS } from "../shared/appConstants";
+import { FLOW_MESSAGES } from "../shared/businessTextConstants";
 
 export type SelectionContext = {
   sheetName: string;
@@ -35,7 +38,7 @@ export async function getSelectionContext(): Promise<SelectionContext | null> {
         column === 3 || column === 4 || column === 5 || column === 6 ? "C" : "";
 
       if (!targetColumn) {
-        console.warn("请先选中配置表 C/D/E/F 列的组件单元格");
+        console.warn(FLOW_MESSAGES.selectQuoteConfigColumnsPrefix);
         return null;
       }
 
@@ -52,12 +55,12 @@ export async function getSelectionContext(): Promise<SelectionContext | null> {
       const componentMaterial = String(values[5] || "").trim();
       const componentBrand = String(values[6] || "").trim();
       const componentUnit = String(values[8] || "").trim();
-      const isEasyparts = sheet.name === "易损件表";
+      const isEasyparts = SHEET_NAME_ALIASES.wearParts.includes(sheet.name);
       const priceCellValue = isEasyparts ? values[11] : values[13];
       const currentPrice = parseNumber(priceCellValue);
 
       if (!categoryName || !projectModel || !componentName) {
-        console.warn("当前行缺少分类/型号/组件名称，无法继续");
+        console.warn(FLOW_MESSAGES.missingRequiredSelection);
         return null;
       }
 
@@ -79,7 +82,7 @@ export async function getSelectionContext(): Promise<SelectionContext | null> {
       };
     });
   } catch (error) {
-    console.error("读取当前选区失败", error);
+    console.error(FLOW_MESSAGES.selectionReadFailed, error);
     return null;
   }
 }
@@ -94,7 +97,7 @@ export async function writeToSheet(selection: SelectionContext, payload: CellWri
     await context.sync();
 
     if (!qtyCell.values[0][0]) {
-      qtyCell.values = [[1]];
+      qtyCell.values = [[UI_DEFAULTS.defaultQuantity]];
     }
 
     targetCell.getOffsetRange(0, 1).values = [[payload.desc || ""]];
@@ -113,3 +116,4 @@ export async function writeToSheet(selection: SelectionContext, payload: CellWri
     await context.sync();
   });
 }
+

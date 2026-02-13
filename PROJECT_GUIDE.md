@@ -61,8 +61,25 @@
 
 ## 7. 代码风格
 - TS/JS：2 空格缩进，双引号
+- **注释必须使用中文（强制）**
 - 保持函数短小、职责清晰
 - Office.js 统一用 `Excel.run` + `context.sync`
+
+## 7.1 禁止硬编码（强制）
+- **坚决杜绝硬编码。**
+- 所有可复用字面量必须提取为常量，禁止在业务代码中重复写死：
+  - URL / API 路径 / 端口
+  - 对话框路径与尺寸
+  - 业务文案、提示语、标题、表头
+  - 默认值、魔法数字、颜色、列宽、字号、正则规则
+- 常量统一存放到 `src/shared/`（按领域拆分）：
+  - `appConstants.ts`
+  - `buildsheetConstants.ts`
+  - `businessTextConstants.ts`
+- 后端常量统一存放到 `serverConstants.js`
+- 仅允许以下硬编码例外：
+  - 临时调试代码（提交前必须删除）
+  - 与 Office API 绑定的必要枚举字符串（无法抽象时）
 
 ## 8. AI 助手协作规则（重要）
 
@@ -157,3 +174,48 @@ Webpack 入口：
 - 图片不显示：检查 3001 是否启用 HTTPS + CORS + `crossOrigin`
 - Excel 卡死：检查 `event.completed()`
 - 变更不生效：确认 build 后刷新 Taskpane/对话框
+
+## 14. 代码文件清单（根目录 + src）
+说明：按你当前约定，代码主要位于项目根目录与 `src/` 目录。以下为当前清单。
+
+根目录代码/配置文件：
+- `babel.config.json`
+- `diagnose.js`
+- `manifest.xml`
+- `package.json`
+- `package-lock.json`
+- `server.js`
+- `tsconfig.json`
+- `unpack.js`
+- `webpack.config.js`
+- `.eslintrc.json`
+
+`src/` 源码文件：
+- `src/buildsheet/index.ts`
+- `src/buildsheet/insertRows.ts`
+- `src/buildsheet/quotationSheet.ts`
+- `src/commands/commands.html`
+- `src/commands/commands.ts`
+- `src/dialog/craftmodify.css`
+- `src/dialog/craftmodify.html`
+- `src/dialog/craftmodify.ts`
+- `src/dialog/devmodify.css`
+- `src/dialog/devmodify.html`
+- `src/dialog/devmodify.ts`
+- `src/dialog/dialog.css`
+- `src/dialog/dialog.html`
+- `src/dialog/dialog.ts`
+- `src/dialog/handleDialogData.ts`
+- `src/dialog/queryprice.css`
+- `src/dialog/queryprice.html`
+- `src/dialog/queryprice.ts`
+- `src/shared/dialogActions.ts`
+- `src/shared/sheetNames.ts`
+- `src/taskpane/devCraftController.ts`
+- `src/taskpane/devCraftDataService.ts`
+- `src/taskpane/devCraftTypes.ts`
+- `src/taskpane/querypriceController.ts`
+- `src/taskpane/quotationSelectionService.ts`
+- `src/taskpane/taskpane.css`
+- `src/taskpane/taskpane.html`
+- `src/taskpane/taskpane.ts`

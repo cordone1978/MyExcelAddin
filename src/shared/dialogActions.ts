@@ -9,6 +9,7 @@ export const DIALOG_ACTIONS = {
   CRAFTMODIFY_CANCEL: "craftmodify_cancel",
   CRAFTMODIFY_RESULT: "craftmodify_result",
   QUERYPRICE_SELECT: "queryprice_select",
+  QUERYPRICE_REPLACE: "queryprice_replace",
   QUERYPRICE_CANCEL: "queryprice_cancel",
   QUERYPRICE_WARNING: "queryprice_warning",
 } as const;

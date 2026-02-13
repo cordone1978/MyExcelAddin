@@ -1,31 +1,33 @@
-﻿import { ComponentRecord, JsonMap } from "./devCraftTypes";
+﻿import { API_PATHS, APP_URLS, CRAFTING_CONSTANTS } from "../shared/appConstants";
+import { ComponentRecord, JsonMap } from "./devCraftTypes";
+import { FLOW_MESSAGES } from "../shared/businessTextConstants";
 
-const API_BASE = "https://localhost:3001/api";
+const API_BASE = APP_URLS.apiBase;
 
 export async function fetchJson<T = unknown>(path: string): Promise<T> {
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
   const response = await fetch(url);
   const result = await response.json();
   if (!result.success) {
-    throw new Error(result.error || result.message || "请求失败");
+    throw new Error(result.error || result.message || FLOW_MESSAGES.requestFailed);
   }
   return result.data as T;
 }
 
 export async function resolveProjectId(categoryName: string, projectModel: string): Promise<number> {
-  const categories = await fetchJson<Array<JsonMap>>("/categories");
+  const categories = await fetchJson<Array<JsonMap>>(API_PATHS.categories);
   const category = (categories || []).find((item) => String(item.name || "").trim() === categoryName.trim());
 
   if (category) {
-    const projects = await fetchJson<Array<JsonMap>>(`/projects/${category.id}`);
+    const projects = await fetchJson<Array<JsonMap>>(`${API_PATHS.projects}/${category.id}`);
     const project = (projects || []).find((item) => String(item.name || "").trim() === projectModel.trim());
     if (project) return Number(project.id);
   }
 
-  const fallback = await fetchJson<JsonMap>(`/project-by-model/${encodeURIComponent(projectModel)}`);
+  const fallback = await fetchJson<JsonMap>(`${API_PATHS.projectByModel}/${encodeURIComponent(projectModel)}`);
   if (fallback?.product_id) return Number(fallback.product_id);
 
-  throw new Error(`未找到项目型号: ${projectModel}`);
+  throw new Error(`${FLOW_MESSAGES.projectModelNotFoundPrefix}: ${projectModel}`);
 }
 
 export function findComponent(configData: ComponentRecord[], componentName: string) {
@@ -37,8 +39,8 @@ export function findComponent(configData: ComponentRecord[], componentName: stri
 
 export function getStandardPartPrice(configData: ComponentRecord[]): number | null {
   if (!Array.isArray(configData)) return null;
-  const byName = configData.find((item) => String(item.component_name || "").trim() === "标准件");
-  const byKind = configData.find((item) => String(item.whatkind || "").trim() === "标准件");
+  const byName = configData.find((item) => String(item.component_name || "").trim() === CRAFTING_CONSTANTS.standardPart);
+  const byKind = configData.find((item) => String(item.whatkind || "").trim() === CRAFTING_CONSTANTS.standardPart);
   const target = byName || byKind;
   if (!target) return null;
   return parseNumber(target.component_unitprice) || 0;
@@ -70,7 +72,7 @@ export function buildImageUrl(pic: unknown): string | null {
   if (!pic) return null;
   const file = String(pic).trim();
   if (!file) return null;
-  return `${API_BASE.replace("/api", "")}/public/images/${file}.png`;
+  return `${APP_URLS.serverOrigin}/public/images/${file}.png`;
 }
 
 export function parseNumber(value: unknown): number | null {

@@ -1,38 +1,27 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const https = require('https');
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const path = require('path');
+const {
+  SERVER_CONFIG,
+  DATABASE_CONFIG,
+  ACTIVE_DB,
+  API_ROUTES,
+  URLS,
+  DOMAIN_TERMS,
+  SERVER_MESSAGES,
+  SERVER_LOGS,
+} = require("./serverConstants");
 
 const app = express();
 
-// ==================== 数据库配置 ====================
-const DATABASE_CONFIG = {
-  // 本机数据库
-  localhost: {
-    host: 'localhost',
-    user: 'root',
-    password: 'Livsun24',
-    database: 'quotation'
-  },
-  // 公司数据库
-  company: {
-    host: '192.168.1.79',
-    user: 'root',
-    password: 'ipanel',
-    database: 'quotation'
-  }
-};
-
-// 选择要使用的数据库配置：'localhost' 或 'company'
-const ACTIVE_DB = 'localhost';
-
-// ==================== 中间件配置 ====================
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// MySQL 连接池
+// MySQL connection pool
 const pool = mysql.createPool({
   ...DATABASE_CONFIG[ACTIVE_DB],
   waitForConnections: true,
@@ -40,25 +29,25 @@ const pool = mysql.createPool({
   queueLimit: 0
 });
 
-// 导出配置供其他模块使用
+// Export active DB config for external modules
 module.exports.DATABASE_CONFIG = DATABASE_CONFIG;
 module.exports.ACTIVE_DB = ACTIVE_DB;
 
-// ==================== API 路由（必须在静态文件之前）====================
+// API routes (must be defined before static file serving)
 
-// 0. 测试连接
-app.get('/api/test', async (req, res) => {
+// 0. Test DB connection
+app.get(API_ROUTES.test, async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT 1 + 1 AS result');
     res.json({ success: true, data: rows });
   } catch (error) {
-    console.error('❌ 测试连接失败:', error);
+    console.error(`${SERVER_LOGS.testConnectionFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 1. 获取产品类型列表
-app.get('/api/categories', async (req, res) => {
+// 1. Get product categories
+app.get(API_ROUTES.categories, async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT 
@@ -71,13 +60,13 @@ app.get('/api/categories', async (req, res) => {
     
     res.json({ success: true, data: rows });
   } catch (error) {
-    console.error('❌ 获取产品类型失败:', error);
+    console.error(`${SERVER_LOGS.fetchCategoriesFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 2. 获取某个类型下的产品型号列表
-app.get('/api/projects/:categoryId', async (req, res) => {
+// 2. Get products by category
+app.get(API_ROUTES.projects, async (req, res) => {
   try {
     const { categoryId } = req.params;
     
@@ -93,13 +82,13 @@ app.get('/api/projects/:categoryId', async (req, res) => {
     
     res.json({ success: true, data: rows });
   } catch (error) {
-    console.error('❌ 获取产品型号失败:', error);
+    console.error(`${SERVER_LOGS.fetchProjectsFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 3. 获取组件详细信息
-app.get('/api/details/:projectId', async (req, res) => {
+// 3. Get component details
+app.get(API_ROUTES.details, async (req, res) => {
   try {
     const { projectId } = req.params;
     
@@ -112,25 +101,25 @@ app.get('/api/details/:projectId', async (req, res) => {
         CAST(is_active AS SIGNED) as is_required,
         CASE 
           WHEN component_pic IS NOT NULL AND component_pic != '' 
-          THEN CONCAT('https://localhost:3001/public/images/', component_pic, '.png')
+          THEN CONCAT('${URLS.imageBase}', component_pic, '.png')
           ELSE NULL
         END as image_url
       FROM ht_sales_product_default_config
       WHERE product_id = ?
         AND CAST(is_Assembly AS SIGNED) = 0
-        AND whatkind NOT IN ('工艺', '标准件')
+        AND whatkind NOT IN (?, ?)
       ORDER BY component_sn
-    `, [projectId]);
+    `, [projectId, DOMAIN_TERMS.craftingKind, DOMAIN_TERMS.standardPartKind]);
     
     res.json({ success: true, data: rows });
   } catch (error) {
-    console.error('❌ 获取组件详细信息失败:', error);
+    console.error(`${SERVER_LOGS.fetchDetailsFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 4. 获取标注选项
-app.get('/api/annotations/:projectId', async (req, res) => {
+// 4. Get annotation options
+app.get(API_ROUTES.annotations, async (req, res) => {
   try {
     const { projectId } = req.params;
     
@@ -143,7 +132,7 @@ app.get('/api/annotations/:projectId', async (req, res) => {
         NULL as position_y,
         CASE 
           WHEN component_pic IS NOT NULL AND component_pic != '' 
-          THEN CONCAT('https://localhost:3001/public/images/', component_pic, '.png')
+          THEN CONCAT('${URLS.imageBase}', component_pic, '.png')
           ELSE NULL
         END as image_url
       FROM ht_sales_product_default_config
@@ -154,13 +143,13 @@ app.get('/api/annotations/:projectId', async (req, res) => {
     
     res.json({ success: true, data: rows });
   } catch (error) {
-    console.error('❌ 获取标注选项失败:', error);
+    console.error(`${SERVER_LOGS.fetchAnnotationsFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 5. 获取完整配置数据
-app.get('/api/config/:projectId', async (req, res) => {
+// 5. Get full config data
+app.get(API_ROUTES.config, async (req, res) => {
   try {
     const { projectId } = req.params;
     
@@ -190,13 +179,13 @@ app.get('/api/config/:projectId', async (req, res) => {
     
     res.json({ success: true, data: rows });
   } catch (error) {
-    console.error('❌ 获取完整配置数据失败:', error);
+    console.error(`${SERVER_LOGS.fetchConfigFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 6. 获取表面处理配置
-app.get('/api/crafting/:componentId', async (req, res) => {
+// 6. Get crafting config
+app.get(API_ROUTES.crafting, async (req, res) => {
   try {
     const { componentId } = req.params;
     
@@ -207,13 +196,13 @@ app.get('/api/crafting/:componentId', async (req, res) => {
     
     res.json({ success: true, data: rows });
   } catch (error) {
-    console.error('❌ 获取表面处理配置失败:', error);
+    console.error(`${SERVER_LOGS.fetchCraftingFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 7. 获取材料配置
-app.get('/api/materials/:componentId', async (req, res) => {
+// 7. Get material config
+app.get(API_ROUTES.materials, async (req, res) => {
   try {
     const { componentId } = req.params;
 
@@ -230,13 +219,13 @@ app.get('/api/materials/:componentId', async (req, res) => {
 
     res.json({ success: true, data: rows });
   } catch (error) {
-    console.error('❌ 获取材料配置失败:', error);
+    console.error(`${SERVER_LOGS.fetchMaterialsFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 8. 获取系统列表（用于报价汇总表）
-app.get('/api/systems', async (req, res) => {
+// 8. Get system list
+app.get(API_ROUTES.systems, async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT
@@ -250,42 +239,42 @@ app.get('/api/systems', async (req, res) => {
 
     res.json({ success: true, data: rows });
   } catch (error) {
-    console.error('❌ 获取系统列表失败:', error);
+    console.error(`${SERVER_LOGS.fetchSystemsFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 8.1 获取工艺单价列表（用于表面工艺下拉）
-app.get('/api/craft-prices', async (req, res) => {
+// 8.1 Get craft price options
+app.get(API_ROUTES.craftPrices, async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT DISTINCT
         material_name,
         material_unitprice
       FROM ht_sales_materials
-      WHERE material_type = '工艺'
+      WHERE material_type = ?
       ORDER BY material_name
-    `);
+    `, [DOMAIN_TERMS.craftingKind]);
 
     const data = rows.map((row) => {
-      const name = row.material_name || "未知工艺";
+      const name = row.material_name || DOMAIN_TERMS.unknownCrafting;
       const price = Number(row.material_unitprice || 0);
       return {
         craftType: name,
         price,
-        label: `${name} -- ￥, ${price}`
+        label: `${name}${DOMAIN_TERMS.craftLabelSeparator}${DOMAIN_TERMS.rmbSymbol} ${price}`
       };
     });
 
     res.json({ success: true, data });
   } catch (error) {
-    console.error('获取工艺单价列表失败:', error);
+    console.error(`${SERVER_LOGS.fetchCraftPricesFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 8.2 根据产品型号获取产品ID（用于更改设备/工艺）
-app.get('/api/project-by-model/:productModel', async (req, res) => {
+// 8.2 Get product ID by product model
+app.get(API_ROUTES.projectByModel, async (req, res) => {
   try {
     const { productModel } = req.params;
     const [rows] = await pool.query(`
@@ -296,19 +285,19 @@ app.get('/api/project-by-model/:productModel', async (req, res) => {
     `, [productModel]);
 
     if (rows.length === 0) {
-      res.json({ success: false, message: '未找到对应产品型号' });
+      res.json({ success: false, message: SERVER_MESSAGES.projectModelNotFound });
       return;
     }
 
     res.json({ success: true, data: rows[0] });
   } catch (error) {
-    console.error('获取产品ID失败:', error);
+    console.error(`${SERVER_LOGS.fetchProjectByModelFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 8.3 价格查询（用于外购件查询价格）
-app.get('/api/price-search', async (req, res) => {
+// 8.3 Price search
+app.get(API_ROUTES.priceSearch, async (req, res) => {
   try {
     const keyword = (req.query.keyword || "").toString().trim();
     if (!keyword) {
@@ -337,17 +326,17 @@ app.get('/api/price-search', async (req, res) => {
 
     res.json({ success: true, data: rows });
   } catch (error) {
-    console.error('价格查询失败:', error);
+    console.error(`${SERVER_LOGS.priceSearchFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 9. 获取产品类型到系统的映射关系
-app.get('/api/system-mapping/:typeName', async (req, res) => {
+// 9. Get product type to system mapping
+app.get(API_ROUTES.systemMapping, async (req, res) => {
   try {
     const { typeName } = req.params;
 
-    console.log('🔍 查询系统映射 - 产品类型:', typeName);
+    console.log(`${SERVER_LOGS.querySystemMapping}:`, typeName);
 
     const [rows] = await pool.query(`
       SELECT DISTINCT
@@ -358,10 +347,10 @@ app.get('/api/system-mapping/:typeName', async (req, res) => {
       LIMIT 1
     `, [typeName]);
 
-    console.log('📋 查询结果:', rows);
+    console.log(`${SERVER_LOGS.querySystemMappingResult}:`, rows);
 
     if (rows.length > 0) {
-      console.log('✅ 找到映射:', rows[0].system_name);
+      console.log(`${SERVER_LOGS.foundSystemMapping}:`, rows[0].system_name);
       res.json({
         success: true,
         data: {
@@ -370,46 +359,59 @@ app.get('/api/system-mapping/:typeName', async (req, res) => {
         }
       });
     } else {
-      console.log('⚠️ 未找到映射');
+      console.log(SERVER_MESSAGES.systemMappingNotFound);
       res.json({
         success: false,
-        message: '未找到对应的系统映射'
+        message: SERVER_MESSAGES.systemMappingNotFound
       });
     }
   } catch (error) {
-    console.error('❌ 查询系统映射失败:', error);
+    console.error(`${SERVER_LOGS.querySystemMappingFailed}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// ==================== 静态文件服务（必须在 API 之后）====================
+// Static file serving (must be after API routes)
 app.use('/public', express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// ==================== HTTPS 服务器 ====================
+// HTTPS server
 
-// 读取 SSL 证书
+// Read SSL certificates from parent directory
+const certBaseDir = path.resolve(__dirname, "..");
+const certKeyPath = path.join(certBaseDir, SERVER_CONFIG.certKeyFile);
+const certPemPath = path.join(certBaseDir, SERVER_CONFIG.certPemFile);
+
+if (!fs.existsSync(certKeyPath) || !fs.existsSync(certPemPath)) {
+  console.error(SERVER_LOGS.sslCertMissing);
+  console.error(`   ${certBaseDir}`);
+  console.error(`   ${SERVER_LOGS.sslCertRequiredFiles}`);
+  process.exit(1);
+}
+
 const httpsOptions = {
-  key: fs.readFileSync('./localhost+2-key.pem'),
-  cert: fs.readFileSync('./localhost+2.pem')
+  key: fs.readFileSync(certKeyPath),
+  cert: fs.readFileSync(certPemPath)
 };
 
-// 启动 HTTPS 服务器
-const PORT = 3001;
+// Start HTTPS server
+const PORT = SERVER_CONFIG.port;
 https.createServer(httpsOptions, app).listen(PORT, () => {
-  console.log('========================================');
-  console.log(`✅ HTTPS 服务运行在 https://localhost:${PORT}`);
-  console.log('🔒 SSL 证书已加载');
-  console.log('========================================');
-  console.log('📍 API 端点:');
-  console.log(`   测试:       https://localhost:${PORT}/api/test`);
-  console.log(`   分类:       https://localhost:${PORT}/api/categories`);
-  console.log(`   配置数据:   https://localhost:${PORT}/api/config/:projectId`);
-  console.log(`   系统映射:   https://localhost:${PORT}/api/system-mapping/:productModel`);
-  console.log(`   图片服务:   https://localhost:${PORT}/public/images/`);
-  console.log(`   静态文件:   https://localhost:${PORT}/`);
-  console.log('========================================');
-  console.log('💡 示例:');
-  console.log(`   https://localhost:${PORT}/api/system-mapping/暂存仓（2000L）`);
-  console.log('========================================');
+  console.log(SERVER_LOGS.startupDivider);
+  console.log(`${SERVER_LOGS.startupServerRunning} ${URLS.serverOrigin}`);
+  console.log(SERVER_LOGS.startupSslLoaded);
+  console.log(SERVER_LOGS.startupDivider);
+  console.log(SERVER_LOGS.startupApiEndpoints);
+  console.log(`   ${SERVER_LOGS.startupApiTest}: ${URLS.serverOrigin}/api/test`);
+  console.log(`   ${SERVER_LOGS.startupApiCategories}: ${URLS.serverOrigin}/api/categories`);
+  console.log(`   ${SERVER_LOGS.startupApiConfig}: ${URLS.serverOrigin}/api/config/:projectId`);
+  console.log(`   ${SERVER_LOGS.startupApiSystemMapping}: ${URLS.serverOrigin}/api/system-mapping/:productModel`);
+  console.log(`   ${SERVER_LOGS.startupApiImages}: ${URLS.serverOrigin}/public/images/`);
+  console.log(`   ${SERVER_LOGS.startupApiStatic}: ${URLS.serverOrigin}/`);
+  console.log(SERVER_LOGS.startupDivider);
+  console.log(`${SERVER_LOGS.startupExample}: ${URLS.serverOrigin}/api/system-mapping/demo`);
+  console.log(SERVER_LOGS.startupDivider);
 });
+
+
+

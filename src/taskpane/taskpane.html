@@ -13,7 +13,7 @@
     <!-- Template styles -->
     <link href="taskpane.css" rel="stylesheet" type="text/css" />
     <style>
-        /* 新增按钮样式 */
+        /* Dialog action buttons */
         .dialog-btn {
             display: block;
             margin: 8px 0;
@@ -44,14 +44,14 @@
     <main id="app-body" class="ms-welcome__main" style="display: none;">
         <p><label id="item-subject"></label></p>
 
-        <!-- 新增三按钮，调用不同 Dialog -->
+        <!-- Action buttons -->
         <div style="margin-top: 0;">
-            <button class="dialog-btn" onclick="openDialog('dialog.html', '窗体1')">添加设备</button>
-            <button class="dialog-btn" onclick="openDevModifyDialog()">更改设备</button>
-            <button class="dialog-btn" onclick="createQuotationSheet()">生成Sheet</button>
-            <button class="dialog-btn" onclick="openDialog('form3.html', '生成报价')">生成报价</button>
-            <button class="dialog-btn" onclick="openCraftModifyDialog()">更改工艺</button>
-            <button class="dialog-btn" onclick="openQueryPriceDialog()">查询价格</button>
+            <button class="dialog-btn" id="addDeviceBtn" onclick="openDialog()"></button>
+            <button class="dialog-btn" id="modifyDeviceBtn" onclick="openDevModifyDialog()"></button>
+            <button class="dialog-btn" id="generateSheetBtn" onclick="createQuotationSheet()"></button>
+            <button class="dialog-btn" id="generateQuoteBtn" onclick="openDialog('form3.html')"></button>
+            <button class="dialog-btn" id="modifyCraftBtn" onclick="openCraftModifyDialog()"></button>
+            <button class="dialog-btn" id="queryPriceBtn" onclick="openQueryPriceDialog()"></button>
         </div>
     </main>
 

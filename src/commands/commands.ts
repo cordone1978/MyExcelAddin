@@ -1,45 +1,46 @@
 ﻿/* global Office, Excel */
 import { handleDialogData } from "../dialog/handleDialogData";
+import { SHEET_NAMES } from "../shared/sheetNames";
+import { DIALOG_PATHS, DIALOG_SIZES } from "../shared/appConstants";
+import { COMMAND_TEXT } from "../shared/dialogHtmlTextConstants";
 
-console.log("🚨 commands.ts 加载");
+console.log(COMMAND_TEXT.load);
 
 function openDialog(event: Office.AddinCommands.Event) {
-    console.log("🎯 openDialog被调用");
+    console.log(COMMAND_TEXT.openDialogCalled);
 
-    // 使用相对路径或绝对路径
-    const dialogUrl = location.origin + '/dialog.html';
+    const dialogUrl = `${location.origin}/${DIALOG_PATHS.main}`;
 
     try {
         Office.context.ui.displayDialogAsync(
             dialogUrl,
             {
-                width: 60,
-                height: 65,
+                width: DIALOG_SIZES.main.width,
+                height: DIALOG_SIZES.main.height,
                 displayInIframe: true
             },
             function(result) {
                 if (result.status === Office.AsyncResultStatus.Succeeded) {
-                    console.log("✅ 对话框打开成功");
+                    console.log(COMMAND_TEXT.dialogOpenSuccess);
                     const dialog = result.value;
 
                     dialog.addEventHandler(Office.EventType.DialogMessageReceived, async function(args) {
-                        console.log("收到对话框消息:", args.message);
+                        console.log(`${COMMAND_TEXT.dialogMessageReceived}:`, args.message);
 
                         try {
-                            // 解析对话框返回的数据
                             const data = JSON.parse(args.message);
-                            console.log("解析后的数据:", data);
+                            console.log(`${COMMAND_TEXT.parsedData}:`, data);
 
-                            // 调用插入函数
                             await handleDialogData(data);
 
-                            // 关闭对话框
                             dialog.close();
 
-                            // 显示成功消息
                             Office.context.ui.displayDialogAsync(
-                                'data:text/html,<html><body style="font-family:Arial;padding:20px;text-align:center;"><h2>✅ 数据插入成功</h2><p>已成功插入 ' + data.details.length + ' 个组件到配置表</p></body></html>',
-                                { width: 30, height: 20, displayInIframe: true },
+                                createToastHtml(
+                                    COMMAND_TEXT.successTitle,
+                                    `${COMMAND_TEXT.successPrefix}${data.details.length}${COMMAND_TEXT.successSuffix}${SHEET_NAMES.quoteConfig}`
+                                ),
+                                { width: DIALOG_SIZES.toast.width, height: DIALOG_SIZES.toast.height, displayInIframe: true },
                                 function(msgResult) {
                                     if (msgResult.status === Office.AsyncResultStatus.Succeeded) {
                                         setTimeout(() => {
@@ -50,13 +51,12 @@ function openDialog(event: Office.AddinCommands.Event) {
                             );
 
                         } catch (error) {
-                            console.error("处理对话框数据失败:", error);
+                            console.error(`${COMMAND_TEXT.handleDialogFailed}:`, error);
                             dialog.close();
 
-                            // 显示错误消息
                             Office.context.ui.displayDialogAsync(
-                                'data:text/html,<html><body style="font-family:Arial;padding:20px;text-align:center;"><h2>❌ 插入失败</h2><p>' + error.message + '</p></body></html>',
-                                { width: 30, height: 20, displayInIframe: true },
+                                createToastHtml(COMMAND_TEXT.failTitle, error.message),
+                                { width: DIALOG_SIZES.toast.width, height: DIALOG_SIZES.toast.height, displayInIframe: true },
                                 function(msgResult) {
                                     if (msgResult.status === Office.AsyncResultStatus.Succeeded) {
                                         setTimeout(() => {
@@ -68,24 +68,35 @@ function openDialog(event: Office.AddinCommands.Event) {
                         }
                     });
                 } else {
-                    console.error("❌ 对话框打开失败:", result.error.message);
+                    console.error(`${COMMAND_TEXT.dialogOpenFailed}:`, result.error.message);
                 }
 
-                // ⚠️ 必须在回调里调用 completed
                 event.completed();
             }
         );
 
     } catch (error) {
-        console.error("❌ 捕获到错误:", error);
-        event.completed(); // 出错也要调用
+        console.error(`${COMMAND_TEXT.caughtError}:`, error);
+        event.completed();
     }
 }
 
-
-// ⚠️ 关键：桌面版 Excel 必须用这个方式注册
 Office.onReady(() => {
-    console.log("✅ Office已就绪");
+    console.log(COMMAND_TEXT.officeReady);
     Office.actions.associate("openDialog", openDialog);
-    console.log("✅ openDialog已注册到Office.actions");
+    console.log(COMMAND_TEXT.actionRegistered);
 });
+
+function createToastHtml(title: string, message: string): string {
+    const html = `<html><body style="font-family:Arial;padding:20px;text-align:center;"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(message)}</p></body></html>`;
+    return `data:text/html,${encodeURIComponent(html)}`;
+}
+
+function escapeHtml(value: string): string {
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
