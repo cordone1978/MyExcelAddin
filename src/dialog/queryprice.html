@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>查询价格</title>
+    <script defer src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <link rel="stylesheet" href="queryprice.css" />
+  </head>
+  <body>
+    <div class="dialog-shell">
+      <div class="result-panel">
+        <div class="result-table">
+          <div class="result-row header">
+            <div class="result-cell name">物料名称</div>
+            <div class="result-cell desc">规格描述</div>
+            <div class="result-cell type">型号</div>
+            <div class="result-cell price">价格</div>
+          </div>
+          <div id="resultList" class="result-list"></div>
+        </div>
+      </div>
+
+      <div class="search-panel">
+        <div class="input-group">
+          <label for="mainKeyword">物料名称</label>
+          <input id="mainKeyword" class="input" type="text" placeholder="输入物料名称..." />
+        </div>
+        <div class="input-group">
+          <label for="secondKeyword">关键字</label>
+          <input id="secondKeyword" class="input" type="text" placeholder="输入关键字（可选）..." />
+        </div>
+        <div class="actions">
+          <button class="btn btn-secondary" id="cancelBtn">取消</button>
+          <button class="btn btn-primary" id="searchBtn">查询</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

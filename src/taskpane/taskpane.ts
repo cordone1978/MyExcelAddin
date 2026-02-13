@@ -1,5 +1,6 @@
 ﻿import { createQuotationSheet } from "../buildsheet";
 import { handleDialogData } from "../dialog/handleDialogData";
+import { openQueryPriceDialogController } from "./querypriceController";
 
 /* global console, document, Excel, Office */
 
@@ -52,6 +53,7 @@ Office.onReady((info) => {
     (window as any).openDialog = openDialog;
     (window as any).openDevModifyDialog = openDevModifyDialog;
     (window as any).openCraftModifyDialog = openCraftModifyDialog;
+    (window as any).openQueryPriceDialog = openQueryPriceDialog;
     (window as any).createQuotationSheet = createQuotationSheet;
     warmUpDialogResources();
   }
@@ -90,7 +92,7 @@ function openDialog(url?: string) {
             const data = JSON.parse(args.message);
             await handleDialogData(data);
           } catch (error: any) {
-            console.error("处理对话框数据失败:", error);
+            console.error("濠㈣泛瀚幃濠勨偓鐢殿攰閻﹁棄顩奸崱妯绘闁硅鍠栭妵鎴犳嫻?", error);
           }
         });
       } else {
@@ -109,12 +111,12 @@ async function openDevModifyDialog() {
     devModifyState = initData.state;
     await openDevModifyDialogWithData(initData.data, selection);
   } catch (error) {
-    console.error("打开更改设备失败:", error);
+    console.error("闁瑰灚鎸哥槐鎴﹀即鐎涙ɑ鏆悹浣瑰劤椤︻剚寰勬潏顐バ?", error);
   }
 }
 
 async function openDevModifyDialogWithData(initData: any, selection: SelectionContext) {
-  const dialog = await displayDialog("devmodify.html", { width: 75, height: 60 });
+  const dialog = await displayDialog("devmodify.html", { width: 70, height: 50 });
   devModifyDialog = dialog;
 
   dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
@@ -140,8 +142,6 @@ async function openDevModifyDialogWithData(initData: any, selection: SelectionCo
       return;
     }
   });
-
-  // init is sent after devmodify_ready
 }
 
 async function openCraftModifyDialog(selection?: SelectionContext) {
@@ -173,11 +173,13 @@ async function openCraftModifyDialog(selection?: SelectionContext) {
         return;
       }
     });
-
-    // init is sent after craftmodify_ready
   } catch (error) {
-    console.error("打开更改工艺失败:", error);
+    console.error("闁瑰灚鎸哥槐鎴﹀即鐎涙ɑ鏆€规悶鍎存竟鎾村緞鏉堫偉袝:", error);
   }
+}
+
+async function openQueryPriceDialog() {
+  await openQueryPriceDialogController(displayDialog);
 }
 
 async function handleDevModifySubmit(data: any) {
@@ -234,7 +236,7 @@ async function buildDevModifyInit(selection: SelectionContext) {
   const component = findComponent(configData, selection.componentName);
 
   if (!component) {
-    throw new Error(`未找到组件配置: ${selection.componentName}`);
+    throw new Error(`闁哄牜浜濇竟姗€宕氶幍顔剧煁濞寸姴鐖奸崢銈囩磾? ${selection.componentName}`);
   }
 
   const componentId = Number(component.config_id || component.component_id);
@@ -303,7 +305,7 @@ async function buildCraftModifyInit(selection: SelectionContext) {
   const component = findComponent(configData, selection.componentName);
 
   if (!component) {
-    throw new Error(`未找到组件配置: ${selection.componentName}`);
+    throw new Error(`闁哄牜浜濇竟姗€宕氶幍顔剧煁濞寸姴鐖奸崢銈囩磾? ${selection.componentName}`);
   }
 
   const componentId = Number(component.config_id || component.component_id);
@@ -358,7 +360,7 @@ async function getSelectionContext(): Promise<SelectionContext | null> {
         column === 3 || column === 4 || column === 5 || column === 6 ? "C" : "";
 
       if (!targetColumn) {
-        console.warn("请选择 C/D/E/F 列的组件单元格");
+        console.warn("请先选中配置表 C/D/E/F 列的组件单元格");
         return null;
       }
 
@@ -380,7 +382,7 @@ async function getSelectionContext(): Promise<SelectionContext | null> {
       const currentPrice = parseNumber(priceCellValue);
 
       if (!categoryName || !projectModel || !componentName) {
-        console.warn("缺少类别、型号或组件名称");
+        console.warn("当前行缺少分类/型号/组件名称，无法继续");
         return null;
       }
 
@@ -402,7 +404,7 @@ async function getSelectionContext(): Promise<SelectionContext | null> {
       };
     });
   } catch (error) {
-    console.error("获取选区失败:", error);
+    console.error("闁兼儳鍢茶ぐ鍥焻婢跺﹤闅樺鎯扮簿鐟?", error);
     return null;
   }
 }
@@ -485,7 +487,7 @@ async function resolveProjectId(categoryName: string, projectModel: string): Pro
   const fallback = await fetchJson(`/project-by-model/${encodeURIComponent(projectModel)}`);
   if (fallback?.product_id) return Number(fallback.product_id);
 
-  throw new Error(`未找到产品型号: ${projectModel}`);
+  throw new Error(`闁哄牜浜濇竟姗€宕氭０渚€鐛撻柛婵呯閻庣兘宕? ${projectModel}`);
 }
 
 async function fetchJson(path: string): Promise<any> {
@@ -493,7 +495,7 @@ async function fetchJson(path: string): Promise<any> {
   const response = await fetch(url);
   const result = await response.json();
   if (!result.success) {
-    throw new Error(result.error || result.message || "请求失败");
+    throw new Error(result.error || result.message || "閻犲洭鏀遍惇鐗堝緞鏉堫偉袝");
   }
   return result.data;
 }

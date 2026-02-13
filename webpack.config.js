@@ -22,6 +22,7 @@ module.exports = async (env, options) => {
       dialog: ["./src/dialog/dialog.ts", "./src/dialog/dialog.html"],
       devmodify: ["./src/dialog/devmodify.ts", "./src/dialog/devmodify.html"],
       craftmodify: ["./src/dialog/craftmodify.ts", "./src/dialog/craftmodify.html"],
+      queryprice: ["./src/dialog/queryprice.ts", "./src/dialog/queryprice.html"],
       commands: "./src/commands/commands.ts",
     },
     output: {
@@ -76,6 +77,11 @@ module.exports = async (env, options) => {
         chunks: ["craftmodify"],
       }),
       new HtmlWebpackPlugin({
+        filename: "queryprice.html",
+        template: "./src/dialog/queryprice.html",
+        chunks: ["queryprice"],
+      }),
+      new HtmlWebpackPlugin({
         filename: "commands.html",
         template: "./src/commands/commands.html",
         chunks: ["polyfill", "commands"],
@@ -106,6 +112,10 @@ module.exports = async (env, options) => {
           {
             from: "src/dialog/craftmodify.css",
             to: "craftmodify.css",
+          },
+          {
+            from: "src/dialog/queryprice.css",
+            to: "queryprice.css",
           },
           {
             from: "manifest*.xml",

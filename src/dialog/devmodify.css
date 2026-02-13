@@ -9,13 +9,15 @@ body {
   background: #f5f5f5;
   padding: 12px;
   height: 100vh;
+  overflow: hidden;
 }
 
 .dialog-shell {
   display: grid;
-  grid-template-columns: 320px 1fr 1fr;
+  grid-template-columns: 260px 1fr 1fr;
   gap: 16px;
   height: calc(100vh - 24px);
+  overflow: hidden;
 }
 
 .panel {
@@ -26,6 +28,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .panel-header {
@@ -34,6 +38,7 @@ body {
   gap: 6px;
   border-bottom: 2px solid #0078d4;
   padding-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .title {
@@ -52,6 +57,9 @@ body {
   grid-template-columns: 100px 1fr;
   gap: 10px 12px;
   align-items: center;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .label {
@@ -83,6 +91,7 @@ body {
   border-radius: 4px;
   background: #ffffff;
   height: 30px;
+  width: 100%;
 }
 
 .text-btn {
@@ -94,6 +103,7 @@ body {
   background: #ffffff;
   cursor: pointer;
   color: #0078d4;
+  width: 100%;
 }
 
 .text-btn:hover {
@@ -103,6 +113,7 @@ body {
 .actions {
   display: flex;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .btn {
@@ -131,21 +142,25 @@ body {
   background: #e0e0e0;
 }
 
+/* ========== 预览区 - 正方形自适应 ========== */
 .preview {
   background: #ffffff;
   border-radius: 10px;
-  padding: 12px;
+  padding: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden; /* ✅ 关键 */
+  min-height: 0;
 }
 
 .preview-frame {
   width: 100%;
-  height: 100%;
+  aspect-ratio: 1 / 1; /* ✅ 保持正方形 */
+  max-height: 100%; /* ✅ 不超过父容器高度 */
   border: 2px solid #0078d4;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #2c2c2c;
   position: relative;
   overflow: hidden;
@@ -154,79 +169,93 @@ body {
   justify-content: center;
 }
 
-.preview-frame::before {
-  content: "";
-  display: block;
-  padding-top: 100%;
-}
-
 .preview-frame img,
 .preview-frame .placeholder {
   position: absolute;
   inset: 0;
-  margin: auto;
   width: 100%;
   height: 100%;
 }
 
 .preview-frame img {
-  width: 100%;
-  height: 100%;
   object-fit: contain;
   display: none;
 }
 
 .placeholder {
   color: #b5b5b5;
-  font-size: 14px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
+/* ========== 工艺面板 - 紧凑版本 ========== */
 .craft-panel {
   background: #ffffff;
   border-radius: 10px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .craft-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #333;
+  flex-shrink: 0;
 }
 
 .craft-table {
   display: grid;
-  gap: 6px;
+  gap: 4px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .craft-row {
   display: grid;
-  grid-template-columns: 140px 1fr 1.1fr 0.8fr;
-  gap: 8px;
+  grid-template-columns: 120px 0.8fr 1.3fr 80px;
+  gap: 6px;
   align-items: center;
 }
 
 .craft-row.header {
-  font-size: 12px;
+  font-size: 11px;
   color: #666;
   font-weight: 600;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 1;
+  padding: 4px 0;
 }
 
 .craft-cell {
-  font-size: 12px;
+  font-size: 13px;
   color: #333;
 }
 
 .craft-cell.label {
   text-align: left;
+  font-size: 13px;
 }
 
 .craft-cell.total {
   text-align: right;
   font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+
+.craft-row .input {
+  font-size: 11px;
+  padding: 4px 6px;
+  height: 26px;
 }
 
 .craft-summary {
@@ -234,18 +263,21 @@ body {
   justify-content: space-between;
   align-items: center;
   border-top: 1px solid #ececec;
-  padding-top: 8px;
-  font-size: 12px;
+  padding-top: 6px;
+  margin-top: 4px;
+  font-size: 13px;
   color: #333;
+  flex-shrink: 0;
 }
 
 .craft-sum {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #111;
   font-variant-numeric: tabular-nums;
 }
 
+/* ========== 模态框 ========== */
 .modal-mask {
   position: fixed;
   inset: 0;

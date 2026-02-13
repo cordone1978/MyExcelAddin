@@ -10,6 +10,7 @@ export async function createQuotationSheet(systems?: SystemItem[]) {
     await Excel.run(async (context) => {
       await buildQuotationSheet(context, systems);
       await buildConfigSheet(context);
+      await buildEasypartsSheet(context);
     });
   } catch (error) {
     console.error(error);
@@ -290,6 +291,107 @@ const sections = [
 
   // 预设足够大的行高，避免插入后落入默认行高区域
   sheet.getRange("A1:S2000").format.rowHeight = 30;
+
+  // 同步所有格式设置到 Excel
+  await context.sync();
+}
+
+async function buildEasypartsSheet(context: Excel.RequestContext) {
+  const sheetName = "易损件表";
+  const existing = context.workbook.worksheets.getItemOrNullObject(sheetName);
+  existing.load("name");
+  await context.sync();
+  if (!existing.isNullObject) {
+    existing.delete();
+    await context.sync();
+  }
+
+  const sheet = context.workbook.worksheets.add(sheetName);
+  sheet.activate();
+  context.application.suspendScreenUpdatingUntilNextSync();
+
+  // 第一行：标题行 "易损件"（合并AB单元格）
+  sheet.getRange("A1:B1").merge();
+  sheet.getRange("A1").values = [["易损件"]];
+  sheet.getRange("A1").format.font.bold = true;
+  sheet.getRange("A1").format.font.size = 20;
+  sheet.getRange("A1").format.horizontalAlignment = "Center";
+  sheet.getRange("A1").format.verticalAlignment = "Center";
+
+  // 设置表头（从第2行开始）
+  const headers = [
+    "序号",
+    "设备名称",
+    "规格",
+    "型号",
+    "材质",
+    "品牌",
+    "数量",
+    "单位",
+    "单价（万元）",
+    "总价（万元）",
+    "成本单价（元）",
+    "成本总价（元）",
+    "系数",
+    "备注",
+    "备注",
+  ];
+
+  // 写入表头（第2行）
+  sheet.getRange("A2:O2").values = [headers];
+  sheet.getRange("A2:O2").format.font.bold = true;
+  sheet.getRange("A2:O2").format.horizontalAlignment = "Center";
+  sheet.getRange("A2:O2").format.verticalAlignment = "Center";
+  sheet.getRange("A2:O2").format.font.name = "Microsoft YaHei";
+  sheet.getRange("A2:O2").format.font.size = 11;
+  sheet.getRange("A2:O2").format.rowHeight = 30;
+
+  // 设置列宽
+  sheet.getRange("A:A").format.columnWidth = 40;
+  sheet.getRange("B:B").format.columnWidth = 120;
+  sheet.getRange("C:C").format.columnWidth = 200;
+  sheet.getRange("D:D").format.columnWidth = 150;
+  sheet.getRange("E:E").format.columnWidth = 100;
+  sheet.getRange("F:F").format.columnWidth = 100;
+  sheet.getRange("G:G").format.columnWidth = 40;
+  sheet.getRange("H:H").format.columnWidth = 40;
+  sheet.getRange("I:I").format.columnWidth = 80;
+  sheet.getRange("J:J").format.columnWidth = 80;
+  sheet.getRange("K:K").format.columnWidth = 80;
+  sheet.getRange("L:L").format.columnWidth = 80;
+  sheet.getRange("M:M").format.columnWidth = 40;
+  sheet.getRange("N:N").format.columnWidth = 120;
+  sheet.getRange("O:O").format.columnWidth = 150;
+
+  // 设置 K、L、M、N 列绿色背景
+  sheet.getRange("K:K").format.fill.color = "#cfe8b9";
+  sheet.getRange("L:L").format.fill.color = "#cfe8b9";
+  sheet.getRange("M:M").format.fill.color = "#cfe8b9";
+  sheet.getRange("N:N").format.fill.color = "#cfe8b9";
+
+  // 设置边框
+  const borderRange = sheet.getRange("A1:O2").format.borders;
+  borderRange.getItem("EdgeTop").style = "Continuous";
+  borderRange.getItem("EdgeTop").weight = "Medium";
+  borderRange.getItem("EdgeBottom").style = "Continuous";
+  borderRange.getItem("EdgeBottom").weight = "Medium";
+  borderRange.getItem("EdgeLeft").style = "Continuous";
+  borderRange.getItem("EdgeLeft").weight = "Medium";
+  borderRange.getItem("EdgeRight").style = "Continuous";
+  borderRange.getItem("EdgeRight").weight = "Medium";
+  borderRange.getItem("InsideHorizontal").style = "Continuous";
+  borderRange.getItem("InsideHorizontal").weight = "Medium";
+  borderRange.getItem("InsideVertical").style = "Continuous";
+  borderRange.getItem("InsideVertical").weight = "Thin";
+
+  // 单价和总价列设置为数字格式
+  sheet.getRange("L:L").format.numberFormat = "#,##0.00";
+  sheet.getRange("M:M").format.numberFormat = "#,##0.00";
+  sheet.getRange("N:N").format.numberFormat = "#,##0.00";
+  sheet.getRange("O:O").format.numberFormat = "#,##0.00";
+
+  // 预设足够大的行高，避免插入后落入默认行高区域
+  sheet.getRange("A2:O2000").format.rowHeight = 30;
 
   // 同步所有格式设置到 Excel
   await context.sync();
