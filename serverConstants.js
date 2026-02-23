@@ -39,6 +39,10 @@ const API_ROUTES = {
   projectByModel: "/api/project-by-model/:productModel",
   priceSearch: "/api/price-search",
   systemMapping: "/api/system-mapping/:typeName",
+  authLogin: "/api/auth/login",
+  authLogout: "/api/auth/logout",
+  authMe: "/api/auth/me",
+  authResetPassword: "/api/auth/reset-password",
 };
 
 const URLS = {
@@ -57,6 +61,10 @@ const DOMAIN_TERMS = {
 const SERVER_MESSAGES = {
   projectModelNotFound: "\u672a\u627e\u5230\u5bf9\u5e94\u4ea7\u54c1\u578b\u53f7",
   systemMappingNotFound: "\u672a\u627e\u5230\u5bf9\u5e94\u7684\u7cfb\u7edf\u6620\u5c04",
+  authMissingToken: "\u672a\u767b\u5f55\u6216\u767b\u5f55\u5df2\u5931\u6548",
+  authInvalidCredentials: "\u7528\u6237\u540d\u6216\u5bc6\u7801\u9519\u8bef",
+  authUserDisabled: "\u8d26\u53f7\u5df2\u505c\u7528",
+  authResetPasswordFailed: "\u91cd\u7f6e\u5bc6\u7801\u5931\u8d25",
 };
 
 const SERVER_LOGS = {
@@ -76,6 +84,10 @@ const SERVER_LOGS = {
   querySystemMappingResult: "System mapping query result",
   foundSystemMapping: "Found system mapping",
   querySystemMappingFailed: "Query system mapping failed",
+  authLoginFailed: "Auth login failed",
+  authLogoutFailed: "Auth logout failed",
+  authMeFailed: "Auth me failed",
+  authResetPasswordFailed: "Auth reset password failed",
   sslCertMissing: "SSL certificate files are missing",
   sslCertRequiredFiles: "Required files: localhost+2.pem and localhost+2-key.pem",
   startupDivider: "========================================",

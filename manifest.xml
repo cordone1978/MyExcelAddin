@@ -1,11 +1,11 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+﻿<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <Id>f7e3465d-3425-4bf6-b4cc-ec940ee88851</Id>
   <Version>1.0.0.133</Version>
   <ProviderName>Contoso</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="MyExcelAddin"/>
-  <Description DefaultValue="A template to get started."/>
+  <DisplayName DefaultValue="报价系统"/>
+  <Description DefaultValue="报价系统加载项"/>
   <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-64.png"/>
   <SupportUrl DefaultValue="https://www.contoso.com/help"/>
@@ -39,24 +39,6 @@
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                
-                <!-- 打开对话框的按钮 -->
-                <Control xsi:type="Button" id="OpenDialogButton">
-                  <Label resid="OpenDialogButton.Label"/>
-                  <Supertip>
-                    <Title resid="OpenDialogButton.Label"/>
-                    <Description resid="OpenDialogButton.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.16x16"/>
-                    <bt:Image size="32" resid="Icon.32x32"/>
-                    <bt:Image size="80" resid="Icon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>openDialog</FunctionName>
-                  </Action>
-                </Control>
-                
                 <!-- 原始的任务窗格按钮 -->
                 <Control xsi:type="Button" id="TaskpaneButton">
                   <Label resid="TaskpaneButton.Label"/>
@@ -92,16 +74,15 @@
         <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/taskpane.html"/>
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="GetStarted.Title" DefaultValue="Get started with your sample add-in!"/>
+        <bt:String id="GetStarted.Title" DefaultValue="欢迎使用报价系统"/>
         <bt:String id="CustomGroup.Label" DefaultValue="我的加载项"/>
-        <bt:String id="OpenDialogButton.Label" DefaultValue="添加设备"/>
-        <bt:String id="TaskpaneButton.Label" DefaultValue="显示任务窗格"/>
+        <bt:String id="TaskpaneButton.Label" DefaultValue="报价系统"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="GetStarted.Description" DefaultValue="Your sample add-in loaded successfully. Go to the HOME tab and click the buttons to get started."/>
-        <bt:String id="OpenDialogButton.Tooltip" DefaultValue="点击打开数据输入对话框"/>
-        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to Show a Taskpane"/>
+        <bt:String id="GetStarted.Description" DefaultValue="报价系统加载成功，请在“开始”选项卡中点击按钮开始使用。"/>
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="打开报价系统"/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
 </OfficeApp>
+

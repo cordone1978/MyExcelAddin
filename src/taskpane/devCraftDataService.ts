@@ -15,19 +15,24 @@ export async function fetchJson<T = unknown>(path: string): Promise<T> {
 }
 
 export async function resolveProjectId(categoryName: string, projectModel: string): Promise<number> {
+  const normalizedCategoryName = String(categoryName || "").trim();
+  const normalizedProjectModel = String(projectModel || "").trim();
   const categories = await fetchJson<Array<JsonMap>>(API_PATHS.categories);
-  const category = (categories || []).find((item) => String(item.name || "").trim() === categoryName.trim());
+  const category =
+    normalizedCategoryName.length > 0
+      ? (categories || []).find((item) => String(item.name || "").trim() === normalizedCategoryName)
+      : null;
 
   if (category) {
     const projects = await fetchJson<Array<JsonMap>>(`${API_PATHS.projects}/${category.id}`);
-    const project = (projects || []).find((item) => String(item.name || "").trim() === projectModel.trim());
+    const project = (projects || []).find((item) => String(item.name || "").trim() === normalizedProjectModel);
     if (project) return Number(project.id);
   }
 
-  const fallback = await fetchJson<JsonMap>(`${API_PATHS.projectByModel}/${encodeURIComponent(projectModel)}`);
+  const fallback = await fetchJson<JsonMap>(`${API_PATHS.projectByModel}/${encodeURIComponent(normalizedProjectModel)}`);
   if (fallback?.product_id) return Number(fallback.product_id);
 
-  throw new Error(`${FLOW_MESSAGES.projectModelNotFoundPrefix}: ${projectModel}`);
+  throw new Error(`${FLOW_MESSAGES.projectModelNotFoundPrefix}: ${normalizedProjectModel}`);
 }
 
 export function findComponent(configData: ComponentRecord[], componentName: string) {

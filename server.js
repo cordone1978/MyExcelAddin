@@ -4,6 +4,7 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
 const {
   SERVER_CONFIG,
   DATABASE_CONFIG,
@@ -16,6 +17,7 @@ const {
 } = require("./serverConstants");
 
 const app = express();
+const authSessions = new Map();
 
 // Middleware
 app.use(cors());
@@ -32,6 +34,35 @@ const pool = mysql.createPool({
 // Export active DB config for external modules
 module.exports.DATABASE_CONFIG = DATABASE_CONFIG;
 module.exports.ACTIVE_DB = ACTIVE_DB;
+
+function getBearerToken(req) {
+  const authHeader = req.headers.authorization || "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : "";
+}
+
+function hashSha256(text) {
+  return crypto.createHash("sha256").update(String(text || ""), "utf8").digest("hex");
+}
+
+function verifyPassword(inputPassword, storedPasswordHash) {
+  const input = String(inputPassword || "");
+  const stored = String(storedPasswordHash || "");
+  if (!stored) return false;
+  return stored === input || stored === hashSha256(input);
+}
+
+function isSha256Hex(text) {
+  return /^[a-f0-9]{64}$/i.test(String(text || ""));
+}
+
+function clearUserSessions(userId) {
+  for (const [token, session] of authSessions.entries()) {
+    if (Number(session?.userId) === Number(userId)) {
+      authSessions.delete(token);
+    }
+  }
+}
 
 // API routes (must be defined before static file serving)
 
@@ -331,6 +362,186 @@ app.get(API_ROUTES.priceSearch, async (req, res) => {
   }
 });
 
+// 8.4 Auth login
+app.post(API_ROUTES.authLogin, async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").trim();
+    const password = String(req.body?.password || "");
+
+    if (!username || !password) {
+      res.status(401).json({ success: false, error: SERVER_MESSAGES.authInvalidCredentials });
+      return;
+    }
+
+    const [rows] = await pool.query(
+      `
+      SELECT
+        id,
+        username,
+        full_name,
+        password_hash,
+        is_active
+      FROM app_users
+      WHERE username = ?
+      LIMIT 1
+    `,
+      [username]
+    );
+
+    if (!rows.length) {
+      res.status(401).json({ success: false, error: SERVER_MESSAGES.authInvalidCredentials });
+      return;
+    }
+
+    const user = rows[0];
+    if (Number(user.is_active) !== 1) {
+      res.status(403).json({ success: false, error: SERVER_MESSAGES.authUserDisabled });
+      return;
+    }
+
+    if (!verifyPassword(password, user.password_hash)) {
+      res.status(401).json({ success: false, error: SERVER_MESSAGES.authInvalidCredentials });
+      return;
+    }
+
+    const storedPassword = String(user.password_hash || "");
+    if (storedPassword === password && !isSha256Hex(storedPassword)) {
+      try {
+        await pool.query(
+          `
+          UPDATE app_users
+          SET password_hash = ?
+          WHERE id = ?
+        `,
+          [hashSha256(password), user.id]
+        );
+      } catch (updateError) {
+        console.warn("Password hash upgrade failed:", updateError.message || updateError);
+      }
+    }
+
+    const token = crypto.randomUUID();
+    const session = {
+      userId: Number(user.id),
+      username: String(user.username || username),
+      fullName: String(user.full_name || user.username || username),
+      createdAt: new Date().toISOString(),
+    };
+    authSessions.set(token, session);
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        userId: session.userId,
+        username: session.username,
+        fullName: session.fullName,
+      },
+    });
+  } catch (error) {
+    console.error(`${SERVER_LOGS.authLoginFailed}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 8.5 Auth logout
+app.post(API_ROUTES.authLogout, async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    if (token) {
+      authSessions.delete(token);
+    }
+    res.json({ success: true, data: { loggedOut: true } });
+  } catch (error) {
+    console.error(`${SERVER_LOGS.authLogoutFailed}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 8.6 Auth me
+app.get(API_ROUTES.authMe, async (req, res) => {
+  try {
+    const token = getBearerToken(req);
+    const session = token ? authSessions.get(token) : null;
+    if (!session) {
+      res.status(401).json({ success: false, error: SERVER_MESSAGES.authMissingToken });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        userId: session.userId,
+        username: session.username,
+        fullName: session.fullName,
+      },
+    });
+  } catch (error) {
+    console.error(`${SERVER_LOGS.authMeFailed}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 8.7 Auth reset password
+app.post(API_ROUTES.authResetPassword, async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").trim();
+    const oldPassword = String(req.body?.oldPassword || "");
+    const newPassword = String(req.body?.newPassword || "");
+
+    if (!username || !oldPassword || !newPassword) {
+      res.status(400).json({ success: false, error: SERVER_MESSAGES.authResetPasswordFailed });
+      return;
+    }
+
+    const [rows] = await pool.query(
+      `
+      SELECT
+        id,
+        username,
+        password_hash,
+        is_active
+      FROM app_users
+      WHERE username = ?
+      LIMIT 1
+    `,
+      [username]
+    );
+
+    if (!rows.length) {
+      res.status(401).json({ success: false, error: SERVER_MESSAGES.authInvalidCredentials });
+      return;
+    }
+
+    const user = rows[0];
+    if (Number(user.is_active) !== 1) {
+      res.status(403).json({ success: false, error: SERVER_MESSAGES.authUserDisabled });
+      return;
+    }
+
+    if (!verifyPassword(oldPassword, user.password_hash)) {
+      res.status(401).json({ success: false, error: SERVER_MESSAGES.authInvalidCredentials });
+      return;
+    }
+
+    await pool.query(
+      `
+      UPDATE app_users
+      SET password_hash = ?
+      WHERE id = ?
+    `,
+      [hashSha256(newPassword), user.id]
+    );
+
+    clearUserSessions(user.id);
+
+    res.json({ success: true, data: { username } });
+  } catch (error) {
+    console.error(`${SERVER_LOGS.authResetPasswordFailed}:`, error);
+    res.status(500).json({ success: false, error: error.message || SERVER_MESSAGES.authResetPasswordFailed });
+  }
+});
+
 // 9. Get product type to system mapping
 app.get(API_ROUTES.systemMapping, async (req, res) => {
   try {
@@ -412,6 +623,3 @@ https.createServer(httpsOptions, app).listen(PORT, () => {
   console.log(`${SERVER_LOGS.startupExample}: ${URLS.serverOrigin}/api/system-mapping/demo`);
   console.log(SERVER_LOGS.startupDivider);
 });
-
-
-

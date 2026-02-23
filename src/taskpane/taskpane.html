@@ -5,59 +5,68 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Contoso Task Pane Add-in</title>
+    <title>报价系统</title>
 
     <!-- Office JavaScript API -->
     <script defer type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 
     <!-- Template styles -->
     <link href="taskpane.css" rel="stylesheet" type="text/css" />
-    <style>
-        /* Dialog action buttons */
-        .dialog-btn {
-            display: block;
-            margin: 8px 0;
-            padding: 8px 12px;
-            background-color: #0078d4;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 200px;
-            text-align: left;
-        }
-
-        .dialog-btn:hover {
-            background-color: #005a9e;
-        }
-    </style>
 </head>
 
 <body class="app-shell">
     <header class="ms-welcome__header app-header">
-        <img width="45" height="45" src="../../assets/logo-filled.png" alt="Contoso" title="Contoso" />
-        <h1 class="app-title">Welcome</h1>
+        <img width="45" height="45" src="../../assets/logo-filled.png" alt="报价系统" title="报价系统" />
+        <h1 class="app-title">报价系统</h1>
     </header>
     <section id="sideload-msg" class="ms-welcome__main">
-        <h2 class="app-subtitle">Please <a target="_blank" href="https://learn.microsoft.com/office/dev/add-ins/testing/test-debug-office-add-ins#sideload-an-office-add-in-for-testing">sideload</a> your add-in to see app body.</h2>
+        <h2 class="app-subtitle">请先<a target="_blank" href="https://learn.microsoft.com/office/dev/add-ins/testing/test-debug-office-add-ins#sideload-an-office-add-in-for-testing">旁加载</a>加载项后查看功能界面。</h2>
     </section>
-    <main id="app-body" class="ms-welcome__main" style="display: none;">
-        <p><label id="item-subject"></label></p>
+    <main id="app-body" class="ms-welcome__main app-main" style="display: none;">
+        <p class="app-meta"><label id="item-subject"></label></p>
 
-        <!-- Action buttons -->
-        <div style="margin-top: 0;">
-            <button class="dialog-btn" id="addDeviceBtn" onclick="openDialog()"></button>
-            <button class="dialog-btn" id="modifyDeviceBtn" onclick="openDevModifyDialog()"></button>
-            <button class="dialog-btn" id="generateSheetBtn" onclick="createQuotationSheet()"></button>
-            <button class="dialog-btn" id="generateQuoteBtn" onclick="openDialog('form3.html')"></button>
-            <button class="dialog-btn" id="modifyCraftBtn" onclick="openCraftModifyDialog()"></button>
-            <button class="dialog-btn" id="queryPriceBtn" onclick="openQueryPriceDialog()"></button>
+        <section class="panel panel-auth" id="authPanel" aria-labelledby="authPanelTitle">
+            <div class="panel-head">
+                <h2 class="panel-title" id="authPanelTitle">登录系统</h2>
+                <span class="panel-badge">账户</span>
+            </div>
+            <p class="panel-status"><label id="loginStatusLabel"></label></p>
+            <p class="user-info" id="userInfoLabel"></p>
+            <p class="auth-feedback" id="authFeedbackLabel"></p>
+            <div class="field-list">
+                <input class="login-input" id="usernameInput" type="text" placeholder="用户名" autocomplete="username" />
+                <input class="login-input" id="passwordInput" type="password" placeholder="密码" autocomplete="current-password" />
+                <input class="login-input is-hidden" id="newPasswordInput" type="password" placeholder="新密码（重置用）" autocomplete="new-password" />
+            </div>
+            <div class="reset-password-tip is-hidden" id="resetPasswordTip" role="note">
+                重置密码需要填写“用户名 + 当前密码 + 新密码”，提交后请使用新密码重新登录。
+            </div>
+            <div class="btn-grid two-cols">
+                <button class="dialog-btn btn-primary" id="loginBtn" onclick="handleLoginClick()"></button>
+                <button class="dialog-btn btn-secondary" id="resetPasswordBtn" onclick="handleResetPasswordClick()"></button>
+                <button class="dialog-btn btn-secondary is-hidden" id="cancelResetPasswordBtn" onclick="handleCancelResetPasswordClick()"></button>
+                <button class="dialog-btn btn-primary is-hidden" id="confirmResetPasswordBtn" onclick="handleConfirmResetPasswordClick()"></button>
+            </div>
+        </section>
+
+        <section class="panel panel-actions is-hidden" id="actionPanel" aria-label="功能区">
+            <div class="btn-grid">
+                <button class="dialog-btn btn-secondary" id="addDeviceBtn" onclick="handleAddDeviceClick()"></button>
+                <button class="dialog-btn btn-secondary" id="modifyDeviceBtn" onclick="handleModifyDeviceClick()"></button>
+                <button class="dialog-btn btn-secondary" id="generateSheetBtn" onclick="handleGenerateSheetClick()"></button>
+                <button class="dialog-btn btn-secondary" id="generateQuoteBtn" onclick="handleGenerateQuoteClick()"></button>
+                <button class="dialog-btn btn-secondary" id="queryPriceBtn" onclick="handleQueryPriceClick()"></button>
+            </div>
+        </section>
+
+        <div class="account-dock is-hidden" id="accountDock">
+            <button class="account-dock-toggle" id="accountDockToggle" onclick="handleAccountDockToggle()">
+                <span class="account-dock-label" id="accountDockLabel"></span>
+            </button>
+            <button class="account-dock-btn" id="logoutDockBtn" onclick="handleLoginClick()">退出</button>
         </div>
     </main>
 
     </body>
 
 </html>
-
-
-

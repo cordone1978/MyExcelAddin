@@ -42,11 +42,14 @@ export const CRAFTMODIFY_HTML_TEXT = {
 } as const;
 
 export const TASKPANE_HTML_TEXT = {
+  loginBtn: "登录",
+  resetPasswordBtn: "重置密码",
+  cancelResetPasswordBtn: "取消",
+  confirmResetPasswordBtn: "确认",
   addDeviceBtn: "添加设备",
   modifyDeviceBtn: "更改设备",
-  generateSheetBtn: "生成Sheet",
+  generateSheetBtn: "生成模板",
   generateQuoteBtn: "生成报价",
-  modifyCraftBtn: "更改工艺",
   queryPriceBtn: "查询价格",
 } as const;
 
@@ -79,4 +82,3 @@ export const TASKPANE_LOG_TEXT = {
   dialogOpenFailedPrefix: "Error opening dialog after",
   dialogOpenFailedSuffix: "ms:",
 } as const;
-

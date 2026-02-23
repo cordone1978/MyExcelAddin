@@ -9,6 +9,22 @@ interface SystemItem {
   name: string;
 }
 
+function buildConfigSectionTotalFormula(titleRow: number): string {
+  return `=IF($O${titleRow}<>"总价","",LET(s,ROW()+2,n,IFERROR(AGGREGATE(15,6,ROW($O$1:$O$9978)/(ROW($O$1:$O$9978)>=s)/($O$1:$O$9978="总价"),1),0),e,IF(n=0,LOOKUP(2,1/($B$1:$B$9978<>""),ROW($B$1:$B$9978)),n-1),IF(e<s,0,SUM(INDEX($P:$P,s):INDEX($P:$P,e)))))`;
+}
+
+function splitSectionTitle(rawTitle: string): { ordinal: string; text: string } {
+  const title = String(rawTitle || "").trim();
+  const match = title.match(/^([一二三四五六七八九十百零\d]+)[、.\s]*(.*)$/);
+  if (!match) {
+    return { ordinal: "", text: title };
+  }
+  return {
+    ordinal: String(match[1] || "").trim(),
+    text: String(match[2] || "").trim(),
+  };
+}
+
 export async function createQuotationSheet(systems?: SystemItem[]) {
   try {
     await Excel.run(async (context) => {
@@ -33,6 +49,7 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
 
   const sheet = context.workbook.worksheets.add(sheetName);
   sheet.activate();
+  sheet.showGridlines = false;
   context.application.suspendScreenUpdatingUntilNextSync();
 
   sheet.getRange("A1:D1").merge();
@@ -121,6 +138,7 @@ async function buildConfigSheet(context: Excel.RequestContext) {
 
   const sheet = context.workbook.worksheets.add(sheetName);
   sheet.activate();
+  sheet.showGridlines = false;
   context.application.suspendApiCalculationUntilNextSync();
   context.application.suspendScreenUpdatingUntilNextSync();
 
@@ -132,36 +150,44 @@ async function buildConfigSheet(context: Excel.RequestContext) {
   const titleRows: number[] = [];
 
   sections.forEach((title) => {
-    sheet.getRange(`A${row}:S${row}`).values = [new Array(headers.length).fill("")];
-    sheet.getRange(`A${row}:K${row}`).merge();
-    sheet.getRange(`A${row}`).values = [[title]];
+    const parsedTitle = splitSectionTitle(title);
+    sheet.getRange(`A${row}:R${row}`).values = [new Array(headers.length).fill("")];
+    sheet.getRange(`B${row}:K${row}`).merge();
+    sheet.getRange(`A${row}`).values = [[parsedTitle.ordinal]];
+    sheet.getRange(`B${row}`).values = [[parsedTitle.text]];
     sheet.getRange(`A${row}`).format.font.bold = true;
+    sheet.getRange(`B${row}`).format.font.bold = true;
+    sheet.getRange(`A${row}`).format.horizontalAlignment = "Center";
+    sheet.getRange(`A${row}`).format.verticalAlignment = "Center";
     titleRows.push(row);
 
-    sheet.getRange(`L${row}`).values = [[BUILDSHEET_TEXT.configSectionTotalLabel]];
-    sheet.getRange(`L${row}`).format.horizontalAlignment = "Center";
-    sheet.getRange(`L${row}`).format.font.bold = true;
-    sheet.getRange(`M${row}`).values = [[""]];
-    sheet.getRange(`M${row}`).format.horizontalAlignment = "Center";
-    sheet.getRange(`M${row}`).format.font.bold = true;
+    sheet.getRange(`O${row}`).values = [[BUILDSHEET_TEXT.configSectionTotalLabel]];
+    sheet.getRange(`O${row}`).format.horizontalAlignment = "Center";
+    sheet.getRange(`O${row}`).format.font.bold = true;
+    sheet.getRange(`P${row}`).formulas = [[buildConfigSectionTotalFormula(row)]];
+    sheet.getRange(`P${row}`).format.horizontalAlignment = "Center";
+    sheet.getRange(`P${row}`).format.font.bold = true;
 
     row += 1;
 
-    sheet.getRange(`A${row}:S${row}`).values = [headers];
-    sheet.getRange(`A${row}:S${row}`).format.font.bold = true;
-    sheet.getRange(`A${row}:S${row}`).format.horizontalAlignment = "Center";
-    sheet.getRange(`A${row}:S${row}`).format.verticalAlignment = "Center";
+    sheet.getRange(`A${row}:R${row}`).values = [headers];
+    sheet.getRange(`A${row}:R${row}`).format.font.bold = true;
+    sheet.getRange(`A${row}:R${row}`).format.horizontalAlignment = "Center";
+    sheet.getRange(`A${row}:R${row}`).format.verticalAlignment = "Center";
     sheet.getRange(`A${row}`).format.rowHeight = BUILDSHEET_STYLE.defaultRowHeight;
     row += 1;
   });
 
   const lastRow = row - 1;
-  sheet.getRange(`A1:S${lastRow}`).format.font.name = BUILDSHEET_STYLE.fontName;
-  sheet.getRange(`A1:S${lastRow}`).format.font.size = BUILDSHEET_STYLE.fontSize;
+  sheet.getRange(`A1:R${lastRow}`).format.font.name = BUILDSHEET_STYLE.fontName;
+  sheet.getRange(`A1:R${lastRow}`).format.font.size = BUILDSHEET_STYLE.fontSize;
 
-  sheet.getRange("N:R").format.fill.color = BUILDSHEET_STYLE.costAreaColor;
+  sheet.getRange("L:L").format.fill.color = BUILDSHEET_STYLE.costAreaColor;
+  sheet.getRange("M:M").format.fill.color = BUILDSHEET_STYLE.costAreaColor;
+  sheet.getRange("N:N").format.fill.color = BUILDSHEET_STYLE.costAreaColor;
+  sheet.getRange("Q:Q").format.fill.color = BUILDSHEET_STYLE.costAreaColor;
 
-  const borders = sheet.getRange(`A1:S${lastRow}`).format.borders;
+  const borders = sheet.getRange(`A1:R${lastRow}`).format.borders;
   borders.getItem("InsideHorizontal").style = "Continuous";
   borders.getItem("InsideHorizontal").weight = "Medium";
   borders.getItem("InsideVertical").style = "Continuous";
@@ -176,7 +202,7 @@ async function buildConfigSheet(context: Excel.RequestContext) {
   borders.getItem("EdgeRight").weight = "Medium";
 
   titleRows.forEach((titleRow) => {
-    const titleBorders = sheet.getRange(`A${titleRow}:S${titleRow}`).format.borders;
+    const titleBorders = sheet.getRange(`A${titleRow}:R${titleRow}`).format.borders;
     titleBorders.getItem("InsideVertical").style = "None";
     titleBorders.getItem("EdgeTop").style = "Continuous";
     titleBorders.getItem("EdgeTop").weight = "Medium";
@@ -204,7 +230,12 @@ async function buildConfigSheet(context: Excel.RequestContext) {
   sheet.getRange("P:P").format.columnWidth = cfg.P;
   sheet.getRange("Q:Q").format.columnWidth = cfg.Q;
   sheet.getRange("R:R").format.columnWidth = cfg.R;
-  sheet.getRange("S:S").format.columnWidth = cfg.S;
+
+  sheet.getRange("L:L").format.numberFormat = "#,##0";
+  sheet.getRange("M:M").format.numberFormat = "#,##0";
+  sheet.getRange("N:N").format.numberFormat = "#,##0";
+  sheet.getRange("O:O").format.numberFormat = "#,##0";
+  sheet.getRange("P:P").format.numberFormat = "#,##0";
 
   sheet.getRange(BUILDSHEET_RANGES.configLongRows).format.rowHeight = BUILDSHEET_STYLE.defaultRowHeight;
   await context.sync();
@@ -222,6 +253,7 @@ async function buildEasypartsSheet(context: Excel.RequestContext) {
 
   const sheet = context.workbook.worksheets.add(sheetName);
   sheet.activate();
+  sheet.showGridlines = false;
   context.application.suspendScreenUpdatingUntilNextSync();
 
   sheet.getRange("A1:B1").merge();

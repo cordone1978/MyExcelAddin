@@ -42,12 +42,13 @@ export async function getSelectionContext(): Promise<SelectionContext | null> {
         return null;
       }
 
-      const rowRange = sheet.getRange(`A${row}:N${row}`);
+      const rowRange = sheet.getRange(`A${row}:R${row}`);
       rowRange.load("values");
       await context.sync();
 
       const values = rowRange.values[0] || [];
-      const categoryName = String(values[0] || "").trim();
+      const rawCategoryValue = String(values[0] || "").trim();
+      const categoryName = /^\d+$/.test(rawCategoryValue) ? "" : rawCategoryValue;
       const projectModel = String(values[1] || "").trim();
       const componentName = String(values[2] || "").trim();
       const componentDesc = String(values[3] || "").trim();
@@ -56,10 +57,10 @@ export async function getSelectionContext(): Promise<SelectionContext | null> {
       const componentBrand = String(values[6] || "").trim();
       const componentUnit = String(values[8] || "").trim();
       const isEasyparts = SHEET_NAME_ALIASES.wearParts.includes(sheet.name);
-      const priceCellValue = isEasyparts ? values[11] : values[13];
+      const priceCellValue = values[11];
       const currentPrice = parseNumber(priceCellValue);
 
-      if (!categoryName || !projectModel || !componentName) {
+      if (!projectModel || !componentName) {
         console.warn(FLOW_MESSAGES.missingRequiredSelection);
         return null;
       }
@@ -110,10 +111,9 @@ export async function writeToSheet(selection: SelectionContext, payload: CellWri
     if (selection.isEasyparts) {
       targetCell.getOffsetRange(0, 9).values = [[priceValue]];
     } else {
-      targetCell.getOffsetRange(0, 11).values = [[priceValue]];
+      targetCell.getOffsetRange(0, 9).values = [[priceValue]];
     }
 
     await context.sync();
   });
 }
-

@@ -209,7 +209,7 @@ async function applyQuoteConfigReplace(
   currentRowRange.format.autofitRows();
   currentRowRange.format.load("rowHeight");
   sheet.getRange(`I${row}`).values = [[rowData.unit || UI_DEFAULTS.defaultUnit]];
-  sheet.getRange(`N${row}`).values = [[rowData.price || 0]];
+  sheet.getRange(`L${row}`).values = [[rowData.price || 0]];
 
   if (!configQtyCell.values[0][0]) {
     configQtyCell.values = [[UI_DEFAULTS.defaultQuantity]];
@@ -249,24 +249,23 @@ async function assertReplaceAllowed(
 
   // 报价配置表：
   // 1) 表头行：C列等于“组件名称”
-  // 2) 分区标题行：L列等于“总价”且 C列为空
+  // 2) 分区标题行：O列等于“总价”且 C列为空
   const cCell = sheet.getRange(`C${row}`);
-  const lCell = sheet.getRange(`L${row}`);
+  const oCell = sheet.getRange(`O${row}`);
   cCell.load("values");
-  lCell.load("values");
+  oCell.load("values");
   await context.sync();
 
   const cText = String(cCell.values[0]?.[0] || "").trim();
-  const lText = String(lCell.values[0]?.[0] || "").trim();
+  const oText = String(oCell.values[0]?.[0] || "").trim();
   const configHeaderName = String(BUILDSHEET_TEXT.configHeaders[2] || "").trim();
   const sectionTotalLabel = String(BUILDSHEET_TEXT.configSectionTotalLabel || "").trim();
 
   const isHeaderRow = cText === configHeaderName;
-  const isSectionTitleRow = cText.length === 0 && lText === sectionTotalLabel;
+  const isSectionTitleRow = cText.length === 0 && oText === sectionTotalLabel;
 
   if (isHeaderRow || isSectionTitleRow) {
     throw new Error(FLOW_MESSAGES.replaceOnHeaderOrSectionForbidden);
   }
 }
-
 

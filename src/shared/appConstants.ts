@@ -28,6 +28,10 @@ export const API_PATHS = {
   projectByModel: "/project-by-model",
   priceSearch: "/price-search",
   systemMapping: "/system-mapping",
+  authLogin: "/auth/login",
+  authLogout: "/auth/logout",
+  authMe: "/auth/me",
+  authResetPassword: "/auth/reset-password",
 } as const;
 
 export const DIALOG_PATHS = {
@@ -57,6 +61,7 @@ export const UI_DEFAULTS = {
   defaultQueryFailMessage: "查询失败",
   defaultSelectPriceMessage: "请先选择一条价格记录",
   defaultRowDataMessage: "请选择数据行，不要选择表头。",
+  authTokenStorageKey: "quotation_addin_auth_token",
 } as const;
 
 export const EXCEL_LAYOUT = {
