@@ -23,6 +23,7 @@ module.exports = async (env, options) => {
       devmodify: ["./src/dialog/devmodify.ts", "./src/dialog/devmodify.html"],
       craftmodify: ["./src/dialog/craftmodify.ts", "./src/dialog/craftmodify.html"],
       queryprice: ["./src/dialog/queryprice.ts", "./src/dialog/queryprice.html"],
+      quoteSummaryPreview: ["./src/quote-preview/quoteSummaryPreview.ts", "./src/quote-preview/quoteSummaryPreview.html"],
       commands: "./src/commands/commands.ts",
     },
     output: {
@@ -82,6 +83,11 @@ module.exports = async (env, options) => {
         chunks: ["queryprice"],
       }),
       new HtmlWebpackPlugin({
+        filename: "quoteSummaryPreview.html",
+        template: "./src/quote-preview/quoteSummaryPreview.html",
+        chunks: ["quoteSummaryPreview"],
+      }),
+      new HtmlWebpackPlugin({
         filename: "commands.html",
         template: "./src/commands/commands.html",
         chunks: ["polyfill", "commands"],
@@ -92,14 +98,6 @@ module.exports = async (env, options) => {
           {
             from: "assets/*",
             to: "assets/[name][ext][query]",
-          },
-          {
-            from: "public/form2.html",
-            to: "form2.html",
-          },
-          {
-            from: "public/form3.html",
-            to: "form3.html",
           },
           {
             from: "src/dialog/dialog.css",
@@ -116,6 +114,10 @@ module.exports = async (env, options) => {
           {
             from: "src/dialog/queryprice.css",
             to: "queryprice.css",
+          },
+          {
+            from: "src/quote-preview/quoteSummaryPreview.css",
+            to: "quoteSummaryPreview.css",
           },
           {
             from: "manifest*.xml",

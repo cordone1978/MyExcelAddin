@@ -1,0 +1,10 @@
+﻿{
+  "hostName": "quotation.company",
+  "defaultServerIp": "192.168.1.79",
+  "port": 3001,
+  "sharePath": "\\\\quotation.company\\office-addins",
+  "smbUsername": "addinread",
+  "smbPassword": "addinread",
+  "openBrowser": true,
+  "openExcel": true
+}

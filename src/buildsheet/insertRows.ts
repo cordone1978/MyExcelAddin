@@ -161,9 +161,6 @@ function findInsertRowBySelectionSync(
   selectedRow: number,
   selectedColumn: number
 ): InsertSectionInfo {
-  if (selectedColumn !== 1) {
-    throw new Error("请先切换到报价配置表，并点击相应的A列单元格。");
-  }
   if (abUsedRange.isNullObject) {
     throw new Error("报价配置表为空，请先生成模板。");
   }
@@ -174,6 +171,9 @@ function findInsertRowBySelectionSync(
   const selectedIndex = selectedRow - rowOffset - 1;
   if (selectedIndex < 0 || selectedIndex >= rowCount) {
     throw new Error("所选单元格不在报价配置表有效区域内。");
+  }
+  if (selectedColumn < 1) {
+    throw new Error("请先切换到报价配置表，并点击相应的系列区域单元格。");
   }
 
   const aText = String(values[selectedIndex]?.[0] ?? "").trim();

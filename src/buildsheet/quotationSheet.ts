@@ -60,6 +60,7 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
   sheet.getRange("A1").format.verticalAlignment = "Center";
 
   sheet.getRange("A2:D7").values = BUILDSHEET_TEXT.quoteInfoRows;
+  sheet.getRange("B2:D2").merge();
 
   sheet.getRange("A7:D7").merge();
   sheet.getRange("A7").values = [[BUILDSHEET_TEXT.quoteTitle]];
@@ -105,7 +106,7 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
 
   sheet.getRange(BUILDSHEET_RANGES.quoteMain).format.font.name = BUILDSHEET_STYLE.fontName;
   sheet.getRange(BUILDSHEET_RANGES.quoteMain).format.font.size = BUILDSHEET_STYLE.fontSize;
-  sheet.getRange("A1").format.font.size = 16;
+  sheet.getRange("A1").format.font.size = BUILDSHEET_STYLE.fontSize + 9;
 
   const borderRange = sheet.getRange(BUILDSHEET_RANGES.quoteMain).format.borders;
   borderRange.getItem("InsideHorizontal").style = "Continuous";
@@ -116,6 +117,7 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
   borderRange.getItem("EdgeRight").style = "Continuous";
 
   sheet.getRange("A:A").format.rowHeight = BUILDSHEET_STYLE.defaultRowHeight;
+  sheet.getRange("1:1").format.rowHeight = BUILDSHEET_STYLE.defaultRowHeight * 3;
   sheet.getRange(BUILDSHEET_RANGES.quoteMain).format.autofitColumns();
 
   sheet.getRange("A:A").format.columnWidth = BUILDSHEET_COLUMNS.quote.A;

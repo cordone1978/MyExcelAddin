@@ -904,11 +904,13 @@ function normalizeAnnotations(annotations) {
     async function confirmData() {
         if (!currentCategoryId || !currentProjectId) {
             console.warn(DIALOG_TEXT.needSelectCategoryAndProject);
+            alert(DIALOG_TEXT.needSelectCategoryAndProject);
             return;
         }
 
         if (selectedDetails.size === 0) {
             console.warn(DIALOG_TEXT.needSelectAtLeastOneDetail);
+            alert(DIALOG_TEXT.needSelectAtLeastOneDetail);
             return;
         }
 
@@ -949,7 +951,6 @@ function normalizeAnnotations(annotations) {
     // 暴露函数到全局作用域，供 HTML onclick 使用
     (window as any).confirmData = confirmData;
     (window as any).clearAll = clearAll;
-
 
 
 

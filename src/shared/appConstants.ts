@@ -28,6 +28,7 @@ export const API_PATHS = {
   projectByModel: "/project-by-model",
   priceSearch: "/price-search",
   systemMapping: "/system-mapping",
+  exportQuotePdf: "/export-quote-pdf",
   authLogin: "/auth/login",
   authLogout: "/auth/logout",
   authMe: "/auth/me",
@@ -39,12 +40,14 @@ export const DIALOG_PATHS = {
   devModify: "devmodify.html",
   craftModify: "craftmodify.html",
   queryPrice: "queryprice.html",
+  generateQuote: "quoteSummaryPreview.html",
 } as const;
 
 export const DIALOG_SIZES = {
   main: { width: 60, height: 65 },
   devModify: { width: 70, height: 50 },
   queryPrice: { width: 75, height: 60 },
+  generateQuote: { width: 71, height: 100 },
   default: { width: 50, height: 60 },
   toast: { width: 30, height: 20 },
 } as const;

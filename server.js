@@ -582,14 +582,77 @@ app.get(API_ROUTES.systemMapping, async (req, res) => {
   }
 });
 
+// 10. Export quote preview page as PDF
+app.post(API_ROUTES.exportQuotePdf, async (req, res) => {
+  let browser;
+  try {
+    const html = String(req.body?.html || "").trim();
+    const fileName = String(req.body?.fileName || "报价汇总表").trim() || "报价汇总表";
+
+    if (!html) {
+      res.status(400).json({ success: false, error: "缺少导出内容" });
+      return;
+    }
+
+    let puppeteer;
+    try {
+      puppeteer = require("puppeteer");
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: "服务器未安装 puppeteer，请先执行 npm i puppeteer",
+      });
+      return;
+    }
+
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.emulateMediaType("screen");
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: {
+        top: "10mm",
+        right: "10mm",
+        bottom: "10mm",
+        left: "10mm",
+      },
+    });
+
+    const encodedName = encodeURIComponent(`${fileName}.pdf`);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodedName}`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Export quote PDF failed:", error);
+    res.status(500).json({ success: false, error: error.message || "导出PDF失败" });
+  } finally {
+    if (browser) {
+      try {
+        await browser.close();
+      } catch {
+        // ignore
+      }
+    }
+  }
+});
+
 // Static file serving (must be after API routes)
 app.use('/public', express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // HTTPS server
 
-// Read SSL certificates from parent directory
-const certBaseDir = path.resolve(__dirname, "..");
+// Prefer external cert directory to avoid certificate files being coupled to code updates.
+const certBaseDir = process.env.CERT_BASE_DIR
+  ? path.resolve(process.env.CERT_BASE_DIR)
+  : path.resolve(__dirname, "..");
 const certKeyPath = path.join(certBaseDir, SERVER_CONFIG.certKeyFile);
 const certPemPath = path.join(certBaseDir, SERVER_CONFIG.certPemFile);
 
@@ -597,6 +660,7 @@ if (!fs.existsSync(certKeyPath) || !fs.existsSync(certPemPath)) {
   console.error(SERVER_LOGS.sslCertMissing);
   console.error(`   ${certBaseDir}`);
   console.error(`   ${SERVER_LOGS.sslCertRequiredFiles}`);
+  console.error("   Tip: set CERT_BASE_DIR to an external certificate directory.");
   process.exit(1);
 }
 
@@ -611,6 +675,7 @@ https.createServer(httpsOptions, app).listen(PORT, () => {
   console.log(SERVER_LOGS.startupDivider);
   console.log(`${SERVER_LOGS.startupServerRunning} ${URLS.serverOrigin}`);
   console.log(SERVER_LOGS.startupSslLoaded);
+  console.log(`SSL cert dir: ${certBaseDir}`);
   console.log(SERVER_LOGS.startupDivider);
   console.log(SERVER_LOGS.startupApiEndpoints);
   console.log(`   ${SERVER_LOGS.startupApiTest}: ${URLS.serverOrigin}/api/test`);

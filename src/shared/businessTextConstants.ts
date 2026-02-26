@@ -25,7 +25,7 @@ export const BUILDSHEET_TEXT = {
     [12, "包装、运输", "", ""],
     [13, "安装、调试", "", ""],
   ] as Array<[number, string, string, string]>,
-  totalLabel: "总计（万元）",
+  totalLabel: "总计（元）",
   remarkLabel: "备注",
   quoteNotes: [
     "1) 以上报价不含电缆和桥架，不含筒体料仓、水气管路（由客户提供），不含管道保温。",

@@ -23,7 +23,7 @@ const DATABASE_CONFIG = {
   },
 };
 
-const ACTIVE_DB = "localhost";
+const ACTIVE_DB = "company";
 
 const API_ROUTES = {
   test: "/api/test",
@@ -43,6 +43,7 @@ const API_ROUTES = {
   authLogout: "/api/auth/logout",
   authMe: "/api/auth/me",
   authResetPassword: "/api/auth/reset-password",
+  exportQuotePdf: "/api/export-quote-pdf",
 };
 
 const URLS = {
