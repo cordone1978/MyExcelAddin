@@ -24,6 +24,7 @@ module.exports = async (env, options) => {
       devmodify: ["./src/dialog/devmodify.ts", "./src/dialog/devmodify.html"],
       craftmodify: ["./src/dialog/craftmodify.ts", "./src/dialog/craftmodify.html"],
       queryprice: ["./src/dialog/queryprice.ts", "./src/dialog/queryprice.html"],
+      graphEditor: ["./src/graph-editor/graphEditor.ts", "./src/graph-editor/graphEditor.html"],
       quoteSummaryPreview: ["./src/quote-preview/quoteSummaryPreview.ts", "./src/quote-preview/quoteSummaryPreview.html"],
       commands: "./src/commands/commands.ts",
     },
@@ -84,6 +85,11 @@ module.exports = async (env, options) => {
         chunks: ["queryprice"],
       }),
       new HtmlWebpackPlugin({
+        filename: "graphEditor.html",
+        template: "./src/graph-editor/graphEditor.html",
+        chunks: ["graphEditor"],
+      }),
+      new HtmlWebpackPlugin({
         filename: "quoteSummaryPreview.html",
         template: "./src/quote-preview/quoteSummaryPreview.html",
         chunks: ["quoteSummaryPreview"],
@@ -115,6 +121,10 @@ module.exports = async (env, options) => {
           {
             from: "src/dialog/queryprice.css",
             to: "queryprice.css",
+          },
+          {
+            from: "src/graph-editor/graphEditor.css",
+            to: "graphEditor.css",
           },
           {
             from: "src/quote-preview/quoteSummaryPreview.css",

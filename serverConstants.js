@@ -70,6 +70,7 @@ const API_ROUTES = {
   authMe: "/api/auth/me",
   authResetPassword: "/api/auth/reset-password",
   exportQuotePdf: "/api/export-quote-pdf",
+  graphTemplateImage: "/api/graph-template-image",
 };
 
 const URLS = {

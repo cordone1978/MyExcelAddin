@@ -83,6 +83,7 @@ export const API_PATHS = {
   authLogout: "/auth/logout",
   authMe: "/auth/me",
   authResetPassword: "/auth/reset-password",
+  graphTemplateImage: "/graph-template-image",
 } as const;
 
 export const DIALOG_PATHS = {
@@ -91,6 +92,7 @@ export const DIALOG_PATHS = {
   craftModify: "craftmodify.html",
   queryPrice: "queryprice.html",
   generateQuote: "quoteSummaryPreview.html",
+  graphEditor: "graphEditor.html",
 } as const;
 
 export const DIALOG_SIZES = {
@@ -98,6 +100,7 @@ export const DIALOG_SIZES = {
   devModify: { width: 70, height: 50 },
   queryPrice: { width: 75, height: 60 },
   generateQuote: { width: 71, height: 100 },
+  graphEditor: { width: 90, height: 88 },
   default: { width: 50, height: 60 },
   toast: { width: 30, height: 20 },
 } as const;

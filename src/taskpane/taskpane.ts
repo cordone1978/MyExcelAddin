@@ -37,6 +37,7 @@ Office.onReady((info) => {
     (window as any).handleGenerateSheetClick = () => withLoginGuard(() => createQuotationSheet());
     (window as any).handleGenerateQuoteClick = () => withLoginGuard(() => handleGenerateQuoteClick());
     (window as any).handleQueryPriceClick = () => withLoginGuard(() => openQueryPriceDialog());
+    (window as any).handleGraphEditorClick = () => withLoginGuard(() => openGraphEditorDialog());
     (window as any).handleAccountDockToggle = handleAccountDockToggle;
     restoreAuthState();
     bindLoginInputEvents();
@@ -55,6 +56,7 @@ function applyStaticText() {
   setText("generateSheetBtn", TASKPANE_HTML_TEXT.generateSheetBtn);
   setText("generateQuoteBtn", TASKPANE_HTML_TEXT.generateQuoteBtn);
   setText("queryPriceBtn", TASKPANE_HTML_TEXT.queryPriceBtn);
+  setText("graphEditorBtn", TASKPANE_HTML_TEXT.graphEditorBtn);
   setText("loginStatusLabel", "未登录");
   setText("userInfoLabel", "");
   setText("accountDockLabel", "");
@@ -197,6 +199,10 @@ function openDialog(url?: string) {
 
 async function openQueryPriceDialog() {
   await openQueryPriceDialogController(displayDialog);
+}
+
+async function openGraphEditorDialog() {
+  await displayDialog(DIALOG_PATHS.graphEditor, DIALOG_SIZES.graphEditor);
 }
 
 async function handleGenerateQuoteClick() {

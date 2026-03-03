@@ -1,0 +1,277 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  background: #ffffff;
+  border-bottom: 1px solid #dbe3ee;
+}
+
+.btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: #0284c7;
+}
+
+.btn.primary {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #fff;
+}
+
+.btn.danger {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+.main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 10px;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.canvas-panel {
+  background: #fff;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.15) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.15) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.edge-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+}
+
+.edge-line {
+  stroke: #1d4ed8;
+  stroke-width: 2;
+  cursor: pointer;
+}
+
+.edge-line.selected {
+  stroke: #dc2626;
+  stroke-width: 3;
+}
+
+.node-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.graph-node {
+  position: absolute;
+  width: 180px;
+  min-height: 88px;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  padding: 8px;
+  user-select: none;
+  cursor: grab;
+}
+
+.graph-node.product-node {
+  width: 220px;
+  min-height: 140px;
+}
+
+.graph-node.selected {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+.node-image-wrap {
+  position: relative;
+  width: 100%;
+  height: 90px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  margin-bottom: 6px;
+}
+
+.node-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hotspot-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #dc2626;
+  border: 1px solid #fff;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.2);
+}
+
+.hotspot-dot.small {
+  width: 6px;
+  height: 6px;
+}
+
+.node-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-bottom: 6px;
+}
+
+.node-meta {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.side-panel {
+  background: #fff;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+  padding: 10px;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.side-panel h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.side-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: #334155;
+}
+
+.side-panel input,
+.side-panel select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 12px;
+}
+
+.status {
+  min-height: 18px;
+  margin: 10px 0 0;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.status.error {
+  color: #b91c1c;
+}
+
+.status.success {
+  color: #166534;
+}
+
+.template-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.template-item {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px;
+  background: #f8fafc;
+  cursor: grab;
+}
+
+.template-item.dragging {
+  opacity: 0.65;
+}
+
+.template-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.template-thumb {
+  position: relative;
+  width: 100%;
+  height: 72px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
+}
+
+.template-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.template-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #475569;
+}
+
+@media (max-width: 860px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+
+  .canvas {
+    min-height: 420px;
+  }
+}

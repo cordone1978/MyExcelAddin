@@ -51,6 +51,7 @@ export const TASKPANE_HTML_TEXT = {
   generateSheetBtn: "生成模板",
   generateQuoteBtn: "生成报价",
   queryPriceBtn: "查询价格",
+  graphEditorBtn: "关系画布",
 } as const;
 
 export const TASKPANE_TEXT = {

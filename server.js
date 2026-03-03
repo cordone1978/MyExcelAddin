@@ -64,6 +64,23 @@ function clearUserSessions(userId) {
   }
 }
 
+function sanitizeFileToken(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[^\w\-.]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function inferExtFromUrl(urlOrPath) {
+  const ext = path.extname(String(urlOrPath || "")).toLowerCase();
+  if (ext === ".jpg" || ext === ".jpeg" || ext === ".png" || ext === ".webp") {
+    return ext === ".jpeg" ? ".jpg" : ext;
+  }
+  return ".png";
+}
+
 // API routes (must be defined before static file serving)
 
 // 0. Test DB connection
@@ -640,6 +657,73 @@ app.post(API_ROUTES.exportQuotePdf, async (req, res) => {
         // ignore
       }
     }
+  }
+});
+
+// 11. Generate temporary graph template image into clean directory
+app.post(API_ROUTES.graphTemplateImage, async (req, res) => {
+  try {
+    const productModel = String(req.body?.productModel || "").trim() || "template";
+    const sourceImageUrl = String(req.body?.sourceImageUrl || "").trim();
+
+    if (!sourceImageUrl) {
+      res.status(400).json({ success: false, error: "缺少 sourceImageUrl" });
+      return;
+    }
+
+    const tempDir = path.join(__dirname, "public", "graph-temp");
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    const ext = inferExtFromUrl(sourceImageUrl);
+    const stamp = Date.now();
+    const rand = crypto.randomBytes(4).toString("hex");
+    const fileBase = `${sanitizeFileToken(productModel) || "template"}_${stamp}_${rand}`;
+    const fileName = `${fileBase}${ext}`;
+    const destPath = path.join(tempDir, fileName);
+
+    let wrote = false;
+
+    try {
+      const parsed = new URL(sourceImageUrl, URLS.serverOrigin);
+      const publicPrefix = "/public/";
+      if (parsed.pathname.startsWith(publicPrefix)) {
+        const relative = decodeURIComponent(parsed.pathname.slice(publicPrefix.length));
+        const localSrc = path.join(__dirname, "public", relative);
+        if (fs.existsSync(localSrc)) {
+          fs.copyFileSync(localSrc, destPath);
+          wrote = true;
+        }
+      }
+    } catch {
+      // ignore parse failure and fallback to fetch
+    }
+
+    if (!wrote) {
+      const response = await fetch(sourceImageUrl);
+      if (!response.ok) {
+        res.status(502).json({ success: false, error: `下载图片失败: ${response.status}` });
+        return;
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      fs.writeFileSync(destPath, Buffer.from(arrayBuffer));
+      wrote = true;
+    }
+
+    if (!wrote) {
+      res.status(500).json({ success: false, error: "生成临时图片失败" });
+      return;
+    }
+
+    const publicUrl = `${URLS.serverOrigin}/public/graph-temp/${encodeURIComponent(fileName)}`;
+    res.json({
+      success: true,
+      data: {
+        imageUrl: publicUrl,
+        fileName,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message || "生成临时图片失败" });
   }
 });
 
