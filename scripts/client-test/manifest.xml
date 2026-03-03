@@ -2,13 +2,13 @@
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <Id>f7e3465d-3425-4bf6-b4cc-ec940ee88851</Id>
   <Version>1.0.0.133</Version>
-  <ProviderName>Contoso</ProviderName>
+  <ProviderName>WellStone</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="报价系统"/>
   <Description DefaultValue="报价系统加载项"/>
   <IconUrl DefaultValue="https://quotation-vm.test:3001/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://quotation-vm.test:3001/assets/icon-64.png"/>
-  <SupportUrl DefaultValue="https://www.contoso.com/help"/>
+  <SupportUrl DefaultValue="https://www.hnhtft.com.cn"/>
   <AppDomains>
     <AppDomain>https://quotation-vm.test:3001</AppDomain>
   </AppDomains>

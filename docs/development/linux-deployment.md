@@ -81,24 +81,33 @@ npm install
 npm run build
 ```
 
-### 3.3 修改生产配置（必须）
+### 3.3 生成生产 `manifest.xml` + 设置运行环境（必须）
 
-至少确认以下配置已指向服务器：
+当前项目已改为：
 
-1. `src/shared/appConstants.ts`
-- `SERVER_CONFIG.host = "192.168.1.79"`
-- `SERVER_CONFIG.port = 3001`
+1. 服务端配置通过环境变量控制（不再修改代码文件）
+- `APP_HOST`
+- `APP_PORT`
+- `DB_PROFILE`
+- `CERT_BASE_DIR`（推荐，证书目录放仓库外）
 
-2. `serverConstants.js`
-- `SERVER_CONFIG.host = "192.168.1.79"`
-- `SERVER_CONFIG.port = 3001`
-- `ACTIVE_DB = "company"`（若上线使用公司库）
+2. 前端接口地址使用运行时相对路径（开发环境由 webpack dev server 代理）
+- 不再需要修改 `src/shared/appConstants.ts`
 
-3. `manifest.xml`
-- 所有 `https://localhost:3000/...` 改成 `https://192.168.1.79:3001/...`
-- `AppDomain` 增加/改成 `https://192.168.1.79:3001`
+3. `manifest.xml` 由模板生成（仍需区分环境）
+- 模板文件：`manifest.template.xml`
+- 生成脚本：`scripts/render-manifest.js`
 
-你也可以使用本文第 6 节提供的 `scripts/deploy-linux.sh` 自动完成这些替换。
+示例（生成生产版 `manifest.xml`）：
+
+```bash
+MANIFEST_BASE_URL=https://192.168.1.79:3001 \
+node scripts/render-manifest.js
+```
+
+说明：
+- `MANIFEST_APP_DOMAIN` 不传时默认等于 `MANIFEST_BASE_URL`
+- `scripts/deploy-linux.sh patch` 会自动执行上述生成步骤
 
 ### 3.4 启动服务
 
@@ -174,6 +183,7 @@ APP_HOST=192.168.1.79 \
 APP_PORT=3001 \
 APP_BASE_URL=https://192.168.1.79:3001 \
 DB_PROFILE=company \
+CERT_BASE_DIR=/etc/quotationaddin/certs \
 APP_NAME=quotationaddin \
 ./scripts/deploy-linux.sh deploy
 ```
@@ -182,8 +192,9 @@ APP_NAME=quotationaddin \
 - `APP_HOST`：服务地址（默认 `192.168.1.79`）
 - `APP_PORT`：服务端口（默认 `3001`）
 - `APP_BASE_URL`：对外访问地址（默认 `https://APP_HOST:APP_PORT`）
-- `DB_PROFILE`：`serverConstants.js` 的 `ACTIVE_DB`（默认 `company`）
+- `DB_PROFILE`：服务端使用的数据库配置名（默认 `company`）
 - `APP_NAME`：进程名（PM2/日志目录使用）
+- `CERT_BASE_DIR`：服务器证书目录（建议仓库外）
 
 ## 7. 发布后检查清单
 
@@ -231,6 +242,7 @@ curl -k -X POST https://192.168.1.79:3001/api/export-quote-pdf \
 - 防火墙未放行 `3001`
 
 排查：
+- 先执行 `node scripts/render-manifest.js --base-url https://<server>:3001`
 - 浏览器先直接访问 `https://192.168.1.79:3001/taskpane.html`
 
 ### 8.2 生成报表可以打开，但导出 PDF 失败
@@ -246,16 +258,16 @@ curl -k -X POST https://192.168.1.79:3001/api/export-quote-pdf \
 ### 8.3 前端正常，接口报数据库错误
 
 检查：
-- `serverConstants.js` 的 `ACTIVE_DB`
+- `DB_PROFILE` 环境变量（如 `company`）
 - 数据库网络可达性（`192.168.1.79` 到 DB）
 - 用户名密码是否正确
 
 ## 9. 建议的后续改进（维护性）
 
-1. 将 `serverConstants.js` 与 `src/shared/appConstants.ts` 改为读取环境变量（避免发布脚本做文本替换）
+1. 将 `manifest.xml` 改为模板 + 生成脚本（避免发布脚本做正则替换）【已完成】
 2. 使用 `systemd` 托管服务（比 nohup 稳定）
 3. 增加 `/api/health` 健康检查接口
-4. 将 `manifest.xml` 维护为 `manifest.dev.xml` / `manifest.prod.xml`
+4. 如需多环境并行测试，可额外生成 `manifest.dev.xml` / `manifest.test.xml` / `manifest.prod.xml`
 
 
 ## 10. 本次 CentOS7 + VMware 实操补充（2026-02-24）
@@ -431,12 +443,9 @@ curl -k https://192.168.100.16:3001/quoteSummaryPreview.html
 #### 已验证通过
 
 1. VMware 中的 CentOS 7 演练机可访问公司服务器 `192.168.1.79`
-2. `serverConstants.js` 切换到 `ACTIVE_DB = "company"` 后，数据库连接测试成功（`quotation`）
-3. `scripts/deploy-linux.sh patch` 在 CentOS 7 上可运行（修复脚本正则替换 bug 后）
-4. `patch` 能正确替换以下内容：
-   - `src/shared/appConstants.ts` 的 `host/port`
-   - `serverConstants.js` 的 `ACTIVE_DB`
-   - `manifest.xml` 中全部 `localhost:3000` URL
+2. 通过 `DB_PROFILE=company` 启动后，数据库连接测试成功（`quotation`）
+3. `scripts/deploy-linux.sh patch` 在 CentOS 7 上可运行
+4. `patch` 能正确生成部署版 `manifest.xml`（基于 `manifest.template.xml`）
 5. 服务启动后已成功访问（演练机地址示例 `192.168.100.78`）：
 
 ```bash
@@ -528,21 +537,20 @@ chown -R zhh:zhh /opt/quotationaddin
 
 为适配本次演练过程中遇到的问题，脚本已增强：
 
-1. `patch` 支持二次切换地址
-- 不再只支持 `localhost -> 新地址`
-- 现支持从“任意旧地址（localhost / IP / 域名）”切换到新的 `APP_HOST:APP_PORT`
-- 适用于本次场景：`192.168.100.78 -> quotation-vm.test`
+1. `patch` 改为通过模板生成 `manifest.xml`
+- 使用 `manifest.template.xml` + `scripts/render-manifest.js`
+- 不再依赖 `manifest.xml` 当前内容做正则替换
 
-2. `manifest.xml` 替换更稳
-- 会按功能页面/图标 URL 和 `AppDomain` 进行正则替换
-- 不依赖 `contoso` 或 `localhost` 初始值
+2. 运行时配置改为环境变量
+- 服务端不再需要 patch `serverConstants.js` / `src/shared/appConstants.ts`
+- 使用 `APP_HOST` / `APP_PORT` / `DB_PROFILE` / `CERT_BASE_DIR`
 
 3. `build` 容错增强
 - 若 `npm ci` 因 lock 文件不一致失败，会自动回退到 `npm install`
 - 更适合演练环境/临时环境
 
-4. `patch` 前会检查 `python3`
-- 若缺失会给出明确提示（CentOS 7 演练中已遇到）
+4. `patch` 仅依赖 `node`
+- 用于执行 `scripts/render-manifest.js`
 
 ### 10.10 客户端访问 `api/test` 失败的排查（本次已定位）
 

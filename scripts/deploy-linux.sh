@@ -26,7 +26,7 @@ Commands:
   stop      Stop server
   restart   Restart server
   status    Show server status
-  patch     Only patch project config files for production
+  patch     Only patch manifest.xml for production URLs
   build     Only install deps and build
 
 Environment variables:
@@ -34,7 +34,7 @@ Environment variables:
   APP_HOST      Default: ${APP_HOST}
   APP_PORT      Default: ${APP_PORT}
   APP_BASE_URL  Default: ${APP_BASE_URL}
-  DB_PROFILE    Default: ${DB_PROFILE}  (serverConstants.js ACTIVE_DB)
+  DB_PROFILE    Default: ${DB_PROFILE}  (passed to server via env)
   CERT_BASE_DIR Default: ${CERT_BASE_DIR:-<unset>} (external SSL cert directory; optional)
   WORKDIR       Default: repo root
   LOG_DIR       Default: ${LOG_DIR}
@@ -54,6 +54,10 @@ ensure_dirs() {
 require_tools() {
   command -v "${NODE_BIN}" >/dev/null 2>&1 || { echo "Missing node: ${NODE_BIN}" >&2; exit 1; }
   command -v "${NPM_BIN}" >/dev/null 2>&1 || { echo "Missing npm: ${NPM_BIN}" >&2; exit 1; }
+}
+
+require_node() {
+  command -v "${NODE_BIN}" >/dev/null 2>&1 || { echo "Missing node: ${NODE_BIN}" >&2; exit 1; }
 }
 
 require_python3() {
@@ -138,25 +142,14 @@ PY
 patch_config_files() {
   ensure_dirs
   cd "${WORKDIR}"
-  require_python3
-  log "Patching config files for production..."
+  require_node
+  log "Rendering manifest.xml for target environment..."
 
-  backup_file "src/shared/appConstants.ts"
-  backup_file "serverConstants.js"
   backup_file "manifest.xml"
 
-  replace_regex "src/shared/appConstants.ts" '(host:\s*")[^"]+(",)' "\\g<1>${APP_HOST}\\g<2>"
-  replace_regex "src/shared/appConstants.ts" '(port:\s*)[0-9]+(,)' "\\g<1>${APP_PORT}\\g<2>"
+  MANIFEST_BASE_URL="${APP_BASE_URL}" "${NODE_BIN}" "${WORKDIR}/scripts/render-manifest.js"
 
-  replace_regex "serverConstants.js" '(const SERVER_CONFIG = \{.*?host:\s*")[^"]+(",)' "\\g<1>${APP_HOST}\\g<2>"
-  replace_regex "serverConstants.js" '(const SERVER_CONFIG = \{.*?port:\s*)[0-9]+(,)' "\\g<1>${APP_PORT}\\g<2>"
-  replace_regex "serverConstants.js" '(const ACTIVE_DB = ")[^"]+(";\s*)' "\\g<1>${DB_PROFILE}\\g<2>"
-
-  # Replace add-in URLs regardless of prior host (localhost / IP / domain)
-  replace_regex_all "manifest.xml" 'https://[^/"]+/(assets/icon-(16|32|64|80)\.png|taskpane\.html|commands\.html)' "${APP_BASE_URL}/\\g<1>"
-  replace_regex_all "manifest.xml" '(<AppDomain>)https://[^<]+(</AppDomain>)' "\\g<1>${APP_BASE_URL}\\g<2>"
-
-  log "Patch complete. Verify cert host and manifest version before distribution."
+  log "Manifest render complete. Runtime server config comes from env (APP_HOST/APP_PORT/DB_PROFILE/CERT_BASE_DIR)."
 }
 
 install_and_build() {

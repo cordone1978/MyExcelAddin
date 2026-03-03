@@ -1,3 +1,15 @@
+type ClientRuntimeConfig = {
+  serverOrigin?: string;
+  apiBase?: string;
+  imageBase?: string;
+};
+
+declare global {
+  interface Window {
+    __QUOTATION_RUNTIME_CONFIG__?: ClientRuntimeConfig;
+  }
+}
+
 export const SERVER_CONFIG = {
   protocol: "https",
   host: "localhost",
@@ -6,12 +18,50 @@ export const SERVER_CONFIG = {
   publicImagesPath: "/public/images/",
 } as const;
 
-const serverOrigin = `${SERVER_CONFIG.protocol}://${SERVER_CONFIG.host}:${SERVER_CONFIG.port}`;
+function getClientRuntimeConfig(): ClientRuntimeConfig {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  return window.__QUOTATION_RUNTIME_CONFIG__ || {};
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
+function normalizePathPrefix(value: string): string {
+  const trimmed = trimTrailingSlash(value.trim());
+  if (!trimmed) return "";
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
+function getPageOrigin(): string {
+  if (typeof window === "undefined" || !window.location?.origin) {
+    return `${SERVER_CONFIG.protocol}://${SERVER_CONFIG.host}:${SERVER_CONFIG.port}`;
+  }
+  return trimTrailingSlash(window.location.origin);
+}
+
+const runtimeConfig = getClientRuntimeConfig();
+const serverOrigin = runtimeConfig.serverOrigin
+  ? trimTrailingSlash(runtimeConfig.serverOrigin)
+  : getPageOrigin();
+
+const apiBase = runtimeConfig.apiBase
+  ? normalizePathPrefix(runtimeConfig.apiBase)
+  : SERVER_CONFIG.apiPrefix;
+
+const imageBase = runtimeConfig.imageBase
+  ? normalizePathPrefix(runtimeConfig.imageBase)
+  : SERVER_CONFIG.publicImagesPath;
 
 export const APP_URLS = {
   serverOrigin,
-  apiBase: `${serverOrigin}${SERVER_CONFIG.apiPrefix}`,
-  imageBase: `${serverOrigin}${SERVER_CONFIG.publicImagesPath}`,
+  apiBase,
+  imageBase,
 } as const;
 
 export const API_PATHS = {

@@ -5,7 +5,8 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 
 const urlDev = "https://localhost:3000/";
-const urlProd = "https://www.contoso.com/";
+const urlProd = "https://www.hnhtft.com.cn/";
+const apiProxyTarget = process.env.QUOTATION_API_PROXY_TARGET || "https://localhost:3001";
 
 async function getHttpsOptions() {
   const httpsOptions = await devCerts.getHttpsServerOptions();
@@ -137,6 +138,14 @@ module.exports = async (env, options) => {
       headers: {
         "Access-Control-Allow-Origin": "*",
       },
+      proxy: [
+        {
+          context: ["/api", "/public"],
+          target: apiProxyTarget,
+          changeOrigin: true,
+          secure: false,
+        },
+      ],
       server: {
         type: "https",
         options: env.WEBPACK_BUILD || options.https !== undefined ? options.https : await getHttpsOptions(),

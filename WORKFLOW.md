@@ -176,7 +176,8 @@ codex --dangerously-bypass-approvals-and-sandbox   # 跳过权限确认
 - `public/`: static assets copied into the bundle.
 - `assets/` and `images.pkd`: image assets and packed image bundle.
 - `server.js`: local Express server for API/dev support.
-- `manifest.xml`: Office Add-in manifest (entry point for sideloading).
+- `manifest.template.xml`: manifest template (source of truth for environment-specific rendering).
+- `manifest.xml`: generated Office Add-in manifest used for sideloading.
 - `dist/`: webpack build output (generated; do not edit manually).
 
 ### 8.2 Build, Test, and Development Commands
@@ -189,6 +190,7 @@ Run commands from the repo root:
 - `npm run stop`: stop the add-in debugging session.
 - `npm run watch`: rebuild on file changes.
 - `npm run validate`: validate `manifest.xml`.
+- `node scripts/render-manifest.js --dev`: regenerate local dev `manifest.xml` (`https://localhost:3000`).
 - `npm run lint` / `npm run lint:fix`: Office Add-in ESLint rules.
 - `npm run prettier`: apply the Office Add-in Prettier config.
 
@@ -207,8 +209,9 @@ There are no automated tests in this repo today.
 - Recent commits use short, descriptive messages (often Chinese) without a strict convention.
 - Keep commit subjects concise and imperative (e.g., "优化对话框布局").
 - PRs should include: a brief summary, testing steps (commands run), and screenshots for UI changes.
-- If `manifest.xml` changes, call it out explicitly and note how to sideload.
+- If `manifest.template.xml` or generated `manifest.xml` changes, call it out explicitly and note how to sideload.
 
 ### 8.6 Security & Configuration Tips
 - Do not commit secrets; configure API credentials via local environment or `.env` if introduced.
-- Ensure `manifest.xml` URLs match your dev server (`https://localhost:3000` by default).
+- Server runtime config uses env vars (`APP_HOST`, `APP_PORT`, `DB_PROFILE`, `CERT_BASE_DIR`) in deployment.
+- Regenerate `manifest.xml` from `manifest.template.xml` when switching environments (e.g., `node scripts/render-manifest.js --dev`).

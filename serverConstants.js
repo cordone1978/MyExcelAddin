@@ -1,4 +1,21 @@
-const SERVER_CONFIG = {
+function envString(name, fallback) {
+  const value = process.env[name];
+  if (typeof value !== "string" || value.trim() === "") {
+    return fallback;
+  }
+  return value.trim();
+}
+
+function envPort(name, fallback) {
+  const value = process.env[name];
+  if (typeof value !== "string" || value.trim() === "") {
+    return fallback;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const DEFAULT_SERVER_CONFIG = {
   protocol: "https",
   host: "localhost",
   port: 3001,
@@ -6,6 +23,15 @@ const SERVER_CONFIG = {
   publicImagesPath: "/public/images/",
   certKeyFile: "localhost+2-key.pem",
   certPemFile: "localhost+2.pem",
+};
+
+const SERVER_CONFIG = {
+  ...DEFAULT_SERVER_CONFIG,
+  protocol: envString("APP_PROTOCOL", DEFAULT_SERVER_CONFIG.protocol),
+  host: envString("APP_HOST", DEFAULT_SERVER_CONFIG.host),
+  port: envPort("APP_PORT", DEFAULT_SERVER_CONFIG.port),
+  certKeyFile: envString("CERT_KEY_FILE", DEFAULT_SERVER_CONFIG.certKeyFile),
+  certPemFile: envString("CERT_PEM_FILE", DEFAULT_SERVER_CONFIG.certPemFile),
 };
 
 const DATABASE_CONFIG = {
@@ -23,7 +49,7 @@ const DATABASE_CONFIG = {
   },
 };
 
-const ACTIVE_DB = "company";
+const ACTIVE_DB = envString("DB_PROFILE", "localhost");
 
 const API_ROUTES = {
   test: "/api/test",
@@ -90,7 +116,7 @@ const SERVER_LOGS = {
   authMeFailed: "Auth me failed",
   authResetPasswordFailed: "Auth reset password failed",
   sslCertMissing: "SSL certificate files are missing",
-  sslCertRequiredFiles: "Required files: localhost+2.pem and localhost+2-key.pem",
+  sslCertRequiredFiles: `Required files: ${SERVER_CONFIG.certPemFile} and ${SERVER_CONFIG.certKeyFile}`,
   startupDivider: "========================================",
   startupServerRunning: "HTTPS server running at",
   startupSslLoaded: "SSL certificate loaded",

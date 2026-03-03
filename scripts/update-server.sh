@@ -104,6 +104,13 @@ extract_package_if_needed() {
     return 0
   fi
 
+  # Avoid stale source assets lingering on the server after package extraction.
+  # tar extraction overwrites same-name files but does not delete removed/renamed files.
+  if [[ -d "${WORKDIR}/assets" ]]; then
+    log "Removing existing assets directory to avoid stale files: ${WORKDIR}/assets"
+    rm -rf "${WORKDIR}/assets"
+  fi
+
   log "Extracting package into WORKDIR..."
   tar -xzf "${PACKAGE}" -C "${WORKDIR}"
 
@@ -124,13 +131,17 @@ run_update_steps() {
   fi
 
   if [[ "${NO_PATCH}" != "1" ]]; then
-    log "Step 1/4: patch production config"
+    log "Step 1/4: render deployment manifest"
     APP_HOST="${APP_HOST}" APP_PORT="${APP_PORT}" DB_PROFILE="${DB_PROFILE}" CERT_BASE_DIR="${CERT_BASE_DIR}" "${DEPLOY_SCRIPT}" patch
   else
-    log "Step 1/4: patch skipped (--no-patch)"
+    log "Step 1/4: manifest render skipped (--no-patch)"
   fi
 
   if [[ "${NO_BUILD}" != "1" ]]; then
+    if [[ -d "${WORKDIR}/dist" ]]; then
+      log "Removing existing dist before rebuild: ${WORKDIR}/dist"
+      rm -rf "${WORKDIR}/dist"
+    fi
     log "Step 2/4: install/build"
     APP_HOST="${APP_HOST}" APP_PORT="${APP_PORT}" DB_PROFILE="${DB_PROFILE}" CERT_BASE_DIR="${CERT_BASE_DIR}" "${DEPLOY_SCRIPT}" build
   else

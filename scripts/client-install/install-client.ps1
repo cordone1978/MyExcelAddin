@@ -29,6 +29,41 @@ function Invoke-CmdCapture {
   }
 }
 
+function Invoke-ProcessCapture {
+  param(
+    [Parameter(Mandatory = $true)][string]$FilePath,
+    [Parameter(Mandatory = $true)][string[]]$Arguments
+  )
+
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $FilePath
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $true
+
+  $escapedArgs = $Arguments | ForEach-Object {
+    if ($_ -match '[\s"]') {
+      '"' + ($_ -replace '"', '\"') + '"'
+    } else {
+      $_
+    }
+  }
+  $psi.Arguments = ($escapedArgs -join ' ')
+
+  $p = New-Object System.Diagnostics.Process
+  $p.StartInfo = $psi
+  [void]$p.Start()
+  $stdout = $p.StandardOutput.ReadToEnd()
+  $stderr = $p.StandardError.ReadToEnd()
+  $p.WaitForExit()
+
+  return [pscustomobject]@{
+    ExitCode = $p.ExitCode
+    Output   = (($stdout + "`n" + $stderr).Trim())
+  }
+}
+
 function Get-CompactCmdMessage {
   param([string]$Text)
   if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
@@ -239,10 +274,16 @@ try {
 Write-Step 'Verifying shared folder access'
 $shareOk = $false
 $shareHost = $null
+$shareRoots = @()
 if ($SharePath -match '^\\\\([^\\]+)\\([^\\]+)') {
   $shareHost = $matches[1]
   $shareName = $matches[2]
   $shareRoot = "\\$shareHost\$shareName"
+  $shareRoots += $shareRoot
+  if (-not [string]::IsNullOrWhiteSpace($ServerIp) -and $ServerIp -ne $shareHost) {
+    $shareRoots += "\\$ServerIp\$shareName"
+  }
+  $shareRoots = $shareRoots | Select-Object -Unique
 } else {
   $shareName = $null
   $shareRoot = $null
@@ -250,10 +291,12 @@ if ($SharePath -match '^\\\\([^\\]+)\\([^\\]+)') {
 if (-not [string]::IsNullOrWhiteSpace($smbUser) -and -not [string]::IsNullOrWhiteSpace($smbPass) -and $shareHost -and $shareRoot) {
   Write-Step 'Connecting SMB share with configured credentials'
   $legacyHosts = @($shareHost, 'quotation-vm.test') | Select-Object -Unique
+  $legacyHosts += @($ServerIp) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+  $legacyHosts = $legacyHosts | Select-Object -Unique
   foreach ($h in $legacyHosts) {
     foreach ($target in @("\\$h\$shareName", "\\$h\IPC$")) {
       try {
-        $delRes = Invoke-CmdCapture "net use `"$target`" /delete /y"
+        $delRes = Invoke-ProcessCapture -FilePath "net.exe" -Arguments @("use", $target, "/delete", "/y")
         if ($delRes.ExitCode -eq 0) {
           Write-Ok "Removed stale SMB connection: $target"
         } elseif (-not [string]::IsNullOrWhiteSpace($delRes.Output)) {
@@ -271,7 +314,7 @@ if (-not [string]::IsNullOrWhiteSpace($smbUser) -and -not [string]::IsNullOrWhit
   $cmdkeyOk = $false
   foreach ($candidateUser in $cmdkeyCandidates) {
     try {
-      $ck = Invoke-CmdCapture "cmdkey /add:$shareHost /user:$candidateUser /pass:$smbPass"
+      $ck = Invoke-ProcessCapture -FilePath "cmdkey.exe" -Arguments @("/add:$shareHost", "/user:$candidateUser", "/pass:$smbPass")
       if ($ck.ExitCode -eq 0) {
         Write-Ok "Stored SMB credentials for $shareHost with user $candidateUser"
         $cmdkeyOk = $true
@@ -290,27 +333,53 @@ if (-not [string]::IsNullOrWhiteSpace($smbUser) -and -not [string]::IsNullOrWhit
 
   $candidates = @($smbUser, "$shareHost\$smbUser")
   $connected = $false
-  foreach ($candidateUser in ($candidates | Select-Object -Unique)) {
-    try {
-      $conn = Invoke-CmdCapture "net use `"$shareRoot`" /user:$candidateUser $smbPass /persistent:no"
-      if ($conn.ExitCode -eq 0) {
-        Write-Ok "SMB credentials applied to $shareRoot with user $candidateUser"
-        $connected = $true
-        break
-      } elseif (-not [string]::IsNullOrWhiteSpace($conn.Output)) {
-        $compact = Get-CompactCmdMessage $conn.Output
-        Write-WarnMsg "net use failed for user $candidateUser (exit $($conn.ExitCode)): $compact"
+  $connectedShareRoot = $null
+  foreach ($targetShareRoot in $shareRoots) {
+    foreach ($candidateUser in ($candidates | Select-Object -Unique)) {
+      try {
+        $conn = Invoke-ProcessCapture -FilePath "net.exe" -Arguments @("use", $targetShareRoot, "/user:$candidateUser", $smbPass, "/persistent:no")
+        if ($conn.ExitCode -eq 0) {
+          Write-Ok "SMB credentials applied to $targetShareRoot with user $candidateUser"
+          $connected = $true
+          $connectedShareRoot = $targetShareRoot
+          break
+        } elseif (-not [string]::IsNullOrWhiteSpace($conn.Output)) {
+          $compact = Get-CompactCmdMessage $conn.Output
+          Write-WarnMsg "net use failed for $targetShareRoot user $candidateUser (exit $($conn.ExitCode)): $compact"
+        }
+      } catch {
+        Write-WarnMsg "net use exception for $targetShareRoot user ${candidateUser}: $($_.Exception.Message)"
       }
-    } catch {
-      Write-WarnMsg "net use exception for user ${candidateUser}: $($_.Exception.Message)"
     }
+    if ($connected) { break }
+  }
+  if ($connected -and $connectedShareRoot -and $SharePath -ne $connectedShareRoot) {
+    Write-WarnMsg "Primary share path unavailable, switched to SMB fallback: $connectedShareRoot"
+    $SharePath = $connectedShareRoot
   }
   if (-not $connected) {
-    Write-WarnMsg "Failed to preconnect SMB share for $shareRoot. User/password may be incorrect."
+    Write-WarnMsg "Failed to preconnect SMB share for all candidates: $($shareRoots -join ', ')"
   }
 }
 try {
-  if (Test-Path $SharePath) {
+  $sharePathCandidates = @($SharePath)
+  if ($shareRoots.Count -gt 0) {
+    $sharePathCandidates += $shareRoots
+  }
+  $sharePathCandidates = $sharePathCandidates | Select-Object -Unique
+
+  $resolvedSharePath = $null
+  foreach ($candidate in $sharePathCandidates) {
+    if (Test-Path $candidate) {
+      $resolvedSharePath = $candidate
+      break
+    }
+  }
+  if ($resolvedSharePath) {
+    if ($resolvedSharePath -ne $SharePath) {
+      Write-WarnMsg "Primary share path unavailable, switched to reachable path: $resolvedSharePath"
+      $SharePath = $resolvedSharePath
+    }
     $shareOk = $true
     Write-Ok "Share reachable: $SharePath"
     if (Test-Path (Join-Path $SharePath 'manifest.xml')) {

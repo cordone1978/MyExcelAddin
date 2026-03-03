@@ -57,10 +57,12 @@ ul {
 }
 
 .ms-welcome__header img {
-    width: 52px;
-    height: 52px;
-    border-radius: 14px;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+    width: auto;
+    height: 55px;
+    max-width: 100%;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
 }
 
 .ms-welcome__main {
