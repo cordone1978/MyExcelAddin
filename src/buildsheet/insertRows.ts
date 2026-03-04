@@ -178,13 +178,13 @@ function findInsertRowBySelectionSync(
 
   const aText = String(values[selectedIndex]?.[0] ?? "").trim();
   const bText = String(values[selectedIndex]?.[1] ?? "").trim();
+  const headerSerialText = String(BUILDSHEET_TEXT.configHeaders[0] || "").trim();
 
   const sectionRow = findSectionRowBySelectedIndex(values, rowOffset, selectedIndex);
   if (sectionRow < 1) {
     throw new Error("未找到所在系列标题行，请重新选择。");
   }
 
-  const headerSerialText = String(BUILDSHEET_TEXT.configHeaders[0] || "").trim();
   const isSectionRow = isSectionTitleRow(aText, bText);
   const isHeaderRow = aText === headerSerialText;
 
@@ -195,7 +195,26 @@ function findInsertRowBySelectionSync(
     return { insertRow: selectedRow + 1, sectionRow };
   }
 
-  return { insertRow: selectedRow + 1, sectionRow };
+  // If current selection is inside a merged device block, insert below the whole block
+  // to avoid expanding previous merged cells (which causes serial/device merge issues).
+  const groupEndIndex = findDeviceGroupEndIndex(values, selectedIndex, headerSerialText);
+  return { insertRow: rowOffset + groupEndIndex + 2, sectionRow };
+}
+
+function findDeviceGroupEndIndex(values: unknown[][], selectedIndex: number, headerSerialText: string): number {
+  let endIndex = selectedIndex;
+  for (let i = selectedIndex + 1; i < values.length; i++) {
+    const aText = String(values[i]?.[0] ?? "").trim();
+    const bText = String(values[i]?.[1] ?? "").trim();
+    if (isSectionTitleRow(aText, bText) || aText === headerSerialText) {
+      break;
+    }
+    if (bText) {
+      break;
+    }
+    endIndex = i;
+  }
+  return endIndex;
 }
 
 function findSectionRowBySelectedIndex(values: unknown[][], rowOffset: number, selectedIndex: number): number {

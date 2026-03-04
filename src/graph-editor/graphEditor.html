@@ -12,22 +12,15 @@
 
 <body>
   <div class="shell">
-    <header class="toolbar">
-      <button id="loadTemplateLibraryBtn" class="btn">加载模板库</button>
-      <button id="importFromSheetBtn" class="btn">从配置表生成模块</button>
-      <button id="addNodeBtn" class="btn">新增模块</button>
-      <button id="connectModeBtn" class="btn">连线模式：关</button>
-      <button id="deleteSelectedBtn" class="btn">删除选中</button>
-      <button id="clearAllBtn" class="btn danger">清空</button>
-      <button id="saveBtn" class="btn">保存</button>
-      <button id="writeToSheetBtn" class="btn primary">写入报价配置表</button>
-    </header>
-
     <main class="main">
       <section class="canvas-panel">
         <div id="canvas" class="canvas">
-          <svg id="edgeLayer" class="edge-layer"></svg>
-          <div id="nodeLayer" class="node-layer"></div>
+          <div id="selectionBox" class="selection-box"></div>
+          <div id="scene" class="scene">
+            <svg id="edgeLayer" class="edge-layer"></svg>
+            <div id="nodeLayer" class="node-layer"></div>
+            <svg id="strokeLayer" class="stroke-layer"></svg>
+          </div>
         </div>
       </section>
 
@@ -46,11 +39,34 @@
         <label>单价<input id="fieldPrice" type="number" min="0" step="1" /></label>
         <button id="applyNodeBtn" class="btn primary">应用到当前选中模块</button>
         <hr />
-        <h2>模板库（产品热点图）</h2>
-        <div id="templateList" class="template-list"></div>
         <p id="statusText" class="status"></p>
       </aside>
     </main>
+
+    <section id="templateDrawer" class="template-drawer" aria-label="模板库">
+      <div id="templateList" class="template-list"></div>
+    </section>
+
+    <section id="toolsDrawer" class="tools-drawer" aria-label="工具">
+      <div class="tools-panel">
+        <button id="penConnectBtn" class="btn">节点连线笔：关</button>
+        <button id="drawStrokeBtn" class="btn">自由画线：关</button>
+        <button id="undoStrokeBtn" class="btn">撤销一笔</button>
+      </div>
+    </section>
+
+    <footer class="toolbar toolbar-bottom">
+      <button id="loadTemplateLibraryBtn" class="btn">加载模板库</button>
+      <button id="toolsBtn" class="btn">工具</button>
+      <button id="importFromSheetBtn" class="btn">从配置表生成模块</button>
+      <button id="deleteSelectedBtn" class="btn">删除选中</button>
+      <button id="clearAllBtn" class="btn danger">清空</button>
+      <button id="saveBtn" class="btn">保存</button>
+      <button id="writeToSheetBtn" class="btn primary">写入报价配置表</button>
+    </footer>
+  </div>
+  <div id="canvasContextMenu" class="canvas-context-menu" aria-hidden="true">
+    <button id="contextDeleteBtn" class="context-menu-item" type="button">删除选中</button>
   </div>
 </body>
 

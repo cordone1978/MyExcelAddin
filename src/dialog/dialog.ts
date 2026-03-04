@@ -7,6 +7,8 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
     // 新增：图片基础路径
     const IMAGE_BASE = APP_URLS.imageBase;
     const IMAGE_CACHE_BUSTER = Date.now().toString(36);
+    const DEV_GRAPH_SHEET_NAME = "_graph_store_dev";
+    const MAX_CELL_CHARS = 30000;
 
     // 简单缓存
     const cache = {
@@ -936,6 +938,14 @@ function normalizeAnnotations(annotations) {
             compositeImage: compositeImageBase64  // 添加合成图片
         };
 
+        // 开发阶段：将提交数据和合成图保存到可见工作表，便于直接检查效果
+        try {
+            await saveCompositeToDevSheet(result);
+            console.log("已写入开发存储sheet: _graph_store_dev");
+        } catch (error) {
+            console.error("写入开发存储sheet失败:", error);
+        }
+
         console.log(`${DIALOG_TEXT.submitData}:`, {
             [DIALOG_TEXT.summaryCategory]: result.category,
             [DIALOG_TEXT.summaryProject]: result.project,
@@ -952,5 +962,62 @@ function normalizeAnnotations(annotations) {
     (window as any).confirmData = confirmData;
     (window as any).clearAll = clearAll;
 
+    function chunkText(text, size) {
+        const chunks = [];
+        const source = String(text || "");
+        for (let i = 0; i < source.length; i += size) {
+            chunks.push(source.slice(i, i + size));
+        }
+        return chunks.length > 0 ? chunks : [""];
+    }
+
+    async function saveCompositeToDevSheet(result) {
+        await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            let sheet = sheets.getItemOrNullObject(DEV_GRAPH_SHEET_NAME);
+            sheet.load("name,isNullObject");
+            await context.sync();
+
+            if (sheet.isNullObject) {
+                sheet = sheets.add(DEV_GRAPH_SHEET_NAME);
+            }
+
+            // 开发阶段故意设为可见，方便你直接查看内容
+            sheet.visibility = Excel.SheetVisibility.visible;
+
+            const meta = {
+                savedAt: new Date().toISOString(),
+                categoryId: result.categoryId,
+                category: result.category,
+                projectId: result.projectId,
+                project: result.project,
+                details: result.details,
+                annotations: result.annotations,
+                hasCompositeImage: !!result.compositeImage
+            };
+
+            const metaJson = JSON.stringify(meta);
+            const imageBase64 = String(result.compositeImage || "");
+            const imageChunks = chunkText(imageBase64, MAX_CELL_CHARS);
+            const chunkRows = imageChunks.map((chunk) => [chunk]);
+
+            sheet.getRange("A1").values = [["GRAPH_DIALOG_DEV_V1"]];
+            sheet.getRange("A2").values = [[metaJson]];
+            sheet.getRange("A3").values = [[String(imageChunks.length)]];
+
+            // 先清理旧图片区（避免上次更长数据残留）
+            sheet.getRange("A10:A2000").clear(Excel.ClearApplyTo.contents);
+
+            if (chunkRows.length > 0) {
+                const endRow = 10 + chunkRows.length - 1;
+                sheet.getRange(`A10:A${endRow}`).values = chunkRows;
+            }
+
+            sheet.getRange("B1").values = [["说明"]];
+            sheet.getRange("B2").values = [["A2=提交元数据(JSON)，A3=图片分块数，A10起=图片base64分块"]];
+
+            await context.sync();
+        });
+    }
 
 
