@@ -71,6 +71,7 @@ const API_ROUTES = {
   authResetPassword: "/api/auth/reset-password",
   exportQuotePdf: "/api/export-quote-pdf",
   graphTemplateImage: "/api/graph-template-image",
+  warehouseCleanSearch: "/api/warehouse-clean-search",
 };
 
 const URLS = {
@@ -125,6 +126,7 @@ const SERVER_LOGS = {
   startupApiTest: "test",
   startupApiCategories: "categories",
   startupApiConfig: "config",
+  startupApiWarehouseCleanSearch: "warehouseCleanSearch",
   startupApiSystemMapping: "systemMapping",
   startupApiImages: "images",
   startupApiStatic: "static",

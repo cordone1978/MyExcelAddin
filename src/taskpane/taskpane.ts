@@ -6,6 +6,7 @@ import { openQueryPriceDialogController } from "./querypriceController";
 import { FLOW_MESSAGES } from "../shared/businessTextConstants";
 import { TASKPANE_HTML_TEXT, TASKPANE_LOG_TEXT } from "../shared/dialogHtmlTextConstants";
 import { SHEET_NAMES } from "../shared/sheetNames";
+import { saveGraphToWorkbook, WorkbookGraphPayload } from "../graph-editor/workbookStore";
 
 /* global console, document, Excel, Office */
 
@@ -16,6 +17,13 @@ let isResetPasswordMode = false;
 let isAccountDockExpanded = false;
 const QUOTE_PREVIEW_STORAGE_KEY = "quotation_addin_quote_preview_payload";
 const CHINESE_ORDINAL_REGEX = /^[一二三四五六七八九十百零]+$/;
+const GRAPH_STORE_DEV_SHEET = "_graph_store_dev";
+const GRAPH_STORE_MAX_CELL_CHARS = 30000;
+const GRAPH_STORE_DEV_CACHE_KEY = "quotation_addin_graph_store_dev_cache_v1";
+const GRAPH_EDITOR_TEMPLATES_MSG = "graph_editor_templates";
+const GRAPH_EDITOR_REQUEST_MSG = "graph_editor_request_templates";
+const GRAPH_EDITOR_SAVE_REQUEST_MSG = "graph_editor_save_request";
+const GRAPH_EDITOR_SAVE_RESULT_MSG = "graph_editor_save_result";
 
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
@@ -38,6 +46,7 @@ Office.onReady((info) => {
     (window as any).handleGenerateQuoteClick = () => withLoginGuard(() => handleGenerateQuoteClick());
     (window as any).handleQueryPriceClick = () => withLoginGuard(() => openQueryPriceDialog());
     (window as any).handleGraphEditorClick = () => withLoginGuard(() => openGraphEditorDialog());
+    (window as any).handleInfoReferenceClick = () => withLoginGuard(() => openInfoReferenceDialog());
     (window as any).handleAccountDockToggle = handleAccountDockToggle;
     restoreAuthState();
     bindLoginInputEvents();
@@ -57,6 +66,7 @@ function applyStaticText() {
   setText("generateQuoteBtn", TASKPANE_HTML_TEXT.generateQuoteBtn);
   setText("queryPriceBtn", TASKPANE_HTML_TEXT.queryPriceBtn);
   setText("graphEditorBtn", TASKPANE_HTML_TEXT.graphEditorBtn);
+  setText("infoReferenceBtn", TASKPANE_HTML_TEXT.infoReferenceBtn);
   setText("loginStatusLabel", "未登录");
   setText("userInfoLabel", "");
   setText("accountDockLabel", "");
@@ -181,6 +191,7 @@ function openDialog(url?: string) {
           dialog.close();
           try {
             const data = JSON.parse(args.message);
+            await saveDialogCompositeToDevSheet(data);
             await handleDialogData(data);
           } catch (error: any) {
             console.error(FLOW_MESSAGES.dialogParseFailed, error);
@@ -201,8 +212,61 @@ async function openQueryPriceDialog() {
   await openQueryPriceDialogController(displayDialog);
 }
 
+async function openInfoReferenceDialog() {
+  await displayDialog(DIALOG_PATHS.infoReference, DIALOG_SIZES.infoReference);
+}
+
 async function openGraphEditorDialog() {
-  await displayDialog(DIALOG_PATHS.graphEditor, DIALOG_SIZES.graphEditor);
+  const dialog = await displayDialog(DIALOG_PATHS.graphEditor, DIALOG_SIZES.graphEditor);
+  dialog.addEventHandler(Office.EventType.DialogMessageReceived, (args) => {
+    try {
+      const payload = JSON.parse(String(args.message || "{}"));
+      if (payload?.type === GRAPH_EDITOR_REQUEST_MSG) {
+        const raw = localStorage.getItem(GRAPH_STORE_DEV_CACHE_KEY);
+        const cache = raw ? JSON.parse(raw) : null;
+        const message = JSON.stringify({
+          type: GRAPH_EDITOR_TEMPLATES_MSG,
+          data: cache || null,
+        });
+        // DialogApi 1.2: send data from taskpane to dialog
+        (dialog as any).messageChild(message);
+        return;
+      }
+      if (payload?.type === GRAPH_EDITOR_SAVE_REQUEST_MSG) {
+        void handleGraphEditorSaveRequest(dialog, payload);
+      }
+    } catch {
+      // ignore malformed dialog messages
+    }
+  });
+}
+
+async function handleGraphEditorSaveRequest(dialog: Office.Dialog, payload: any) {
+  const requestId = String(payload?.requestId || "").trim();
+  let ok = false;
+  let message = "";
+  try {
+    const workbookPayload = (payload?.payload || {}) as WorkbookGraphPayload;
+    await saveGraphToWorkbook(workbookPayload);
+    ok = true;
+    message = "ok";
+  } catch (error: any) {
+    ok = false;
+    message = String(error?.message || "保存失败");
+  }
+
+  try {
+    (dialog as any).messageChild(
+      JSON.stringify({
+        type: GRAPH_EDITOR_SAVE_RESULT_MSG,
+        requestId,
+        ok,
+        message,
+      })
+    );
+  } catch {
+    // ignore send failures
+  }
 }
 
 async function handleGenerateQuoteClick() {
@@ -388,6 +452,70 @@ function parseCellRef(ref: string): { row: number; col: number } | null {
     col = col * 26 + (colLabel.charCodeAt(i) - 64);
   }
   return { row, col };
+}
+
+function chunkLargeText(text: string, size: number) {
+  const source = String(text || "");
+  const chunks: string[] = [];
+  for (let i = 0; i < source.length; i += size) {
+    chunks.push(source.slice(i, i + size));
+  }
+  return chunks.length > 0 ? chunks : [""];
+}
+
+async function saveDialogCompositeToDevSheet(data: any) {
+  try {
+    const cachePayload = {
+      savedAt: new Date().toISOString(),
+      project: String(data?.project || ""),
+      compositeImage: String(data?.compositeImage || ""),
+    };
+    localStorage.setItem(GRAPH_STORE_DEV_CACHE_KEY, JSON.stringify(cachePayload));
+  } catch {
+    // ignore local cache write failure
+  }
+
+  await Excel.run(async (context) => {
+    const sheets = context.workbook.worksheets;
+    let sheet = sheets.getItemOrNullObject(GRAPH_STORE_DEV_SHEET);
+    sheet.load("name,isNullObject");
+    await context.sync();
+
+    if (sheet.isNullObject) {
+      sheet = sheets.add(GRAPH_STORE_DEV_SHEET);
+    }
+
+    // 开发阶段保持可见，便于直接验证
+    sheet.visibility = Excel.SheetVisibility.visible;
+
+    const meta = {
+      savedAt: new Date().toISOString(),
+      categoryId: data?.categoryId ?? null,
+      category: data?.category ?? "",
+      projectId: data?.projectId ?? null,
+      project: data?.project ?? "",
+      detailsCount: Array.isArray(data?.details) ? data.details.length : 0,
+      annotationsCount: Array.isArray(data?.annotations) ? data.annotations.length : 0,
+      hasCompositeImage: !!data?.compositeImage,
+    };
+    const metaJson = JSON.stringify(meta);
+    const imageData = String(data?.compositeImage || "");
+    const chunks = chunkLargeText(imageData, GRAPH_STORE_MAX_CELL_CHARS);
+    const rows = chunks.map((chunk) => [chunk]);
+
+    sheet.getRange("A1").values = [["GRAPH_DIALOG_DEV_V1"]];
+    sheet.getRange("A2").values = [[metaJson]];
+    sheet.getRange("A3").values = [[String(chunks.length)]];
+    sheet.getRange("A4").values = [[String(data?.project || "")]];
+    sheet.getRange("A10:A2000").clear(Excel.ClearApplyTo.contents);
+
+    if (rows.length > 0) {
+      const endRow = 10 + rows.length - 1;
+      sheet.getRange(`A10:A${endRow}`).values = rows;
+    }
+
+    await context.sync();
+  });
 }
 
 function restoreAuthState() {

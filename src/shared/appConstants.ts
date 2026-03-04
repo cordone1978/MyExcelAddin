@@ -77,6 +77,7 @@ export const API_PATHS = {
   craftPrices: "/craft-prices",
   projectByModel: "/project-by-model",
   priceSearch: "/price-search",
+  warehouseCleanSearch: "/warehouse-clean-search",
   systemMapping: "/system-mapping",
   exportQuotePdf: "/export-quote-pdf",
   authLogin: "/auth/login",
@@ -91,6 +92,7 @@ export const DIALOG_PATHS = {
   devModify: "devmodify.html",
   craftModify: "craftmodify.html",
   queryPrice: "queryprice.html",
+  infoReference: "infoReference.html",
   generateQuote: "quoteSummaryPreview.html",
   graphEditor: "graphEditor.html",
 } as const;
@@ -99,6 +101,7 @@ export const DIALOG_SIZES = {
   main: { width: 60, height: 65 },
   devModify: { width: 70, height: 50 },
   queryPrice: { width: 75, height: 60 },
+  infoReference: { width: 94, height: 88 },
   generateQuote: { width: 71, height: 100 },
   graphEditor: { width: 90, height: 88 },
   default: { width: 50, height: 60 },

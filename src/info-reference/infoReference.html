@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>信息参考</title>
+  <script defer type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link href="infoReference.css" rel="stylesheet" type="text/css" />
+</head>
+
+<body>
+  <div class="shell">
+    <div class="left">
+      <section class="panel">
+        <h3>报价配置表设备</h3>
+        <select id="deviceList" class="listbox" size="14"></select>
+      </section>
+      <section class="panel">
+        <h3>仓库相关产品</h3>
+        <select id="warehouseList" class="listbox" size="14"></select>
+      </section>
+    </div>
+    <div class="right">
+      <section class="panel grow">
+        <h3>报价配置表明细</h3>
+        <div class="table-wrap">
+          <table class="grid" id="quoteTable">
+            <thead>
+              <tr>
+                <th>系统</th>
+                <th>设备</th>
+                <th>部件</th>
+                <th>描述</th>
+                <th>型号</th>
+                <th>材质</th>
+                <th>品牌</th>
+                <th>数量</th>
+                <th>单价</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="panel grow">
+        <h3>数据库匹配明细</h3>
+        <div class="table-wrap">
+          <table class="grid two-col" id="dbDetailTable">
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+      <div id="status" class="status"></div>
+    </div>
+  </div>
+</body>
+
+</html>
+

@@ -25,6 +25,7 @@ module.exports = async (env, options) => {
       craftmodify: ["./src/dialog/craftmodify.ts", "./src/dialog/craftmodify.html"],
       queryprice: ["./src/dialog/queryprice.ts", "./src/dialog/queryprice.html"],
       graphEditor: ["./src/graph-editor/graphEditor.ts", "./src/graph-editor/graphEditor.html"],
+      infoReference: ["./src/info-reference/infoReference.ts", "./src/info-reference/infoReference.html"],
       quoteSummaryPreview: ["./src/quote-preview/quoteSummaryPreview.ts", "./src/quote-preview/quoteSummaryPreview.html"],
       commands: "./src/commands/commands.ts",
     },
@@ -90,6 +91,11 @@ module.exports = async (env, options) => {
         chunks: ["graphEditor"],
       }),
       new HtmlWebpackPlugin({
+        filename: "infoReference.html",
+        template: "./src/info-reference/infoReference.html",
+        chunks: ["infoReference"],
+      }),
+      new HtmlWebpackPlugin({
         filename: "quoteSummaryPreview.html",
         template: "./src/quote-preview/quoteSummaryPreview.html",
         chunks: ["quoteSummaryPreview"],
@@ -125,6 +131,10 @@ module.exports = async (env, options) => {
           {
             from: "src/graph-editor/graphEditor.css",
             to: "graphEditor.css",
+          },
+          {
+            from: "src/info-reference/infoReference.css",
+            to: "infoReference.css",
           },
           {
             from: "src/quote-preview/quoteSummaryPreview.css",

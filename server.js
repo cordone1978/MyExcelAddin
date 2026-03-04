@@ -379,6 +379,71 @@ app.get(API_ROUTES.priceSearch, async (req, res) => {
   }
 });
 
+// 8.31 Warehouse clean fuzzy search
+app.get(API_ROUTES.warehouseCleanSearch, async (req, res) => {
+  try {
+    const keyword = String(req.query.keyword || "").trim();
+    const limitRaw = Number(req.query.limit || 120);
+    const limit = Number.isFinite(limitRaw) ? Math.max(20, Math.min(300, Math.floor(limitRaw))) : 120;
+    if (!keyword) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const [columnsRows] = await pool.query("SHOW COLUMNS FROM ht_sales_warehouse_clean");
+    const columns = (columnsRows || []).map((row) => ({
+      field: String(row.Field || ""),
+      type: String(row.Type || "").toLowerCase(),
+    }));
+    if (!columns.length) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const preferred = [
+      "ItemName",
+      "item_name",
+      "product_model",
+      "product_name",
+      "name",
+      "material_name",
+      "ItemDesc",
+      "item_desc",
+    ];
+
+    const textCols = columns
+      .filter((c) => /(char|text|varchar)/i.test(c.type))
+      .map((c) => c.field);
+    const searchable = preferred.filter((p) => textCols.includes(p));
+    if (!searchable.length) {
+      searchable.push(...textCols.slice(0, 6));
+    }
+    if (!searchable.length) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const whereClause = searchable.map((col) => `\`${col}\` LIKE ?`).join(" OR ");
+    const params = searchable.map(() => `%${keyword}%`);
+    params.push(limit);
+
+    const [rows] = await pool.query(
+      `
+      SELECT *
+      FROM ht_sales_warehouse_clean
+      WHERE ${whereClause}
+      LIMIT ?
+    `,
+      params
+    );
+
+    res.json({ success: true, data: rows || [] });
+  } catch (error) {
+    console.error("Warehouse clean search failed:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 8.4 Auth login
 app.post(API_ROUTES.authLogin, async (req, res) => {
   try {
@@ -765,6 +830,7 @@ https.createServer(httpsOptions, app).listen(PORT, () => {
   console.log(`   ${SERVER_LOGS.startupApiTest}: ${URLS.serverOrigin}/api/test`);
   console.log(`   ${SERVER_LOGS.startupApiCategories}: ${URLS.serverOrigin}/api/categories`);
   console.log(`   ${SERVER_LOGS.startupApiConfig}: ${URLS.serverOrigin}/api/config/:projectId`);
+  console.log(`   ${SERVER_LOGS.startupApiWarehouseCleanSearch}: ${URLS.serverOrigin}/api/warehouse-clean-search?keyword=xxx`);
   console.log(`   ${SERVER_LOGS.startupApiSystemMapping}: ${URLS.serverOrigin}/api/system-mapping/:productModel`);
   console.log(`   ${SERVER_LOGS.startupApiImages}: ${URLS.serverOrigin}/public/images/`);
   console.log(`   ${SERVER_LOGS.startupApiStatic}: ${URLS.serverOrigin}/`);
