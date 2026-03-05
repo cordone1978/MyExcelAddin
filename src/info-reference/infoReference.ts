@@ -166,59 +166,62 @@ function renderDbDetail(row: Record<string, unknown>) {
 
 async function readDevicesFromQuoteConfigSheet(): Promise<DeviceItem[]> {
   return Excel.run(async (context) => {
-    const sheet = context.workbook.worksheets.getItemOrNullObject(SHEET_NAMES.quoteConfig);
-    sheet.load("name,isNullObject");
-    const used = sheet.getRange("A:P").getUsedRangeOrNullObject(false);
+    const workbookSheets = context.workbook.worksheets;
+    workbookSheets.load("items/name");
+    await context.sync();
+
+    const quoteSheetName = workbookSheets.items
+      .map((s) => String(s.name || "").trim())
+      .find((name) => name === SHEET_NAMES.quoteConfig || name === "配置报价表" || name.includes("报价配置"));
+    if (!quoteSheetName) {
+      return [];
+    }
+
+    const sheet = context.workbook.worksheets.getItem(quoteSheetName);
+    sheet.load("name");
+    const used = sheet.getUsedRangeOrNullObject(false);
     used.load("values,isNullObject");
     await context.sync();
-    if (sheet.isNullObject || used.isNullObject) {
+    if (used.isNullObject) {
       return [];
     }
 
     const values = used.values || [];
-    const headerSerial = String(BUILDSHEET_TEXT.configHeaders[0] || "").trim();
-    const sectionRegex = /^[一二三四五六七八九十百零]+$/;
-    let currentSystem = "";
-    let currentDevice = "";
+    const headerTexts = new Set([
+      String(BUILDSHEET_TEXT.configHeaders[0] || "").trim(),
+      String(BUILDSHEET_TEXT.configHeaders[1] || "").trim(),
+      String(BUILDSHEET_TEXT.configHeaders[2] || "").trim(),
+      String(BUILDSHEET_TEXT.configSectionTotalLabel || "").trim(),
+    ]);
     const map = new Map<string, DeviceItem>();
 
     values.forEach((row) => {
-      const a = String(row?.[0] || "").trim();
-      const b = String(row?.[1] || "").trim();
-      const c = String(row?.[2] || "").trim();
-      if (sectionRegex.test(a) && b) {
-        currentSystem = b;
-        currentDevice = "";
+      const b = String(row?.[0] || "").trim();
+      if (!b || headerTexts.has(b)) {
         return;
       }
-      if (a === headerSerial) {
-        currentDevice = "";
-        return;
-      }
-      if (!currentSystem) return;
-      if (b) currentDevice = b;
-      if (!currentDevice || !c) return;
 
-      const key = `${currentSystem}||${currentDevice}`;
+      const systemName = "未分类";
+      const key = b;
       if (!map.has(key)) {
         map.set(key, {
           id: key,
-          systemName: currentSystem,
-          deviceName: currentDevice,
+          systemName,
+          deviceName: b,
           rows: [],
         });
       }
 
       map.get(key).rows.push({
-        systemName: currentSystem,
-        deviceName: currentDevice,
-        componentName: c,
-        componentDesc: String(row?.[3] || "").trim(),
-        componentType: String(row?.[4] || "").trim(),
-        componentMaterial: String(row?.[5] || "").trim(),
-        componentBrand: String(row?.[6] || "").trim(),
-        quantity: String(row?.[8] || "").trim(),
-        unitPrice: String(row?.[10] || "").trim(),
+        systemName,
+        deviceName: b,
+        componentName: "",
+        componentDesc: "",
+        componentType: "",
+        componentMaterial: "",
+        componentBrand: "",
+        quantity: "",
+        unitPrice: "",
       });
     });
 
@@ -279,4 +282,3 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
-
