@@ -4,6 +4,7 @@ body {
   padding: 0;
   width: 100%;
   height: 100%;
+  overflow: hidden;
   font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
   color: #0f172a;
   background: #f8fafc;
@@ -11,7 +12,8 @@ body {
 
 .shell {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 10px;
   height: 100%;
   box-sizing: border-box;
@@ -22,6 +24,7 @@ body {
 .right {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 0;
   gap: 10px;
 }
@@ -31,8 +34,24 @@ body {
   border: 1px solid #dbe3ee;
   border-radius: 8px;
   padding: 8px;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   min-height: 0;
+  overflow: hidden;
+}
+
+.left .panel,
+.right .panel {
+  flex: 1;
+  min-height: 0;
+}
+
+.left-group {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
 }
 
 .panel h3 {
@@ -42,7 +61,8 @@ body {
 
 .listbox {
   width: 100%;
-  min-height: 220px;
+  height: calc(100% - 30px);
+  min-height: 0;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   padding: 4px;
@@ -55,14 +75,55 @@ body {
 }
 
 .table-wrap {
-  height: calc(100% - 4px);
+  flex: 1;
+  height: auto;
+  min-height: 0;
   overflow: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.meta-box {
+  margin-top: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fbff;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+}
+
+.meta-item b {
+  color: #0f172a;
+  margin-right: 4px;
 }
 
 .grid {
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+}
+
+#quoteTable thead th:nth-child(odd),
+#quoteTable tbody td:nth-child(odd),
+#dbDetailTable thead th:nth-child(odd),
+#dbDetailTable tbody td:nth-child(odd) {
+  background: #ffffff;
+}
+
+#quoteTable thead th:nth-child(even),
+#quoteTable tbody td:nth-child(even),
+#dbDetailTable thead th:nth-child(even),
+#dbDetailTable tbody td:nth-child(even) {
+  background: #eef6ff;
 }
 
 .grid th,
@@ -71,35 +132,88 @@ body {
   padding: 5px 6px;
   font-size: 12px;
   vertical-align: top;
-  word-break: break-all;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 0;
 }
 
 .grid thead th {
   position: sticky;
   top: 0;
-  background: #f1f5f9;
   z-index: 1;
 }
 
-.grid.two-col td:first-child {
-  width: 180px;
+.sum-row td {
+  background: #2f6fa6 !important;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.sum-row .sum-price {
+  font-weight: 800;
+}
+
+.cost-with-delta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.cost-value {
+  font-weight: 600;
+}
+
+.delta-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.delta-chip.up {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.delta-chip.down {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.delta-chip.flat {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.db-summary {
+  min-height: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.db-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
   background: #f8fafc;
   color: #334155;
-}
-
-.status {
-  min-height: 18px;
   font-size: 12px;
-  color: #334155;
-}
-
-.status.error {
-  color: #b91c1c;
 }
 
 @media (max-width: 1100px) {
   .shell {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
   }
 }
-

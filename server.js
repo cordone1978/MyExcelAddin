@@ -379,67 +379,122 @@ app.get(API_ROUTES.priceSearch, async (req, res) => {
   }
 });
 
-// 8.31 Warehouse clean fuzzy search
+// 8.31 Warehouse statistics fuzzy search
 app.get(API_ROUTES.warehouseCleanSearch, async (req, res) => {
   try {
     const keyword = String(req.query.keyword || "").trim();
-    const limitRaw = Number(req.query.limit || 120);
-    const limit = Number.isFinite(limitRaw) ? Math.max(20, Math.min(300, Math.floor(limitRaw))) : 120;
+    const sheetLimitRaw = Number(req.query.limit || 20);
+    const sheetLimit = Number.isFinite(sheetLimitRaw)
+      ? Math.max(5, Math.min(80, Math.floor(sheetLimitRaw)))
+      : 20;
+    const detailLimitRaw = Number(req.query.detailLimit || 2500);
+    const detailLimit = Number.isFinite(detailLimitRaw)
+      ? Math.max(200, Math.min(5000, Math.floor(detailLimitRaw)))
+      : 2500;
     if (!keyword) {
       res.json({ success: true, data: [] });
       return;
     }
 
-    const [columnsRows] = await pool.query("SHOW COLUMNS FROM ht_sales_warehouse_clean");
-    const columns = (columnsRows || []).map((row) => ({
-      field: String(row.Field || ""),
-      type: String(row.Type || "").toLowerCase(),
-    }));
-    if (!columns.length) {
+    const like = `%${keyword}%`;
+    const [matchedSheets] = await pool.query(
+      `
+      SELECT DISTINCT sheet_name
+      FROM ht_sales_warehouse_statistics
+      WHERE sheet_name LIKE ?
+         OR key_param LIKE ?
+         OR category_name LIKE ?
+         OR content_spec LIKE ?
+         OR model_name LIKE ?
+         OR material_name LIKE ?
+         OR brand_name LIKE ?
+      ORDER BY sheet_name
+      LIMIT ?
+      `,
+      [like, like, like, like, like, like, like, sheetLimit]
+    );
+    const sheetNames = (matchedSheets || [])
+      .map((x) => String(x.sheet_name || "").trim())
+      .filter(Boolean);
+    if (!sheetNames.length) {
       res.json({ success: true, data: [] });
       return;
     }
 
-    const preferred = [
-      "ItemName",
-      "item_name",
-      "product_model",
-      "product_name",
-      "name",
-      "material_name",
-      "ItemDesc",
-      "item_desc",
-    ];
-
-    const textCols = columns
-      .filter((c) => /(char|text|varchar)/i.test(c.type))
-      .map((c) => c.field);
-    const searchable = preferred.filter((p) => textCols.includes(p));
-    if (!searchable.length) {
-      searchable.push(...textCols.slice(0, 6));
-    }
-    if (!searchable.length) {
-      res.json({ success: true, data: [] });
-      return;
-    }
-
-    const whereClause = searchable.map((col) => `\`${col}\` LIKE ?`).join(" OR ");
-    const params = searchable.map(() => `%${keyword}%`);
-    params.push(limit);
-
+    const placeholders = sheetNames.map(() => "?").join(",");
     const [rows] = await pool.query(
       `
-      SELECT *
-      FROM ht_sales_warehouse_clean
-      WHERE ${whereClause}
+      SELECT
+        id,
+        source_file,
+        sheet_name,
+        row_index,
+        key_param,
+        category_name,
+        content_spec,
+        model_name,
+        brand_name,
+        material_name,
+        skip_spec_columns,
+        weight_kg,
+        category_amount,
+        price_ratio,
+        category_row_count,
+        sheet_total_weight_kg,
+        sheet_total_amount,
+        sheet_total_row_count
+      FROM ht_sales_warehouse_statistics
+      WHERE sheet_name IN (${placeholders})
+      ORDER BY sheet_name ASC, row_index ASC
       LIMIT ?
-    `,
-      params
+      `,
+      [...sheetNames, detailLimit]
     );
 
-    res.json({ success: true, data: rows || [] });
+    const [metaRows] = await pool.query(
+      `
+      SELECT
+        m.sheet_name,
+        m.project_name,
+        m.project_code,
+        m.device_name,
+        m.device_drawing_no,
+        m.tag_no,
+        m.order_qty,
+        m.order_unit,
+        m.surface_process,
+        m.vendor_name
+      FROM ht_sales_warehouse_sheet_meta m
+      INNER JOIN (
+        SELECT sheet_name, MAX(id) AS max_id
+        FROM ht_sales_warehouse_sheet_meta
+        WHERE sheet_name IN (${placeholders})
+        GROUP BY sheet_name
+      ) x ON x.max_id = m.id
+      `,
+      [...sheetNames]
+    );
+
+    const metaBySheet = {};
+    (metaRows || []).forEach((row) => {
+      const sheetName = String(row.sheet_name || "").trim();
+      if (!sheetName) return;
+      metaBySheet[sheetName] = {
+        project_name: row.project_name || "",
+        project_code: row.project_code || "",
+        device_name: row.device_name || "",
+        device_drawing_no: row.device_drawing_no || "",
+        tag_no: row.tag_no || "",
+        order_qty: row.order_qty || "",
+        order_unit: row.order_unit || "",
+        surface_process: row.surface_process || "",
+        vendor_name: row.vendor_name || "",
+      };
+    });
+
+    res.json({ success: true, data: rows || [], metaBySheet });
   } catch (error) {
-    console.error("Warehouse clean search failed:", error);
+    console.error("Warehouse statistics search failed:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
