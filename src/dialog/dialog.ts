@@ -41,6 +41,7 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
     let outlineMode = 'hover';
     let currentBaseImageUrl = '';
     let mouseEventsBound = false;
+    const MAX_COMPOSITE_DATAURL_CHARS = 1200000; // 约 0.9MB 原始字节，避免 Excel 写入过大触发内部错误
 
     // 防抖：减少频繁的 renderCanvas 调用
     let renderTimer = null;
@@ -465,6 +466,7 @@ function displayAnnotations(annotations) {
         label.textContent = annotation.name;
         label.style.cursor = 'pointer';
         label.style.flex = '1';
+        item.title = `${DIALOG_TEXT.tooltipPrefix}${annotation.name || ''}`;
 
         // 单击空白处切换勾选，保持叠加显示
         item.onclick = (e) => {
@@ -732,7 +734,7 @@ function normalizeAnnotations(annotations) {
             }
 
             if (hoveredId) {
-                tooltip.innerHTML = DIALOG_TEXT.tooltipPrefix + (components[hoveredId] ? components[hoveredId].name : hoveredId);
+                tooltip.textContent = DIALOG_TEXT.tooltipPrefix + (components[hoveredId] ? components[hoveredId].name : hoveredId);
                 tooltip.style.display = 'block';
                 tooltip.style.left = (event.clientX + 15) + 'px';
                 tooltip.style.top = (event.clientY + 15) + 'px';
@@ -902,6 +904,72 @@ function normalizeAnnotations(annotations) {
         categoryList.innerHTML = `<div class="error">${message}</div>`;
     }
 
+    function exportCompositeImageDataUrl(canvas, scaleHint = 2) {
+        if (!canvas) return null;
+        const loadedComponents = Object.values(components)
+            .filter((comp: any) => comp && comp.loaded && comp.image && comp.visible)
+            .sort((a: any, b: any) => (a.layer || 0) - (b.layer || 0));
+        if (loadedComponents.length === 0) {
+            return null;
+        }
+
+        const baseW = Math.max(1, Number(canvas.width || 0));
+        const baseH = Math.max(1, Number(canvas.height || 0));
+        if (!baseW || !baseH) return null;
+
+        const sourceScales = loadedComponents.map((comp: any) => {
+            const img = comp.image as HTMLImageElement;
+            const sw = Number(img?.naturalWidth || img?.width || 0);
+            const sh = Number(img?.naturalHeight || img?.height || 0);
+            if (!sw || !sh) return 1;
+            return Math.min(sw / baseW, sh / baseH);
+        });
+        const sourceScale = Math.max(1, ...sourceScales.filter((v) => Number.isFinite(v) && v > 0));
+        const adaptiveScale = Math.max(scaleHint, Math.floor(sourceScale));
+        let exportScale = Math.max(2, Math.min(4, adaptiveScale));
+        let bestDataUrl: string | null = null;
+
+        for (let attempt = 0; attempt < 6; attempt++) {
+            const exportW = Math.max(1, Math.round(baseW * exportScale));
+            const exportH = Math.max(1, Math.round(baseH * exportScale));
+            const offscreen = document.createElement('canvas');
+            offscreen.width = exportW;
+            offscreen.height = exportH;
+            const octx = offscreen.getContext('2d');
+            if (!octx) break;
+            octx.imageSmoothingEnabled = true;
+            octx.imageSmoothingQuality = 'high';
+            octx.clearRect(0, 0, exportW, exportH);
+
+            loadedComponents.forEach((comp: any) => {
+                octx.drawImage(comp.image, 0, 0, exportW, exportH);
+            });
+
+            const pngData = offscreen.toDataURL('image/png');
+            if (!bestDataUrl || pngData.length < bestDataUrl.length) {
+                bestDataUrl = pngData;
+            }
+            if (pngData.length <= MAX_COMPOSITE_DATAURL_CHARS) {
+                return pngData;
+            }
+
+            const jpgData = offscreen.toDataURL('image/jpeg', 0.92);
+            if (!bestDataUrl || jpgData.length < bestDataUrl.length) {
+                bestDataUrl = jpgData;
+            }
+            if (jpgData.length <= MAX_COMPOSITE_DATAURL_CHARS) {
+                return jpgData;
+            }
+
+            exportScale = Math.max(1, exportScale - 0.5);
+            if (exportScale <= 1.01) {
+                break;
+            }
+        }
+
+        return bestDataUrl;
+    }
+
     // 19. 确认提交
     async function confirmData() {
         if (!currentCategoryId || !currentProjectId) {
@@ -921,7 +989,7 @@ function normalizeAnnotations(annotations) {
         const canvas = document.getElementById('mainCanvas') as HTMLCanvasElement;
         if (canvas && canvas.style.display !== 'none') {
             try {
-                compositeImageBase64 = canvas.toDataURL('image/png');
+                compositeImageBase64 = exportCompositeImageDataUrl(canvas, 2) || canvas.toDataURL('image/png');
                 console.log(`${DIALOG_TEXT.exportedCompositeImage}:`, compositeImageBase64.length);
             } catch (error) {
                 console.error(`${DIALOG_TEXT.exportCompositeImageFailed}:`, error);
@@ -938,13 +1006,7 @@ function normalizeAnnotations(annotations) {
             compositeImage: compositeImageBase64  // 添加合成图片
         };
 
-        // 开发阶段：将提交数据和合成图保存到可见工作表，便于直接检查效果
-        try {
-            await saveCompositeToDevSheet(result);
-            console.log("已写入开发存储sheet: _graph_store_dev");
-        } catch (error) {
-            console.error("写入开发存储sheet失败:", error);
-        }
+        // 由 taskpane 统一持久化到 _graph_store_dev，避免对同一次提交重复写入/覆盖。
 
         console.log(`${DIALOG_TEXT.submitData}:`, {
             [DIALOG_TEXT.summaryCategory]: result.category,
@@ -1019,5 +1081,3 @@ function normalizeAnnotations(annotations) {
             await context.sync();
         });
     }
-
-

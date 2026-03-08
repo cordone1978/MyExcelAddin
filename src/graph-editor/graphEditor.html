@@ -26,28 +26,35 @@
 
       <aside class="side-panel">
         <h2>模块属性</h2>
-        <label>名称<input id="fieldLabel" type="text" /></label>
+        <label>名称<input id="fieldLabel" type="text" readonly /></label>
         <label>系统
-          <select id="fieldSystem"></select>
+          <select id="fieldSystem" disabled></select>
         </label>
-        <label>规格描述<input id="fieldDesc" type="text" /></label>
-        <label>型号<input id="fieldType" type="text" /></label>
-        <label>材质<input id="fieldMaterial" type="text" /></label>
-        <label>品牌<input id="fieldBrand" type="text" /></label>
-        <label>单位<input id="fieldUnit" type="text" /></label>
-        <label>数量<input id="fieldQty" type="number" min="1" step="1" /></label>
-        <label>单价<input id="fieldPrice" type="number" min="0" step="1" /></label>
-        <button id="applyNodeBtn" class="btn primary">应用到当前选中模块</button>
+        <label>规格描述<input id="fieldDesc" type="text" readonly /></label>
+        <label>型号<input id="fieldType" type="text" readonly /></label>
+        <label>材质<input id="fieldMaterial" type="text" readonly /></label>
+        <label>品牌<input id="fieldBrand" type="text" readonly /></label>
+        <label>单位<input id="fieldUnit" type="text" readonly /></label>
+        <label>数量<input id="fieldQty" type="number" min="1" step="1" readonly /></label>
+        <label>单价<input id="fieldPrice" type="number" min="0" step="1" readonly /></label>
         <hr />
         <p id="statusText" class="status"></p>
       </aside>
     </main>
 
     <section id="templateDrawer" class="template-drawer" aria-label="模板库">
+      <div class="drawer-head">
+        <h3 class="drawer-title">模板库</h3>
+        <span class="drawer-meta">拖拽图片到画布可快速创建设备模块</span>
+      </div>
       <div id="templateList" class="template-list"></div>
     </section>
 
     <section id="toolsDrawer" class="tools-drawer" aria-label="工具">
+      <div class="drawer-head">
+        <h3 class="drawer-title">工具</h3>
+        <span class="drawer-meta">连线和手绘操作</span>
+      </div>
       <div class="tools-panel">
         <button id="penConnectBtn" class="btn">节点连线笔：关</button>
         <button id="drawStrokeBtn" class="btn">自由画线：关</button>
@@ -56,13 +63,11 @@
     </section>
 
     <footer class="toolbar toolbar-bottom">
-      <button id="loadTemplateLibraryBtn" class="btn">加载模板库</button>
+      <button id="loadTemplateLibraryBtn" class="btn">模板库</button>
       <button id="toolsBtn" class="btn">工具</button>
-      <button id="importFromSheetBtn" class="btn">从配置表生成模块</button>
       <button id="deleteSelectedBtn" class="btn">删除选中</button>
       <button id="clearAllBtn" class="btn danger">清空</button>
       <button id="saveBtn" class="btn">保存</button>
-      <button id="writeToSheetBtn" class="btn primary">写入报价配置表</button>
     </footer>
   </div>
   <div id="canvasContextMenu" class="canvas-context-menu" aria-hidden="true">

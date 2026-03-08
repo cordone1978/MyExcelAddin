@@ -9,6 +9,8 @@ interface SystemItem {
   name: string;
 }
 
+const RELATED_GRAPH_SHEET_NAMES = ["_graph_store", "_graph_store_dev"];
+
 function buildConfigSectionTotalFormula(titleRow: number): string {
   return `=IF($O${titleRow}<>"总价","",LET(s,ROW()+2,n,IFERROR(AGGREGATE(15,6,ROW($O$1:$O$9978)/(ROW($O$1:$O$9978)>=s)/($O$1:$O$9978="总价"),1),0),e,IF(n=0,LOOKUP(2,1/($B$1:$B$9978<>""),ROW($B$1:$B$9978)),n-1),IF(e<s,0,SUM(INDEX($P:$P,s):INDEX($P:$P,e)))))`;
 }
@@ -28,6 +30,7 @@ function splitSectionTitle(rawTitle: string): { ordinal: string; text: string } 
 export async function createQuotationSheet(systems?: SystemItem[]) {
   try {
     await Excel.run(async (context) => {
+      await cleanupRelatedHiddenSheets(context);
       await buildQuotationSheet(context, systems);
       await buildConfigSheet(context);
       await buildEasypartsSheet(context);
@@ -35,6 +38,21 @@ export async function createQuotationSheet(systems?: SystemItem[]) {
   } catch (error) {
     console.error(error);
   }
+}
+
+async function cleanupRelatedHiddenSheets(context: Excel.RequestContext) {
+  const candidates = RELATED_GRAPH_SHEET_NAMES.map((name) =>
+    context.workbook.worksheets.getItemOrNullObject(name)
+  );
+  candidates.forEach((sheet) => sheet.load("name,isNullObject,visibility"));
+  await context.sync();
+
+  candidates.forEach((sheet) => {
+    if (sheet.isNullObject) return;
+    // 生成新模板时，图形缓存sheet无论可见状态都清空，避免模板抽屉残留旧图片。
+    sheet.delete();
+  });
+  await context.sync();
 }
 
 async function buildQuotationSheet(context: Excel.RequestContext, systems?: SystemItem[]) {

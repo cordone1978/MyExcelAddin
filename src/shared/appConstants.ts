@@ -101,9 +101,9 @@ export const DIALOG_SIZES = {
   main: { width: 60, height: 65 },
   devModify: { width: 70, height: 50 },
   queryPrice: { width: 75, height: 60 },
-  infoReference: { width: 94, height: 88 },
+  infoReference: { width: 99, height: 99 },
   generateQuote: { width: 71, height: 100 },
-  graphEditor: { width: 90, height: 88 },
+  graphEditor: { width: 99, height: 99 },
   default: { width: 50, height: 60 },
   toast: { width: 30, height: 20 },
 } as const;

@@ -154,7 +154,7 @@ export const DIALOG_TEXT = {
   componentImageLoadFailed: "组件图片加载失败",
   canvasNotFound: "Canvas element not found",
   canvasRendered: "Canvas 渲染完成，组件数量",
-  tooltipPrefix: "组件: ",
+  tooltipPrefix: "组件信息：",
   imageLoadFailed: "图片加载失败",
   noProductImage: "暂无产品图片",
   selectedAnnotations: "当前选中的可选配件",

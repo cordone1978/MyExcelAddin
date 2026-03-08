@@ -440,6 +440,7 @@ app.get(API_ROUTES.warehouseCleanSearch, async (req, res) => {
         category_amount,
         price_ratio,
         category_row_count,
+        quantity_value,
         sheet_total_weight_kg,
         sheet_total_amount,
         sheet_total_row_count

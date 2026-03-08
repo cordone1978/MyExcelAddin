@@ -1,7 +1,5 @@
 /* global Office, Excel, document, window */
 
-import { createQuotationSheet } from "../buildsheet";
-import { insertComponentsToConfigSheet } from "../buildsheet/insertRows";
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
 import { BUILDSHEET_TEXT } from "../shared/businessTextConstants";
 import { SHEET_NAMES } from "../shared/sheetNames";
@@ -40,6 +38,7 @@ type GraphNode = {
   productModel: string;
   imageUrl: string;
   imageKey?: string;
+  templateFingerprint?: string;
   hotspots: Hotspot[];
   x: number;
   y: number;
@@ -65,9 +64,16 @@ type TemplateItem = {
   hotspots: Hotspot[];
 };
 
+type GraphStoreCacheEntry = {
+  savedAt?: string;
+  project?: string;
+  compositeImage?: string;
+};
+
 const STORAGE_KEY = "quotation_addin_graph_editor_state_v1";
 const DEV_GRAPH_STORE_SHEET = "_graph_store_dev";
 const DEV_GRAPH_STORE_CACHE_KEY = "quotation_addin_graph_store_dev_cache_v1";
+const DEV_GRAPH_STORE_SHEET_MARK = "GRAPH_DIALOG_DEV_LIST_V2";
 const GRAPH_EDITOR_TEMPLATES_MSG = "graph_editor_templates";
 const GRAPH_EDITOR_REQUEST_MSG = "graph_editor_request_templates";
 const GRAPH_EDITOR_SAVE_REQUEST_MSG = "graph_editor_save_request";
@@ -126,6 +132,8 @@ const MAX_ZOOM = 2.2;
 
 let templateLibrary: TemplateItem[] = [];
 let parentCachedTemplate: TemplateItem[] = [];
+const consumedTemplateImageKeys = new Set<string>();
+const templateImageInfoCache = new Map<string, { width: number; height: number; kb: number | null }>();
 let productCatalogCache: Array<{ id: number; name: string }> | null = null;
 let saveRequestSeq = 0;
 const pendingSaveRequests = new Map<
@@ -148,25 +156,31 @@ async function initializeGraphEditor() {
   registerParentMessageHandler();
   ensureSystemOptions();
   await restoreState();
+  syncConsumedTemplatesFromState();
   applyViewportTransform();
   renderAll();
   requestTemplatesFromParent();
-  void loadTemplateLibraryFromQuoteSheet();
 }
 
 function bindEvents() {
   getButton("loadTemplateLibraryBtn").addEventListener("click", () => {
     const nextOpen = !isTemplateDrawerOpen();
-    setTemplateDrawerOpen(nextOpen);
     if (nextOpen) {
+      setToolsDrawerOpen(false);
+      setTemplateDrawerOpen(true);
       void loadTemplateLibraryFromQuoteSheet();
+      return;
     }
+    setTemplateDrawerOpen(false);
   });
   getButton("toolsBtn").addEventListener("click", () => {
-    setToolsDrawerOpen(!isToolsDrawerOpen());
-  });
-  getButton("importFromSheetBtn").addEventListener("click", () => {
-    void importFromQuoteConfigSheet();
+    const nextOpen = !isToolsDrawerOpen();
+    if (nextOpen) {
+      setTemplateDrawerOpen(false);
+      setToolsDrawerOpen(true);
+      return;
+    }
+    setToolsDrawerOpen(false);
   });
   getButton("penConnectBtn").addEventListener("click", toggleConnectMode);
   getButton("drawStrokeBtn").addEventListener("click", toggleDrawMode);
@@ -180,10 +194,6 @@ function bindEvents() {
   getButton("saveBtn").addEventListener("click", () => {
     void saveStateToWorkbook();
   });
-  getButton("writeToSheetBtn").addEventListener("click", () => {
-    void writeToQuoteConfigSheet();
-  });
-  getButton("applyNodeBtn").addEventListener("click", applySelectedNodeFields);
 
   const canvas = getCanvas();
   canvas.addEventListener("pointerdown", onCanvasPointerDown);
@@ -202,6 +212,7 @@ function bindEvents() {
     const x = world.x - PRODUCT_NODE_WIDTH / 2;
     const y = world.y - PRODUCT_NODE_HEIGHT / 2;
     addProductNodeFromTemplate(template, x, y);
+    consumeTemplateByImage(template);
   });
 
   canvas.addEventListener("click", (evt) => {
@@ -268,7 +279,7 @@ async function loadTemplateLibraryFromQuoteSheet() {
     setStatus("正在加载模板库...", "");
 
     if (parentCachedTemplate.length > 0) {
-      templateLibrary = parentCachedTemplate;
+      templateLibrary = dedupeTemplateLibraryByImage(parentCachedTemplate);
       renderTemplateLibrary();
       setStatus(`已从父窗口缓存加载模板 ${templateLibrary.length} 个。`, "success");
       return;
@@ -276,25 +287,25 @@ async function loadTemplateLibraryFromQuoteSheet() {
 
     const cachedTemplates = loadTemplateLibraryFromLocalCache();
     if (cachedTemplates.length > 0) {
-      templateLibrary = cachedTemplates;
+      templateLibrary = dedupeTemplateLibraryByImage(cachedTemplates);
       renderTemplateLibrary();
       setStatus(`已从本地缓存加载模板 ${templateLibrary.length} 个。`, "success");
       return;
     }
 
-    const devTemplates = await loadTemplateLibraryFromDevSheet();
+    const devTemplates = await safeLoadTemplateLibraryFromDevSheet();
     if (devTemplates.length > 0) {
-      templateLibrary = devTemplates;
+      templateLibrary = dedupeTemplateLibraryByImage(devTemplates);
       renderTemplateLibrary();
       setStatus(`已从开发存储sheet加载模板 ${templateLibrary.length} 个。`, "success");
       return;
     }
 
-    const models = await readProductModelCandidates();
+    const models = await safeReadProductModelCandidates();
     if (models.length === 0) {
       templateLibrary = [];
       renderTemplateLibrary();
-      setStatus("未在报价配置表识别到产品名称。", "error");
+      setStatus("模板库为空，请先添加设备后再加载模板库。", "");
       return;
     }
 
@@ -313,15 +324,22 @@ async function loadTemplateLibraryFromQuoteSheet() {
           Array<{ name?: string; image_url?: string; position_x?: number | string; position_y?: number | string }>
         >(`${API_PATHS.annotations}/${productId}`);
 
-        let imageUrl = normalizeImageUrl(
+        const originalImageUrl = normalizeImageUrl(
           String(annotations && annotations[0] && annotations[0].image_url ? annotations[0].image_url : "")
         );
+        let imageUrl = originalImageUrl;
         if (!imageUrl) {
           const configRows = await apiGet<Array<{ component_pic?: string }>>(`${API_PATHS.config}/${productId}`);
           const rowWithPic = (configRows || []).find((r) => String(r && r.component_pic ? r.component_pic : "").trim() !== "");
           imageUrl = getImageUrl(rowWithPic && rowWithPic.component_pic ? rowWithPic.component_pic : "");
         }
-        imageUrl = await requestTempImageUrl(String(product && product.product_model ? product.product_model : model), imageUrl);
+        // 优先使用原图（通常更清晰）；仅当原图不可读取时回退到临时图。
+        let stableImageUrl = await ensureStableTemplateImageUrl(imageUrl);
+        if (!stableImageUrl) {
+          const tempUrl = await requestTempImageUrl(String(product && product.product_model ? product.product_model : model), imageUrl);
+          stableImageUrl = await ensureStableTemplateImageUrl(tempUrl);
+        }
+        imageUrl = stableImageUrl || imageUrl;
         const hotspots = (annotations || []).slice(0, 24).map((a, idx) => ({
           name: String(a && a.name ? a.name : `热点${idx + 1}`),
           x: clampPercent(parseNumber(a ? a.position_x : 0), (idx % 6) * 16 + 10),
@@ -340,7 +358,7 @@ async function loadTemplateLibraryFromQuoteSheet() {
       }
     }
 
-    templateLibrary = items;
+    templateLibrary = dedupeTemplateLibraryByImage(items);
     renderTemplateLibrary();
     if (templateLibrary.length === 0) {
       setStatus(`未匹配到产品模板。候选名称 ${models.length} 个，未匹配 ${unresolvedCount} 个。`, "error");
@@ -348,8 +366,51 @@ async function loadTemplateLibraryFromQuoteSheet() {
     }
     setStatus(`模板库加载完成，共 ${templateLibrary.length} 个产品（未匹配 ${unresolvedCount} 个）。`, "success");
   } catch (error) {
-    setStatus((error as Error).message || "模板库加载失败。", "error");
+    const message = String((error as Error)?.message || "");
+    if (message.includes("无法执行请求的操作")) {
+      templateLibrary = [];
+      renderTemplateLibrary();
+      setStatus("模板库暂不可用，已显示空模板库。", "error");
+      return;
+    }
+    setStatus(message || "模板库加载失败。", "error");
   }
+}
+
+async function safeLoadTemplateLibraryFromDevSheet(): Promise<TemplateItem[]> {
+  try {
+    return await loadTemplateLibraryFromDevSheet();
+  } catch {
+    // 某些宿主在工作簿结构变化后短时间内会抛“无法执行请求的操作”，忽略并走后续来源。
+    return [];
+  }
+}
+
+async function safeReadProductModelCandidates(): Promise<string[]> {
+  try {
+    return await readProductModelCandidates();
+  } catch {
+    await delay(180);
+    try {
+      return await readProductModelCandidates();
+    } catch {
+      return [];
+    }
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function ensureStableTemplateImageUrl(imageUrl: string): Promise<string> {
+  const src = String(imageUrl || "").trim();
+  if (!src) return "";
+  if (src.startsWith("data:")) return src;
+  const dataUrl = await tryFetchImageAsDataUrl(src);
+  return dataUrl || src;
 }
 
 function registerParentMessageHandler() {
@@ -359,15 +420,37 @@ function registerParentMessageHandler() {
         const payload = JSON.parse(String(arg?.message || "{}"));
         if (payload?.type === GRAPH_EDITOR_TEMPLATES_MSG) {
           const data = payload?.data;
+          if (Array.isArray(data?.templates)) {
+            parentCachedTemplate = (data.templates as GraphStoreCacheEntry[])
+              .map((x, idx) => {
+                const imageUrl = String(x?.compositeImage || "").trim();
+                if (!imageUrl) return null;
+                const project = String(x?.project || "").trim() || "缓存模板";
+                const savedAt = String(x?.savedAt || Date.now());
+                return {
+                  id: `tpl_parent_${savedAt}_${idx}`,
+                  productModel: project,
+                  imageUrl,
+                  hotspots: [],
+                } as TemplateItem;
+              })
+              .filter((x): x is TemplateItem => !!x);
+            if (parentCachedTemplate.length > 0) {
+              setStatus(`已接收父窗口模板数据（${parentCachedTemplate.length} 个）。`, "success");
+            }
+            return;
+          }
           const imageUrl = String(data?.compositeImage || "").trim();
           if (!imageUrl) return;
           const project = String(data?.project || "").trim() || "缓存模板";
-          parentCachedTemplate = [{
-            id: `tpl_parent_${Date.now()}`,
-            productModel: project,
-            imageUrl,
-            hotspots: [],
-          }];
+          parentCachedTemplate = [
+            {
+              id: `tpl_parent_${Date.now()}`,
+              productModel: project,
+              imageUrl,
+              hotspots: [],
+            },
+          ];
           setStatus(`已接收父窗口模板数据（长度 ${imageUrl.length}）。`, "success");
           return;
         }
@@ -406,17 +489,35 @@ function loadTemplateLibraryFromLocalCache(): TemplateItem[] {
   try {
     const raw = window.localStorage.getItem(DEV_GRAPH_STORE_CACHE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as { project?: string; compositeImage?: string; savedAt?: string };
+    const parsed = JSON.parse(raw) as { templates?: GraphStoreCacheEntry[]; project?: string; compositeImage?: string; savedAt?: string };
+    if (Array.isArray(parsed?.templates)) {
+      return parsed.templates
+        .map((x, idx) => {
+          const imageUrl = String(x?.compositeImage || "").trim();
+          if (!imageUrl) return null;
+          const project = String(x?.project || "").trim() || "缓存模板";
+          const suffix = String(x?.savedAt || `${Date.now()}_${idx}`);
+          return {
+            id: `tpl_cache_${suffix}_${idx}`,
+            productModel: project,
+            imageUrl,
+            hotspots: [],
+          } as TemplateItem;
+        })
+        .filter((x): x is TemplateItem => !!x);
+    }
     const imageUrl = String(parsed?.compositeImage || "").trim();
     if (!imageUrl) return [];
     const project = String(parsed?.project || "").trim() || "缓存模板";
     const suffix = String(parsed?.savedAt || Date.now());
-    return [{
-      id: `tpl_cache_${suffix}`,
-      productModel: project,
-      imageUrl,
-      hotspots: [],
-    }];
+    return [
+      {
+        id: `tpl_cache_${suffix}`,
+        productModel: project,
+        imageUrl,
+        hotspots: [],
+      },
+    ];
   } catch {
     return [];
   }
@@ -436,6 +537,45 @@ async function loadTemplateLibraryFromDevSheet(): Promise<TemplateItem[]> {
     await context.sync();
 
     const mark = String(header.values?.[0]?.[0] || "").trim();
+    if (mark === DEV_GRAPH_STORE_SHEET_MARK) {
+      const metaRange = sheet.getRange("A1:F20000");
+      metaRange.load("values");
+      await context.sync();
+      const values = metaRange.values || [];
+      const nextRowRaw = Number(values?.[0]?.[1] || 10);
+      const stopRow = Number.isFinite(nextRowRaw) && nextRowRaw > 10 ? Math.min(20000, Math.floor(nextRowRaw)) : 20000;
+      const items: TemplateItem[] = [];
+      let row = 10;
+      while (row < stopRow) {
+        const markCell = String(values?.[row - 1]?.[0] || "").trim();
+        if (markCell !== "ENTRY") {
+          row += 1;
+          continue;
+        }
+        const savedAt = String(values?.[row - 1]?.[1] || "");
+        const projectName = String(values?.[row - 1]?.[2] || "").trim() || "未命名模板";
+        const chunkCount = Math.max(0, Number(values?.[row - 1]?.[4] || 0));
+        const chunks: string[] = [];
+        for (let i = 0; i < chunkCount && row + i <= 20000; i += 1) {
+          chunks.push(String(values?.[row + i + 1]?.[5] || ""));
+        }
+        const imageBase64 = chunks.join("");
+        if (imageBase64) {
+          items.push({
+            id: `tpl_dev_${savedAt || Date.now()}_${row}`,
+            productModel: projectName,
+            imageUrl: imageBase64,
+            hotspots: [],
+          });
+        }
+        row = row + 1 + chunkCount + 1;
+      }
+      if (items.length > 0) {
+        setStatus(`已从开发存储sheet读取模板 ${items.length} 个。`, "success");
+      }
+      return items;
+    }
+
     if (mark !== "GRAPH_DIALOG_DEV_V1") {
       return [];
     }
@@ -479,17 +619,26 @@ async function loadTemplateLibraryFromDevSheet(): Promise<TemplateItem[]> {
 
 async function readProductModelCandidates() {
   return Excel.run(async (context) => {
-    const configSheet = context.workbook.worksheets.getItemOrNullObject(SHEET_NAMES.quoteConfig);
-    configSheet.load("name");
+    const workbookSheets = context.workbook.worksheets;
+    workbookSheets.load("items/name");
+    await context.sync();
 
+    const quoteSheetName = workbookSheets.items
+      .map((s) => String(s.name || "").trim())
+      .find((name) => name === SHEET_NAMES.quoteConfig || name === "配置报价表" || name.includes("报价配置"));
+    if (!quoteSheetName) {
+      return [];
+    }
+
+    const configSheet = context.workbook.worksheets.getItem(quoteSheetName);
     const configUsed = configSheet.getRange("A:C").getUsedRangeOrNullObject(false);
     configUsed.load(["values", "isNullObject"]);
-
     await context.sync();
+
     const models = new Set<string>();
     const headerSerial = String(BUILDSHEET_TEXT.configHeaders[0] || "").trim();
 
-    if (!configSheet.isNullObject && !configUsed.isNullObject) {
+    if (!configUsed.isNullObject) {
       const values = configUsed.values || [];
       let currentDevice = "";
       values.forEach((row) => {
@@ -578,7 +727,7 @@ function renderTemplateLibrary() {
   if (templateLibrary.length === 0) {
     const empty = document.createElement("div");
     empty.className = "template-meta";
-    empty.textContent = "暂无模板。请先在报价配置表录入产品，然后点击“加载模板库”。";
+    empty.textContent = "暂无模板。请先在报价配置表录入产品，然后点击“模板库”。";
     listEl.appendChild(empty);
     return;
   }
@@ -593,6 +742,7 @@ function renderTemplateLibrary() {
         ${item.imageUrl ? `<img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.productModel)}" />` : ""}
         ${renderHotspotsHtml(item.hotspots, "small")}
       </div>
+      <div class="template-name">${escapeHtml(String(item.productModel || "").trim() || "未命名模板")}</div>
     `;
 
     card.addEventListener("dragstart", (evt) => {
@@ -602,15 +752,113 @@ function renderTemplateLibrary() {
         evt.dataTransfer.setDragImage(card, 60, 30);
       }
     });
+    card.addEventListener("click", () => {
+      void showTemplateImageInfo(item);
+    });
     card.addEventListener("dragend", () => {
       card.classList.remove("dragging");
     });
     card.addEventListener("dblclick", () => {
       addProductNodeFromTemplate(item, 40, 40);
+      consumeTemplateByImage(item);
     });
 
     listEl.appendChild(card);
   });
+}
+
+function dedupeTemplateLibraryByImage(items: TemplateItem[]): TemplateItem[] {
+  const used = new Set<string>();
+  const unique: TemplateItem[] = [];
+  for (const item of items || []) {
+    const key = getTemplateImageFingerprint(item.imageUrl, item.productModel);
+    if (!key || consumedTemplateImageKeys.has(key) || used.has(key)) {
+      continue;
+    }
+    used.add(key);
+    unique.push(item);
+  }
+  return unique;
+}
+
+function syncConsumedTemplatesFromState() {
+  consumedTemplateImageKeys.clear();
+  state.nodes.forEach((node) => {
+    if (!node || node.nodeType !== "productHotspot") return;
+    const key = String(node.templateFingerprint || getTemplateImageFingerprint(node.imageUrl, node.productModel || node.label)).trim();
+    if (!key) return;
+    consumedTemplateImageKeys.add(key);
+  });
+}
+
+function consumeTemplateByImage(item: TemplateItem) {
+  const key = getTemplateImageFingerprint(item.imageUrl, item.productModel);
+  if (!key) return;
+  consumedTemplateImageKeys.add(key);
+  templateLibrary = templateLibrary.filter((tpl) => getTemplateImageFingerprint(tpl.imageUrl, tpl.productModel) !== key);
+  renderTemplateLibrary();
+}
+
+function restoreTemplateByDeletedNodes(removedNodes: GraphNode[]) {
+  if (!Array.isArray(removedNodes) || removedNodes.length === 0) {
+    return;
+  }
+  let changed = false;
+  for (const node of removedNodes) {
+    if (!node || node.nodeType !== "productHotspot") continue;
+    const key = String(node.templateFingerprint || getTemplateImageFingerprint(node.imageUrl, node.productModel || node.label)).trim();
+    if (!key) continue;
+
+    const stillExists = state.nodes.some((n) => {
+      if (!n || n.nodeType !== "productHotspot") return false;
+      const existingKey = String(n.templateFingerprint || getTemplateImageFingerprint(n.imageUrl, n.productModel || n.label)).trim();
+      return existingKey === key;
+    });
+    if (stillExists) continue;
+
+    consumedTemplateImageKeys.delete(key);
+    const alreadyInLibrary = templateLibrary.some((tpl) => getTemplateImageFingerprint(tpl.imageUrl, tpl.productModel) === key);
+    if (alreadyInLibrary) continue;
+
+    const recoveredImage = getNodeTemplateImage(node);
+    if (!recoveredImage) continue;
+    templateLibrary.push({
+      id: `tpl_recover_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
+      productModel: String(node.productModel || node.label || "未命名模板"),
+      imageUrl: recoveredImage,
+      hotspots: Array.isArray(node.hotspots) ? node.hotspots : [],
+    });
+    changed = true;
+  }
+  if (changed) {
+    templateLibrary = dedupeTemplateLibraryByImage(templateLibrary);
+    renderTemplateLibrary();
+  }
+}
+
+function getNodeTemplateImage(node: GraphNode): string {
+  if (node?.imageKey && imageAssetStore.has(node.imageKey)) {
+    const fromCache = String(imageAssetStore.get(node.imageKey) || "").trim();
+    if (fromCache) return fromCache;
+  }
+  return String(node?.imageUrl || "").trim();
+}
+
+function getTemplateImageFingerprint(imageUrl: string, productModel: string): string {
+  const image = String(imageUrl || "").trim();
+  if (image.startsWith("data:")) {
+    return `data:${image.length}:${image.slice(0, 64)}:${image.slice(-64)}`;
+  }
+  if (image) {
+    try {
+      const u = new URL(image, window.location.origin);
+      return `url:${u.origin}${u.pathname}`;
+    } catch {
+      const withoutQuery = image.split("?")[0].split("#")[0];
+      return `url:${withoutQuery}`;
+    }
+  }
+  return `model:${String(productModel || "").trim().toLowerCase()}`;
 }
 
 function ensureSystemOptions() {
@@ -629,6 +877,7 @@ function ensureSystemOptions() {
 }
 
 function addProductNodeFromTemplate(item: TemplateItem, x: number, y: number) {
+  const templateFingerprint = getTemplateImageFingerprint(item.imageUrl, item.productModel);
   const imageKey = buildImageKey(item.productModel, item.imageUrl);
   const node: GraphNode = {
     id: `node_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
@@ -645,6 +894,7 @@ function addProductNodeFromTemplate(item: TemplateItem, x: number, y: number) {
     productModel: item.productModel,
     imageUrl: item.imageUrl,
     imageKey,
+    templateFingerprint,
     hotspots: item.hotspots,
     x,
     y,
@@ -667,6 +917,10 @@ function addProductNodeFromTemplate(item: TemplateItem, x: number, y: number) {
 
 async function attachTempImageForNode(nodeId: string, productModel: string, sourceImageUrl: string) {
   if (!sourceImageUrl) return;
+  const raw = String(sourceImageUrl || "").trim();
+  if (raw.startsWith("data:") || raw.startsWith("blob:")) {
+    return;
+  }
   try {
     const tempUrl = await requestTempImageUrl(productModel, sourceImageUrl);
     if (!tempUrl) return;
@@ -704,6 +958,10 @@ async function stabilizeNodeImage(nodeId: string) {
 
 async function requestTempImageUrl(productModel: string, sourceImageUrl: string) {
   if (!sourceImageUrl) return "";
+  const raw = String(sourceImageUrl || "").trim();
+  if (raw.startsWith("data:") || raw.startsWith("blob:")) {
+    return raw;
+  }
   try {
     const data = await apiPost<{ imageUrl?: string }>(API_PATHS.graphTemplateImage, {
       productModel,
@@ -764,6 +1022,7 @@ function deleteSelected() {
     const beforeEdges = state.edges.length;
     const beforeStrokes = state.strokes.length;
 
+    const removedNodes = nodeIds.size > 0 ? state.nodes.filter((n) => nodeIds.has(n.id)) : [];
     if (nodeIds.size > 0) {
       state.nodes = state.nodes.filter((n) => !nodeIds.has(n.id));
     }
@@ -784,6 +1043,7 @@ function deleteSelected() {
     const removedCount =
       (beforeNodes - state.nodes.length) + (beforeEdges - state.edges.length) + (beforeStrokes - state.strokes.length);
     if (removedCount > 0) {
+      restoreTemplateByDeletedNodes(removedNodes);
       setStatus(`已批量删除 ${removedCount} 个元素。`, "success");
       renderAll();
       scheduleSave();
@@ -818,6 +1078,7 @@ function deleteSelected() {
   }
   if (selectedNodeId) {
     const id = selectedNodeId;
+    const removedNode = state.nodes.find((n) => n.id === id) || null;
     state.nodes = state.nodes.filter((n) => n.id !== id);
     state.edges = state.edges.filter((e) => e.source !== id && e.target !== id);
     selectedNodeId = "";
@@ -826,6 +1087,9 @@ function deleteSelected() {
     selectedNodeIds.clear();
     selectedEdgeIds.clear();
     selectedStrokeIds.clear();
+    if (removedNode) {
+      restoreTemplateByDeletedNodes([removedNode]);
+    }
     setStatus("节点已删除。", "success");
     renderAll();
     scheduleSave();
@@ -842,10 +1106,10 @@ function deleteSelectedEdge() {
 }
 
 function clearAll() {
+  const removedNodes = state.nodes.filter((n) => n.nodeType === "productHotspot");
   state.nodes = [];
   state.edges = [];
   state.strokes = [];
-  imageAssetStore.clear();
   selectedNodeId = "";
   selectedEdgeId = "";
   selectedStrokeId = "";
@@ -856,6 +1120,8 @@ function clearAll() {
   penSourceNodeId = "";
   isStrokeDrawing = false;
   activeStrokeId = "";
+  restoreTemplateByDeletedNodes(removedNodes);
+  imageAssetStore.clear();
   renderAll();
   scheduleSave();
   setStatus("已清空画布。", "success");
@@ -1606,235 +1872,6 @@ function applyNodeToForm(node: GraphNode) {
   setInputValue("fieldPrice", String(node.componentUnitPrice));
 }
 
-function applySelectedNodeFields() {
-  const node = findNode(selectedNodeId);
-  if (!node) {
-    setStatus("请先选中一个模块。", "error");
-    return;
-  }
-  node.label = getInputValue("fieldLabel") || node.label;
-  node.systemName = getInputValue("fieldSystem") || node.systemName;
-  node.componentDesc = getInputValue("fieldDesc");
-  node.componentType = getInputValue("fieldType");
-  node.componentMaterial = getInputValue("fieldMaterial");
-  node.componentBrand = getInputValue("fieldBrand");
-  node.componentUnit = getInputValue("fieldUnit") || "台";
-  node.componentQuantity = Math.max(1, Math.round(Number(getInputValue("fieldQty")) || 1));
-  node.componentUnitPrice = Math.max(0, Math.round(Number(getInputValue("fieldPrice")) || 0));
-  renderAll();
-  scheduleSave();
-  setStatus("模块属性已更新。", "success");
-}
-
-async function importFromQuoteConfigSheet() {
-  try {
-    setStatus("正在读取报价配置表...", "");
-    const modules = await Excel.run(async (context) => {
-      const sheet = context.workbook.worksheets.getItemOrNullObject(SHEET_NAMES.quoteConfig);
-      sheet.load("name");
-      const used = sheet.getRange("A:P").getUsedRangeOrNullObject(false);
-      used.load(["values", "isNullObject", "rowIndex"]);
-      await context.sync();
-
-      if (sheet.isNullObject || used.isNullObject) {
-        throw new Error("报价配置表不存在或为空，请先生成并填写配置表。");
-      }
-
-      const values = used.values || [];
-      const rows = [] as Array<{ systemName: string; deviceName: string; componentCount: number; totalPrice: number }>;
-      const moduleMap = new Map<string, { systemName: string; deviceName: string; componentCount: number; totalPrice: number }>();
-      let currentSystem = "";
-      let currentDevice = "";
-      const headerSerial = String(BUILDSHEET_TEXT.configHeaders[0] || "").trim();
-
-      values.forEach((item) => {
-        const colA = String(item && item[0] ? item[0] : "").trim();
-        const colB = String(item && item[1] ? item[1] : "").trim();
-        const colC = String(item && item[2] ? item[2] : "").trim();
-        const colP = item ? item[15] : 0;
-
-        if (/^[一二三四五六七八九十百零]+$/.test(colA) && colB) {
-          currentSystem = colB;
-          currentDevice = "";
-          return;
-        }
-        if (colA === headerSerial) {
-          currentDevice = "";
-          return;
-        }
-        if (!currentSystem) {
-          return;
-        }
-        if (colB) {
-          currentDevice = colB;
-        }
-        if (!currentDevice || !colC) {
-          return;
-        }
-
-        const key = `${currentSystem}__${currentDevice}`;
-        const exists = moduleMap.get(key);
-        if (!exists) {
-          moduleMap.set(key, {
-            systemName: currentSystem,
-            deviceName: currentDevice,
-            componentCount: 1,
-            totalPrice: parseNumber(colP),
-          });
-          return;
-        }
-        exists.componentCount += 1;
-        exists.totalPrice += parseNumber(colP);
-      });
-
-      for (const item of moduleMap.values()) {
-        rows.push(item);
-      }
-      return rows;
-    });
-
-    if (modules.length === 0) {
-      throw new Error("未识别到可生成的模块，请确认配置表中已存在设备与组件数据。");
-    }
-
-    state.nodes = modules.map((item, i) => {
-      const x = 40 + (i % 4) * 230;
-      const y = 40 + Math.floor(i / 4) * 130;
-      const systemName = item.systemName.replace(TITLE_PREFIX_REGEX, "").trim() || "未分类";
-      return {
-        id: `node_${Date.now()}_${i}`,
-        nodeType: "module",
-        label: item.deviceName,
-        systemName,
-        componentDesc: `组件数: ${item.componentCount}`,
-        componentType: "",
-        componentMaterial: "",
-        componentBrand: "",
-        componentUnit: "套",
-        componentQuantity: 1,
-        componentUnitPrice: Math.max(0, Math.round(item.totalPrice)),
-        productModel: item.deviceName,
-        imageUrl: "",
-        hotspots: [],
-        x,
-        y,
-      } as GraphNode;
-    });
-    state.edges = [];
-    state.strokes = [];
-    selectedNodeId = "";
-    selectedEdgeId = "";
-    selectedStrokeId = "";
-    selectedNodeIds.clear();
-    selectedEdgeIds.clear();
-    selectedStrokeIds.clear();
-    isPenDrawing = false;
-    penSourceNodeId = "";
-    isStrokeDrawing = false;
-    activeStrokeId = "";
-    renderAll();
-    scheduleSave();
-    setStatus(`已从配置表生成 ${state.nodes.length} 个模块。`, "success");
-  } catch (error) {
-    setStatus((error as Error).message || "读取配置表失败。", "error");
-  }
-}
-
-async function writeToQuoteConfigSheet() {
-  try {
-    if (state.nodes.length === 0) {
-      throw new Error("当前没有模块，无法写入。");
-    }
-    setStatus("正在写入报价配置表，请稍候...", "");
-    await ensureQuoteTemplate();
-    const sectionRows = await getSectionRows();
-    const grouped = buildComponentsGroupedBySystem();
-
-    let insertedCount = 0;
-    let skippedSystems = 0;
-
-    for (const [systemName, components] of grouped.entries()) {
-      const row = findSectionRowByName(sectionRows, systemName);
-      if (!row) {
-        skippedSystems += 1;
-        continue;
-      }
-      await focusSectionRow(row);
-      await insertComponentsToConfigSheet(systemName, "流程图模块", components, systemName);
-      insertedCount += components.length;
-    }
-
-    if (insertedCount === 0) {
-      throw new Error("未找到可写入的系统分区，请先检查系统名称是否与模板一致。");
-    }
-
-    if (skippedSystems > 0) {
-      setStatus(`写入完成，已插入 ${insertedCount} 行；有 ${skippedSystems} 个系统未匹配模板分区。`, "success");
-      return;
-    }
-    setStatus(`写入完成，已插入 ${insertedCount} 行。`, "success");
-  } catch (error) {
-    setStatus((error as Error).message || "写入失败。", "error");
-  }
-}
-
-async function ensureQuoteTemplate() {
-  const hasConfig = await Excel.run(async (context) => {
-    const sheet = context.workbook.worksheets.getItemOrNullObject(SHEET_NAMES.quoteConfig);
-    sheet.load("name");
-    await context.sync();
-    return !sheet.isNullObject;
-  });
-
-  if (!hasConfig) {
-    await createQuotationSheet();
-  }
-}
-
-async function getSectionRows() {
-  return Excel.run(async (context) => {
-    const sheet = context.workbook.worksheets.getItemOrNullObject(SHEET_NAMES.quoteConfig);
-    sheet.load("name");
-    const used = sheet.getRange("A:B").getUsedRangeOrNullObject(false);
-    used.load(["values", "rowIndex", "rowCount", "isNullObject"]);
-    await context.sync();
-    if (sheet.isNullObject || used.isNullObject) {
-      return [] as Array<{ name: string; row: number }>;
-    }
-    const rows: Array<{ name: string; row: number }> = [];
-    const values = used.values || [];
-    const offset = used.rowIndex;
-    values.forEach((item, idx) => {
-      const aText = String(item && item[0] ? item[0] : "").trim();
-      const bText = String(item && item[1] ? item[1] : "").trim();
-      if (!/^[一二三四五六七八九十百零]+$/.test(aText) || !bText) return;
-      rows.push({ name: bText, row: offset + idx + 1 });
-    });
-    return rows;
-  });
-}
-
-function findSectionRowByName(rows: Array<{ name: string; row: number }>, systemName: string): number {
-  const target = normalizeSystemName(systemName);
-  if (!target) return 0;
-  for (const row of rows) {
-    const current = normalizeSystemName(row.name);
-    if (current === target || current.includes(target) || target.includes(current)) {
-      return row.row;
-    }
-  }
-  return 0;
-}
-
-function normalizeSystemName(value: unknown): string {
-  return String(value || "")
-    .trim()
-    .replace(/[、，,（）().\s]/g, "")
-    .replace(/系统部分/g, "系统")
-    .replace(/筛分除磁包装/g, "粉分除尘包装")
-    .replace(/除尘器系统/g, "除尘系统");
-}
-
 function parseNumber(value: unknown): number {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
@@ -1849,58 +1886,6 @@ function parseNumber(value: unknown): number {
 function clampPercent(value: number, fallback: number) {
   const v = Number.isFinite(value) ? value : fallback;
   return Math.max(2, Math.min(98, v));
-}
-
-async function focusSectionRow(row: number) {
-  await Excel.run(async (context) => {
-    const sheet = context.workbook.worksheets.getItem(SHEET_NAMES.quoteConfig);
-    sheet.activate();
-    sheet.getRange(`A${row}`).select();
-    await context.sync();
-  });
-}
-
-function buildComponentsGroupedBySystem() {
-  const upstreamByTarget = new Map<string, string[]>();
-  state.edges.forEach((edge) => {
-    const source = findNode(edge.source);
-    if (!source) return;
-    const items = upstreamByTarget.get(edge.target) || [];
-    items.push(source.label);
-    upstreamByTarget.set(edge.target, items);
-  });
-
-  const grouped = new Map<string, any[]>();
-  const sorted = [...state.nodes].sort((a, b) => {
-    const bySystem = normalizeSystemName(a.systemName).localeCompare(normalizeSystemName(b.systemName), "zh");
-    if (bySystem !== 0) return bySystem;
-    if (a.y !== b.y) return a.y - b.y;
-    return a.x - b.x;
-  });
-
-  sorted.forEach((node) => {
-    if (node.nodeType === "productHotspot") return;
-
-    const key = node.systemName || "未分类";
-    const list = grouped.get(key) || [];
-    const upstream = upstreamByTarget.get(node.id) || [];
-    const relationDesc = upstream.length > 0 ? `上游: ${upstream.join("、")}` : "";
-    const mergedDesc = [node.componentDesc, relationDesc].filter(Boolean).join(" | ");
-    list.push({
-      component_name: node.label,
-      component_desc: mergedDesc,
-      component_type: node.componentType,
-      component_material: node.componentMaterial,
-      component_brand: node.componentBrand,
-      component_quantity: node.componentQuantity,
-      component_unit: node.componentUnit,
-      component_unitprice: node.componentUnitPrice,
-      is_Assembly: 1,
-    });
-    grouped.set(key, list);
-  });
-
-  return grouped;
 }
 
 function findNode(id: string) {
@@ -1926,6 +1911,7 @@ function normalizeNodes(nodes: unknown): GraphNode[] {
       productModel: String(node.productModel || ""),
       imageUrl: String(node.imageUrl || ""),
       imageKey: node.imageKey ? String(node.imageKey) : "",
+      templateFingerprint: node.templateFingerprint ? String(node.templateFingerprint) : "",
       hotspots: Array.isArray(node.hotspots)
         ? node.hotspots.map((h, hIndex) => ({
             name: String((h as Partial<Hotspot>).name || `热点${hIndex + 1}`),
@@ -2068,6 +2054,59 @@ function setStatus(message: string, kind: "error" | "success" | "" = "") {
   el.className = kind ? `status ${kind}` : "status";
 }
 
+async function showTemplateImageInfo(item: TemplateItem) {
+  const key = getTemplateImageFingerprint(item.imageUrl, item.productModel);
+  let info = templateImageInfoCache.get(key);
+  if (!info) {
+    const [size, bytes] = await Promise.all([
+      readImageNaturalSize(item.imageUrl),
+      readImageByteSize(item.imageUrl),
+    ]);
+    info = {
+      width: size.width,
+      height: size.height,
+      kb: bytes > 0 ? Math.round((bytes / 1024) * 10) / 10 : null,
+    };
+    templateImageInfoCache.set(key, info);
+  }
+
+  const model = String(item.productModel || "").trim() || "未命名模板";
+  const wh =
+    info.width > 0 && info.height > 0 ? `${info.width} x ${info.height}px` : "未知尺寸";
+  const kbText = info.kb != null ? `${info.kb}KB` : "未知大小";
+  setStatus(`模板 ${model} | 尺寸 ${wh} | 大小 ${kbText}`, "success");
+}
+
+async function readImageNaturalSize(url: string): Promise<{ width: number; height: number }> {
+  const src = String(url || "").trim();
+  if (!src) return { width: 0, height: 0 };
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: Number(img.naturalWidth || 0), height: Number(img.naturalHeight || 0) });
+    img.onerror = () => resolve({ width: 0, height: 0 });
+    img.src = src;
+  });
+}
+
+async function readImageByteSize(url: string): Promise<number> {
+  const src = String(url || "").trim();
+  if (!src) return 0;
+  if (src.startsWith("data:")) {
+    const comma = src.indexOf(",");
+    if (comma < 0) return 0;
+    const payload = src.slice(comma + 1);
+    return Math.floor((payload.length * 3) / 4);
+  }
+  try {
+    const resp = await fetch(src, { cache: "no-store" });
+    if (!resp.ok) return 0;
+    const blob = await resp.blob();
+    return Number(blob.size || 0);
+  } catch {
+    return 0;
+  }
+}
+
 function getCanvas() {
   return document.getElementById("canvas") as HTMLDivElement;
 }
@@ -2100,6 +2139,8 @@ function setTemplateDrawerOpen(open: boolean) {
   const drawer = document.getElementById("templateDrawer");
   if (!drawer) return;
   drawer.classList.toggle("open", open);
+  const btn = document.getElementById("loadTemplateLibraryBtn");
+  btn?.classList.toggle("active", open);
 }
 
 function isTemplateDrawerOpen() {
@@ -2112,6 +2153,8 @@ function setToolsDrawerOpen(open: boolean) {
   const drawer = document.getElementById("toolsDrawer");
   if (!drawer) return;
   drawer.classList.toggle("open", open);
+  const btn = document.getElementById("toolsBtn");
+  btn?.classList.toggle("active", open);
 }
 
 function isToolsDrawerOpen() {
@@ -2153,11 +2196,6 @@ function setInputValue(id: string, value: string) {
   el.value = value;
 }
 
-function getInputValue(id: string) {
-  const el = getField(id);
-  return String(el.value || "").trim();
-}
-
 function renderHotspotsHtml(hotspots: Hotspot[], size: "" | "small" = "") {
   return hotspots
     .map((h) => {
@@ -2185,8 +2223,12 @@ function normalizeImageUrl(rawUrl: unknown) {
   if (!rawUrl || !String(rawUrl).trim()) {
     return "";
   }
+  const source = String(rawUrl).trim();
+  if (source.startsWith("data:") || source.startsWith("blob:")) {
+    return source;
+  }
   try {
-    const url = new URL(String(rawUrl), window.location.origin);
+    const url = new URL(source, window.location.origin);
     url.protocol = window.location.protocol;
     const parts = url.pathname.split("/").map((part, idx) => {
       if (idx === 0) return part;

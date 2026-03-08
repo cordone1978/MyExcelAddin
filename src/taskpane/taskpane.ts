@@ -3,7 +3,7 @@ import { handleDialogData } from "../dialog/handleDialogData";
 import { API_PATHS, APP_URLS, DIALOG_PATHS, DIALOG_SIZES, UI_DEFAULTS } from "../shared/appConstants";
 import { createDevCraftController } from "./devCraftController";
 import { openQueryPriceDialogController } from "./querypriceController";
-import { FLOW_MESSAGES } from "../shared/businessTextConstants";
+import { BUILDSHEET_TEXT, FLOW_MESSAGES } from "../shared/businessTextConstants";
 import { TASKPANE_HTML_TEXT, TASKPANE_LOG_TEXT } from "../shared/dialogHtmlTextConstants";
 import { SHEET_NAMES } from "../shared/sheetNames";
 import { saveGraphToWorkbook, WorkbookGraphPayload } from "../graph-editor/workbookStore";
@@ -18,12 +18,33 @@ let isAccountDockExpanded = false;
 const QUOTE_PREVIEW_STORAGE_KEY = "quotation_addin_quote_preview_payload";
 const CHINESE_ORDINAL_REGEX = /^[一二三四五六七八九十百零]+$/;
 const GRAPH_STORE_DEV_SHEET = "_graph_store_dev";
-const GRAPH_STORE_MAX_CELL_CHARS = 30000;
+const GRAPH_STORE_MAX_CELL_CHARS = 6000;
 const GRAPH_STORE_DEV_CACHE_KEY = "quotation_addin_graph_store_dev_cache_v1";
+const GRAPH_EDITOR_STATE_CACHE_KEY = "quotation_addin_graph_editor_state_v1";
+const GRAPH_STORE_DEV_SHEET_MARK = "GRAPH_DIALOG_DEV_LIST_V2";
 const GRAPH_EDITOR_TEMPLATES_MSG = "graph_editor_templates";
 const GRAPH_EDITOR_REQUEST_MSG = "graph_editor_request_templates";
 const GRAPH_EDITOR_SAVE_REQUEST_MSG = "graph_editor_save_request";
 const GRAPH_EDITOR_SAVE_RESULT_MSG = "graph_editor_save_result";
+const INFO_REF_REQUEST_DEVICES_MSG = "info_reference_request_devices";
+const INFO_REF_DEVICES_MSG = "info_reference_devices";
+const INFO_REF_ERROR_MSG = "info_reference_error";
+
+type InfoRefDeviceRow = {
+  cToP: string[];
+};
+
+type InfoRefDeviceItem = {
+  id: string;
+  systemName: string;
+  deviceName: string;
+  rows: InfoRefDeviceRow[];
+};
+
+type InfoRefPayload = {
+  devices: InfoRefDeviceItem[];
+  columnWidths: number[];
+};
 
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
@@ -42,7 +63,7 @@ Office.onReady((info) => {
     (window as any).handleConfirmResetPasswordClick = handleConfirmResetPasswordClick;
     (window as any).handleAddDeviceClick = () => withLoginGuard(() => openDialog());
     (window as any).handleModifyDeviceClick = () => withLoginGuard(() => devCraftController.openDevModifyDialog());
-    (window as any).handleGenerateSheetClick = () => withLoginGuard(() => createQuotationSheet());
+    (window as any).handleGenerateSheetClick = () => withLoginGuard(() => handleGenerateSheetClick());
     (window as any).handleGenerateQuoteClick = () => withLoginGuard(() => handleGenerateQuoteClick());
     (window as any).handleQueryPriceClick = () => withLoginGuard(() => openQueryPriceDialog());
     (window as any).handleGraphEditorClick = () => withLoginGuard(() => openGraphEditorDialog());
@@ -189,13 +210,30 @@ function openDialog(url?: string) {
         const dialog = result.value;
         dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
           dialog.close();
+          let data: any = null;
           try {
-            const data = JSON.parse(args.message);
-            await saveDialogCompositeToDevSheet(data);
-            await handleDialogData(data);
+            data = JSON.parse(args.message);
           } catch (error: any) {
-            console.error(FLOW_MESSAGES.dialogParseFailed, error);
-            setAuthFeedback(error?.message || FLOW_MESSAGES.dialogParseFailed, "error");
+            console.error("解析对话框返回数据失败", error);
+            setAuthFeedback(error?.message || "解析对话框返回数据失败", "error");
+            return;
+          }
+
+          try {
+            await retryExcelInternalError(() => saveDialogCompositeToDevSheetWithFallback(data));
+          } catch (error: any) {
+            const message = error?.message || String(error);
+            console.error("保存模板图片失败", error);
+            setAuthFeedback(`保存模板图片失败：${message}`, "error");
+            // 不阻断主流程：即使图片写入失败，也继续插入报价配置表数据。
+          }
+
+          try {
+            await retryExcelInternalError(() => handleDialogData(data));
+          } catch (error: any) {
+            const message = error?.message || String(error);
+            console.error("写入报价配置表失败", error);
+            setAuthFeedback(`写入报价配置表失败：${message}`, "error");
           }
         });
       } else {
@@ -208,12 +246,223 @@ function openDialog(url?: string) {
   );
 }
 
+function isExcelInternalError(error: any) {
+  const message = String(error?.message || "");
+  return (
+    message.includes("处理请求时出现内部错误") ||
+    message.includes("无法执行请求的操作") ||
+    String(error?.name || "").includes("RichApi.Error")
+  );
+}
+
+async function retryExcelInternalError<T>(action: () => Promise<T>, retries = 1): Promise<T> {
+  let lastError: any = null;
+  for (let i = 0; i <= retries; i += 1) {
+    try {
+      return await action();
+    } catch (error) {
+      lastError = error;
+      if (!isExcelInternalError(error) || i >= retries) {
+        throw error;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 180));
+    }
+  }
+  throw lastError;
+}
+
 async function openQueryPriceDialog() {
   await openQueryPriceDialogController(displayDialog);
 }
 
+async function handleGenerateSheetClick() {
+  const confirmed = await showGenerateTemplateConfirm();
+  if (!confirmed) {
+    return;
+  }
+  clearTemplateCachesBeforeGenerate();
+  await createQuotationSheet();
+}
+
+function clearTemplateCachesBeforeGenerate() {
+  try {
+    localStorage.removeItem(GRAPH_STORE_DEV_CACHE_KEY);
+    localStorage.removeItem(GRAPH_EDITOR_STATE_CACHE_KEY);
+  } catch {
+    // ignore local cache cleanup failures
+  }
+}
+
+function showGenerateTemplateConfirm(): Promise<boolean> {
+  const modal = document.getElementById("generateTemplateConfirmModal");
+  const okBtn = document.getElementById("confirmGenerateTemplateOk") as HTMLButtonElement | null;
+  const cancelBtn = document.getElementById("confirmGenerateTemplateCancel") as HTMLButtonElement | null;
+
+  if (!modal || !okBtn || !cancelBtn) {
+    return Promise.resolve(true);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      modal.classList.add("is-hidden");
+      document.removeEventListener("keydown", onKeydown);
+    };
+    const settle = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const onOk = () => settle(true);
+    const onCancel = () => settle(false);
+    const onKeydown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        settle(false);
+      }
+    };
+
+    modal.classList.remove("is-hidden");
+    okBtn.addEventListener("click", onOk, { once: true });
+    cancelBtn.addEventListener("click", onCancel, { once: true });
+    document.addEventListener("keydown", onKeydown);
+  });
+}
+
 async function openInfoReferenceDialog() {
-  await displayDialog(DIALOG_PATHS.infoReference, DIALOG_SIZES.infoReference);
+  console.log("[InfoReferenceDebug] openInfoReferenceDialog invoked", {
+    path: DIALOG_PATHS.infoReference,
+    size: DIALOG_SIZES.infoReference,
+  });
+  try {
+    const dialog = await displayDialog(DIALOG_PATHS.infoReference, DIALOG_SIZES.infoReference);
+    console.log("[InfoReferenceDebug] infoReference dialog opened");
+    dialog.addEventHandler(Office.EventType.DialogMessageReceived, (args) => {
+      void handleInfoReferenceDialogMessage(dialog, args);
+    });
+    // Fallback: proactively push once in case request message is lost/racing.
+    await pushInfoReferenceDevicesToDialog(dialog);
+  } catch (error) {
+    console.error("[InfoReferenceDebug] infoReference dialog open failed", error);
+    setAuthFeedback(`信息参考窗口打开失败：${(error as any)?.message || String(error)}`, "error");
+  }
+}
+
+async function handleInfoReferenceDialogMessage(dialog: Office.Dialog, args: any) {
+  try {
+    const payload = JSON.parse(String(args?.message || "{}"));
+    console.log("[InfoReferenceDebug] taskpane received dialog message", payload?.type);
+    if (payload?.type !== INFO_REF_REQUEST_DEVICES_MSG) {
+      return;
+    }
+    await pushInfoReferenceDevicesToDialog(dialog);
+  } catch (error: any) {
+    try {
+      (dialog as any).messageChild(
+        JSON.stringify({
+          type: INFO_REF_ERROR_MSG,
+          message: String(error?.message || error),
+        })
+      );
+    } catch {
+      // ignore send failures
+    }
+  }
+}
+
+async function pushInfoReferenceDevicesToDialog(dialog: Office.Dialog) {
+  const payload = await readInfoReferenceDevicesFromWorkbook();
+  console.log("[InfoReferenceDebug] taskpane push devices", {
+    count: payload.devices.length,
+    sample: payload.devices.slice(0, 5).map((d) => d.deviceName),
+    columnWidths: payload.columnWidths,
+  });
+  (dialog as any).messageChild(
+    JSON.stringify({
+      type: INFO_REF_DEVICES_MSG,
+      data: payload,
+    })
+  );
+}
+
+async function readInfoReferenceDevicesFromWorkbook(): Promise<InfoRefPayload> {
+  return Excel.run(async (context) => {
+    const workbookSheets = context.workbook.worksheets;
+    workbookSheets.load("items/name");
+    await context.sync();
+
+    const quoteSheetName = workbookSheets.items
+      .map((s) => String(s.name || "").trim())
+      .find((name) => name === SHEET_NAMES.quoteConfig || name === "配置报价表" || name.includes("报价配置"));
+    if (!quoteSheetName) {
+      return { devices: [], columnWidths: [] };
+    }
+
+    const sheet = context.workbook.worksheets.getItem(quoteSheetName);
+    const used = sheet.getUsedRangeOrNullObject(false);
+    used.load("values,isNullObject");
+    const colLetters = ["C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"];
+    const colRanges = colLetters.map((c) => sheet.getRange(`${c}:${c}`));
+    colRanges.forEach((r) => r.format.load("columnWidth"));
+    await context.sync();
+    if (used.isNullObject) {
+      return {
+        devices: [],
+        columnWidths: colRanges.map((r) => Number((r.format as any).columnWidth || 0)),
+      };
+    }
+
+    const values = used.values || [];
+    const headerTexts = new Set([
+      String(BUILDSHEET_TEXT.configHeaders[0] || "").trim(),
+      String(BUILDSHEET_TEXT.configHeaders[1] || "").trim(),
+      String(BUILDSHEET_TEXT.configHeaders[2] || "").trim(),
+      String(BUILDSHEET_TEXT.configSectionTotalLabel || "").trim(),
+    ]);
+    const devices: InfoRefDeviceItem[] = [];
+    let currentDevice: InfoRefDeviceItem | null = null;
+    let currentSystemName = "未分类";
+
+    values.forEach((row, rowIndex) => {
+      const a = String(row?.[0] || "").trim();
+      const b = String(row?.[1] || "").trim();
+      const cToP = Array.from({ length: 14 }, (_, i) => String(row?.[i + 2] ?? "").trim());
+      const componentName = cToP[0];
+
+      const isSectionTitle = /^[一二三四五六七八九十百零]+$/.test(a) && !!b;
+      if (isSectionTitle) {
+        currentSystemName = b;
+        currentDevice = null;
+        return;
+      }
+
+      if (b && headerTexts.has(b)) {
+        currentDevice = null;
+        return;
+      }
+
+      if (b) {
+        currentDevice = {
+          id: `${b}#${rowIndex}`,
+          systemName: currentSystemName,
+          deviceName: b,
+          rows: [],
+        };
+        devices.push(currentDevice);
+      }
+
+      if (!componentName || !currentDevice) return;
+      currentDevice.rows.push({ cToP });
+    });
+
+    return {
+      devices: devices.filter((d) => d.deviceName),
+      columnWidths: colRanges.map((r) => Number((r.format as any).columnWidth || 0)),
+    };
+  });
 }
 
 async function openGraphEditorDialog() {
@@ -463,17 +712,68 @@ function chunkLargeText(text: string, size: number) {
   return chunks.length > 0 ? chunks : [""];
 }
 
-async function saveDialogCompositeToDevSheet(data: any) {
+type GraphStoreCacheEntry = {
+  savedAt: string;
+  project: string;
+  compositeImage: string;
+};
+
+function formatLocalDateTime(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+}
+
+function appendGraphStoreLocalCache(entry: GraphStoreCacheEntry) {
+  if (!entry.compositeImage) return;
   try {
-    const cachePayload = {
-      savedAt: new Date().toISOString(),
-      project: String(data?.project || ""),
-      compositeImage: String(data?.compositeImage || ""),
-    };
-    localStorage.setItem(GRAPH_STORE_DEV_CACHE_KEY, JSON.stringify(cachePayload));
+    const raw = localStorage.getItem(GRAPH_STORE_DEV_CACHE_KEY);
+    let templates: GraphStoreCacheEntry[] = [];
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.templates)) {
+        templates = parsed.templates as GraphStoreCacheEntry[];
+      } else if (typeof parsed?.compositeImage === "string") {
+        templates = [
+          {
+            savedAt: String(parsed?.savedAt || new Date().toISOString()),
+            project: String(parsed?.project || ""),
+            compositeImage: String(parsed?.compositeImage || ""),
+          },
+        ];
+      }
+    }
+    templates.push(entry);
+    const MAX_TEMPLATES = 120;
+    if (templates.length > MAX_TEMPLATES) {
+      templates = templates.slice(templates.length - MAX_TEMPLATES);
+    }
+    localStorage.setItem(
+      GRAPH_STORE_DEV_CACHE_KEY,
+      JSON.stringify({
+        updatedAt: new Date().toISOString(),
+        templates,
+      })
+    );
   } catch {
     // ignore local cache write failure
   }
+}
+
+async function saveDialogCompositeToDevSheet(data: any) {
+  const entry: GraphStoreCacheEntry = {
+    savedAt: formatLocalDateTime(new Date()),
+    project: String(data?.project || ""),
+    compositeImage: String(data?.compositeImage || ""),
+  };
+  if (!entry.compositeImage || !entry.compositeImage.trim()) {
+    return;
+  }
+  appendGraphStoreLocalCache(entry);
 
   await Excel.run(async (context) => {
     const sheets = context.workbook.worksheets;
@@ -489,7 +789,7 @@ async function saveDialogCompositeToDevSheet(data: any) {
     sheet.visibility = Excel.SheetVisibility.visible;
 
     const meta = {
-      savedAt: new Date().toISOString(),
+      savedAt: entry.savedAt,
       categoryId: data?.categoryId ?? null,
       category: data?.category ?? "",
       projectId: data?.projectId ?? null,
@@ -499,22 +799,135 @@ async function saveDialogCompositeToDevSheet(data: any) {
       hasCompositeImage: !!data?.compositeImage,
     };
     const metaJson = JSON.stringify(meta);
-    const imageData = String(data?.compositeImage || "");
+    const imageData = entry.compositeImage;
     const chunks = chunkLargeText(imageData, GRAPH_STORE_MAX_CELL_CHARS);
     const rows = chunks.map((chunk) => [chunk]);
+    const header = sheet.getRange("A1:B1");
+    header.load("values");
+    await context.sync();
 
-    sheet.getRange("A1").values = [["GRAPH_DIALOG_DEV_V1"]];
-    sheet.getRange("A2").values = [[metaJson]];
-    sheet.getRange("A3").values = [[String(chunks.length)]];
-    sheet.getRange("A4").values = [[String(data?.project || "")]];
-    sheet.getRange("A10:A2000").clear(Excel.ClearApplyTo.contents);
-
-    if (rows.length > 0) {
-      const endRow = 10 + rows.length - 1;
-      sheet.getRange(`A10:A${endRow}`).values = rows;
+    const mark = String(header.values?.[0]?.[0] || "").trim();
+    let nextRow = Number(header.values?.[0]?.[1] || 10);
+    if (!Number.isFinite(nextRow) || nextRow < 10) {
+      nextRow = 10;
     }
 
+    if (mark !== GRAPH_STORE_DEV_SHEET_MARK) {
+      // 初始化为多记录结构（旧格式不再覆盖写入）。
+      sheet.getUsedRangeOrNullObject(true).clear(Excel.ClearApplyTo.contents);
+      sheet.getRange("A1").values = [[GRAPH_STORE_DEV_SHEET_MARK]];
+      sheet.getRange("B1").values = [[String(10)]];
+      sheet.getRange("A2").values = [["A列: ENTRY标记；B=保存时间；C=项目；D=元数据JSON；E=图片分块数；F列起=图片分块"]];
+      nextRow = 10;
+    }
+
+    const startRow = nextRow;
+    sheet.getRange(`A${startRow}`).values = [["ENTRY"]];
+    sheet.getRange(`B${startRow}`).values = [[entry.savedAt]];
+    sheet.getRange(`C${startRow}`).values = [[entry.project]];
+    sheet.getRange(`D${startRow}`).values = [[metaJson]];
+    sheet.getRange(`E${startRow}`).values = [[String(chunks.length)]];
+
+    if (rows.length > 0) {
+      const chunkStart = startRow + 1;
+      const BATCH = 8;
+      for (let i = 0; i < rows.length; i += BATCH) {
+        const batchRows = rows.slice(i, i + BATCH);
+        const from = chunkStart + i;
+        const to = from + batchRows.length - 1;
+        sheet.getRange(`F${from}:F${to}`).values = batchRows;
+        await context.sync();
+      }
+    }
+
+    const afterRow = startRow + 1 + rows.length;
+    const nextWriteRow = afterRow + 1;
+    sheet.getRange(`A${afterRow}:F${afterRow}`).clear(Excel.ClearApplyTo.contents);
+    sheet.getRange("B1").values = [[String(nextWriteRow)]];
+
     await context.sync();
+  });
+}
+
+async function saveDialogCompositeToDevSheetWithFallback(data: any) {
+  try {
+    await saveDialogCompositeToDevSheet(data);
+    return;
+  } catch (error) {
+    if (!isExcelInternalError(error)) {
+      throw error;
+    }
+    const compressed = await compressDataUrlForWorkbook(String(data?.compositeImage || ""), 420000);
+    if (!compressed) {
+      throw error;
+    }
+    const nextData = { ...(data || {}), compositeImage: compressed };
+    await saveDialogCompositeToDevSheet(nextData);
+  }
+}
+
+async function compressDataUrlForWorkbook(dataUrl: string, targetChars: number): Promise<string> {
+  const source = String(dataUrl || "").trim();
+  if (!source) return "";
+  if (!source.startsWith("data:")) {
+    return source.length <= targetChars ? source : "";
+  }
+  if (source.length <= targetChars) {
+    return source;
+  }
+
+  const image = await loadImageFromDataUrl(source);
+  if (!image) {
+    return "";
+  }
+
+  let scale = 1;
+  const qualitySteps = [0.88, 0.78, 0.68, 0.58, 0.5];
+  let best = source;
+
+  for (let round = 0; round < 6; round += 1) {
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) break;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(image, 0, 0, width, height);
+
+    for (const q of qualitySteps) {
+      const jpg = canvas.toDataURL("image/jpeg", q);
+      if (jpg.length < best.length) {
+        best = jpg;
+      }
+      if (jpg.length <= targetChars) {
+        return jpg;
+      }
+    }
+
+    const png = canvas.toDataURL("image/png");
+    if (png.length < best.length) {
+      best = png;
+    }
+    if (png.length <= targetChars) {
+      return png;
+    }
+
+    scale *= 0.8;
+  }
+
+  return best.length < source.length ? best : "";
+}
+
+function loadImageFromDataUrl(dataUrl: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
   });
 }
 

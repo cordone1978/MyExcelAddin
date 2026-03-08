@@ -99,7 +99,20 @@ export async function insertComponentsToConfigSheet(
       sheet.getRange(`L${dataStartRow}:P${dataEndRow}`).format.horizontalAlignment = "Center";
       sheet.getRange(`Q${dataStartRow}:Q${dataEndRow}`).format.horizontalAlignment = "Center";
 
-      const groups = mergeDeviceColumnsByGroup(sheet, dataStartRow, dataEndRow, projectName, components);
+      let groups: DeviceMergeGroup[] = [];
+      try {
+        groups = mergeDeviceColumnsByGroup(sheet, dataStartRow, dataEndRow, projectName, components) || [];
+      } catch (error) {
+        console.warn("mergeDeviceColumnsByGroup failed, fallback to plain rows:", error);
+        // 回退：不做分组合并，避免“有标注时整次插入失败”
+        groups = components.map((_, i) => ({
+          start: dataStartRow + i,
+          end: dataStartRow + i,
+          label: projectName || "",
+        }));
+        const bValues = groups.map((g) => [g.label]);
+        sheet.getRange(`B${dataStartRow}:B${dataEndRow}`).values = bValues;
+      }
 
       sheet.getRange("L:L").format.fill.color = BUILDSHEET_STYLE.costAreaColor;
       sheet.getRange("M:M").format.fill.color = BUILDSHEET_STYLE.costAreaColor;
@@ -113,19 +126,25 @@ export async function insertComponentsToConfigSheet(
       borders.getItem("InsideHorizontal").weight = "Thin";
       borders.getItem("InsideVertical").style = "Continuous";
       borders.getItem("InsideVertical").weight = "Thin";
-
-      sheet.getRange(`A${dataStartRow}:R${dataStartRow}`).format.borders.getItem("EdgeTop").style = "Continuous";
-      sheet.getRange(`A${dataStartRow}:R${dataStartRow}`).format.borders.getItem("EdgeTop").weight = "Medium";
-
-      sheet.getRange(`R${dataStartRow}:R${dataEndRow}`).format.borders.getItem("EdgeRight").style = "Continuous";
-      sheet.getRange(`R${dataStartRow}:R${dataEndRow}`).format.borders.getItem("EdgeRight").weight = "Medium";
+      borders.getItem("EdgeTop").style = "Continuous";
+      borders.getItem("EdgeTop").weight = "Thin";
+      borders.getItem("EdgeBottom").style = "Continuous";
+      borders.getItem("EdgeBottom").weight = "Thin";
+      borders.getItem("EdgeLeft").style = "Continuous";
+      borders.getItem("EdgeLeft").weight = "Thin";
+      borders.getItem("EdgeRight").style = "Continuous";
+      borders.getItem("EdgeRight").weight = "Thin";
 
       const mFormulas = Array.from({ length: dataRowCount }, (_, i) => [`=L${dataStartRow + i}*H${dataStartRow + i}`]);
       sheet.getRange(`M${dataStartRow}:M${dataEndRow}`).formulas = mFormulas;
       groups.forEach((group) => {
-        sheet.getRange(`N${group.start}`).formulas = [[`=SUM(M${group.start}:M${group.end})`]];
-        sheet.getRange(`O${group.start}`).formulas = [[`=N${group.start}*Q${group.start}`]];
-        sheet.getRange(`P${group.start}`).formulas = [[`=O${group.start}*J${group.start}`]];
+        try {
+          sheet.getRange(`N${group.start}`).formulas = [[`=SUM(M${group.start}:M${group.end})`]];
+          sheet.getRange(`O${group.start}`).formulas = [[`=N${group.start}*Q${group.start}`]];
+          sheet.getRange(`P${group.start}`).formulas = [[`=O${group.start}*J${group.start}`]];
+        } catch (error) {
+          console.warn("group formula write failed:", error);
+        }
       });
       sheet.getRange(`L${dataStartRow}:L${dataEndRow}`).format.numberFormat = "#,##0";
       sheet.getRange(`M${dataStartRow}:M${dataEndRow}`).format.numberFormat = "#,##0";
@@ -134,6 +153,8 @@ export async function insertComponentsToConfigSheet(
       sheet.getRange(`P${dataStartRow}:P${dataEndRow}`).format.numberFormat = "#,##0";
 
       await renumberSectionSerialsByLayout(context, sheet, sectionInfo.sectionRow);
+      ensureSectionBoundaryRowsBoldBorders(sheet, sectionInfo.sectionRow);
+      await refreshAllSectionTitleBorders(context, sheet);
 
       await context.sync();
     });
@@ -143,17 +164,71 @@ export async function insertComponentsToConfigSheet(
   }
 }
 
+function ensureSectionBoundaryRowsBoldBorders(sheet: Excel.Worksheet, sectionRow: number) {
+  if (!sheet || !sectionRow || sectionRow < 1) return;
+
+  const titleRange = sheet.getRange(`A${sectionRow}:R${sectionRow}`);
+  titleRange.format.borders.getItem("EdgeTop").style = "Continuous";
+  titleRange.format.borders.getItem("EdgeTop").weight = "Medium";
+  titleRange.format.borders.getItem("EdgeBottom").style = "Continuous";
+  titleRange.format.borders.getItem("EdgeBottom").weight = "Medium";
+
+  const adjacentRow = sectionRow + 1;
+  const adjacentRange = sheet.getRange(`A${adjacentRow}:R${adjacentRow}`);
+  adjacentRange.format.borders.getItem("EdgeTop").style = "Continuous";
+  adjacentRange.format.borders.getItem("EdgeTop").weight = "Medium";
+  adjacentRange.format.borders.getItem("EdgeBottom").style = "Continuous";
+  adjacentRange.format.borders.getItem("EdgeBottom").weight = "Medium";
+}
+
+async function refreshAllSectionTitleBorders(context: Excel.RequestContext, sheet: Excel.Worksheet) {
+  const abUsedRange = sheet.getRange("A:B").getUsedRangeOrNullObject(false);
+  abUsedRange.load(["values", "rowIndex", "isNullObject"]);
+  await context.sync();
+  if (abUsedRange.isNullObject) return;
+
+  const values = abUsedRange.values || [];
+  const rowOffset = abUsedRange.rowIndex;
+  for (let i = 0; i < values.length; i++) {
+    const aText = String(values[i]?.[0] ?? "").trim();
+    const bText = String(values[i]?.[1] ?? "").trim();
+    if (!isSectionTitleRow(aText, bText)) continue;
+
+    const row = rowOffset + i + 1;
+    const titleRange = sheet.getRange(`A${row}:R${row}`);
+    titleRange.format.borders.getItem("EdgeTop").style = "Continuous";
+    titleRange.format.borders.getItem("EdgeTop").weight = "Medium";
+    titleRange.format.borders.getItem("EdgeBottom").style = "Continuous";
+    titleRange.format.borders.getItem("EdgeBottom").weight = "Medium";
+  }
+}
+
 function resolveInsertPositionSync(
   abUsedRange: Excel.Range,
   activeSheetName: string,
   selectedRow: number,
   selectedColumn: number,
-  _categoryNameFallback: string
+  categoryNameFallback: string
 ): InsertSectionInfo {
-  if (activeSheetName !== SHEET_NAMES.quoteConfig) {
-    throw new Error("请先切换到报价配置表，并点击相应的A列单元格。");
+  // 优先使用“当前选中行”定位。只有选中定位失败时，才回退到分类定位。
+  if (activeSheetName === SHEET_NAMES.quoteConfig) {
+    try {
+      return findInsertRowBySelectionSync(abUsedRange, selectedRow, selectedColumn);
+    } catch {
+      // fall through to category fallback
+    }
   }
-  return findInsertRowBySelectionSync(abUsedRange, selectedRow, selectedColumn);
+
+  let categoryPosition: InsertSectionInfo | null = null;
+  try {
+    categoryPosition = findInsertRowForCategorySync(abUsedRange, categoryNameFallback);
+  } catch {
+    categoryPosition = null;
+  }
+  if (categoryPosition) {
+    return categoryPosition;
+  }
+  throw new Error("未找到可插入的分区位置，请先确认报价配置表中存在对应系统分区。");
 }
 
 function findInsertRowBySelectionSync(

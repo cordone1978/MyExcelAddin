@@ -75,33 +75,54 @@ body {
 .template-drawer {
   max-height: 0;
   overflow: hidden;
-  background: #ffffff;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   border-top: 1px solid transparent;
-  transition: max-height 0.25s ease;
+  transition: max-height 0.25s ease, border-color 0.25s ease;
 }
 
 .template-drawer.open {
-  max-height: 104px;
+  max-height: 176px;
   border-top-color: #dbe3ee;
 }
 
 .tools-drawer {
   max-height: 0;
   overflow: hidden;
-  background: #ffffff;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   border-top: 1px solid transparent;
-  transition: max-height 0.2s ease;
+  transition: max-height 0.2s ease, border-color 0.2s ease;
 }
 
 .tools-drawer.open {
-  max-height: 68px;
+  max-height: 114px;
   border-top-color: #dbe3ee;
 }
 
+.drawer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 4px;
+}
+
+.drawer-title {
+  margin: 0;
+  font-size: 13px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.drawer-meta {
+  font-size: 11px;
+  color: #64748b;
+}
+
 .tools-panel {
-  padding: 8px 10px;
+  padding: 6px 10px 10px;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .canvas-panel {
@@ -337,19 +358,42 @@ body {
 
 .template-list {
   display: flex;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 10px;
+  padding: 8px 10px 10px;
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
   align-items: center;
 }
 
+.template-meta {
+  font-size: 12px;
+  color: #64748b;
+  padding: 8px 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
 .template-item {
-  flex: 0 0 60px;
-  width: 60px;
-  height: 60px;
+  flex: 0 0 92px;
+  width: 92px;
+  height: 108px;
   cursor: grab;
+  border-radius: 10px;
+  border: 1px solid #dbe3ee;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.template-item:hover {
+  transform: translateY(-1px);
+  border-color: #93c5fd;
+  box-shadow: 0 8px 18px rgba(2, 132, 199, 0.14);
 }
 
 .template-item.dragging {
@@ -358,9 +402,11 @@ body {
 
 .template-thumb {
   width: 100%;
-  height: 100%;
+  height: 72px;
   position: relative;
   overflow: hidden;
+  border-radius: 10px 10px 0 0;
+  background: #f8fafc;
 }
 
 .template-thumb img {
@@ -368,6 +414,18 @@ body {
   height: 100%;
   object-fit: contain;
   display: block;
+}
+
+.template-name {
+  flex: 1;
+  padding: 6px 6px 7px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #334155;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 

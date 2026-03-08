@@ -164,14 +164,9 @@ async function handleDeviceChanged() {
 function renderDeviceList(items: DeviceItem[]) {
   const list = getDeviceList();
   list.innerHTML = "";
-  const countByName = new Map<string, number>();
-  items.forEach((item) => {
-    countByName.set(item.deviceName, (countByName.get(item.deviceName) || 0) + 1);
-  });
   items.forEach((item) => {
     const option = document.createElement("option");
-    const duplicated = (countByName.get(item.deviceName) || 0) > 1;
-    option.textContent = duplicated ? `${item.deviceName}（${item.systemName}）` : item.deviceName;
+    option.textContent = item.deviceName;
     option.value = item.id;
     list.appendChild(option);
   });
@@ -353,7 +348,7 @@ function normalizeWarehouseRow(row: Record<string, unknown>): DbDisplayRow {
   const legacy = normalizeWarehouseRowLegacy(row);
   const costTotal = pickText(row, ["category_amount", "sheet_total_amount"]) || legacy.price;
   const componentName = pickText(row, ["category_name", "component_name", "name"]) || legacy.category || legacy.name;
-  const componentQuantity = pickText(row, ["category_row_count", "数量", "qty", "quantity", "count"]) || legacy.quantity;
+  const componentQuantity = pickText(row, ["quantity_value"]);
   const componentUnit = pickText(row, ["component_unit", "单位", "unit", "ItemUnit", "item_unit"]) || "";
   return {
     componentName,
