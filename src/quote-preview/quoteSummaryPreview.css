@@ -26,6 +26,27 @@ body { min-height: 100vh; padding: 10px; }
 .center { text-align: center; }
 .bold { font-weight: bold; }
 .title { font-size: 20px; }
+.quote-row-1 td { font-size: 24px; font-weight: 700; text-align: center; }
+.quote-row-7 td { font-size: 14px; font-weight: 700; text-align: center; }
+.quote-row-1 td { padding: 0; }
+.title-cell {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+}
+.title-logo {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: auto;
+  object-fit: contain;
+}
+.title-text {
+  display: inline-block;
+}
 .notes td { vertical-align: top; }
 #contextMenu {
   position: fixed;

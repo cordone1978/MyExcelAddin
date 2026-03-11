@@ -133,7 +133,11 @@ export async function insertComponentsToConfigSheet(
       borders.getItem("EdgeLeft").style = "Continuous";
       borders.getItem("EdgeLeft").weight = "Thin";
       borders.getItem("EdgeRight").style = "Continuous";
-      borders.getItem("EdgeRight").weight = "Thin";
+      borders.getItem("EdgeRight").weight = "Medium";
+      // 新增行贴靠表右边界时，确保最右侧外框保持粗线（避免被插入区域细边框覆盖）。
+      const rightEdgeRange = sheet.getRange(`R${dataStartRow}:R${dataEndRow}`);
+      rightEdgeRange.format.borders.getItem("EdgeRight").style = "Continuous";
+      rightEdgeRange.format.borders.getItem("EdgeRight").weight = "Medium";
 
       const mFormulas = Array.from({ length: dataRowCount }, (_, i) => [`=L${dataStartRow + i}*H${dataStartRow + i}`]);
       sheet.getRange(`M${dataStartRow}:M${dataEndRow}`).formulas = mFormulas;

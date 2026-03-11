@@ -28,26 +28,39 @@ body {
 .toolbar-bottom {
   border-top: 1px solid #dbe3ee;
   border-bottom: 0;
+  position: relative;
+  z-index: 3;
+  background: #f7f9fc;
+  backdrop-filter: none;
+  padding: 10px;
+  overflow: visible;
+  border-radius: 0 0 16px 16px;
 }
 
 .btn {
+  position: relative;
   border: 1px solid #cbd5e1;
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   color: #0f172a;
-  border-radius: 8px;
+  border-radius: 999px;
   padding: 8px 12px;
   font-size: 13px;
   cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .btn:hover {
-  border-color: #0284c7;
+  border-color: #93c5fd;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
 }
 
 .btn.active {
-  background: #0284c7;
-  border-color: #0284c7;
-  color: #fff;
+  background: linear-gradient(180deg, #ffffff 0%, #f2f6fb 100%);
+  border-color: #bfdbfe;
+  box-shadow: 0 10px 24px rgba(2, 132, 199, 0.16);
+  color: #0b1f38;
+  z-index: 11;
 }
 
 .btn.primary {
@@ -72,30 +85,58 @@ body {
   box-sizing: border-box;
 }
 
+.bottom-dock {
+  margin: 0 10px 10px;
+  border: 1px solid #dbe3ee;
+  border-radius: 16px;
+  background: #f7f9fc;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.1);
+  backdrop-filter: none;
+  overflow: visible;
+}
+
 .template-drawer {
+  position: relative;
+  margin: 0;
   max-height: 0;
+  opacity: 0;
   overflow: hidden;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  border-top: 1px solid transparent;
-  transition: max-height 0.25s ease, border-color 0.25s ease;
+  background: #f7f9fc;
+  border: 0;
+  border-radius: 16px 16px 0 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  transform: translateY(8px) scale(0.985);
+  transform-origin: bottom center;
+  transition: max-height 0.28s ease, opacity 0.2s ease, transform 0.25s ease, border-color 0.25s ease;
 }
 
 .template-drawer.open {
-  max-height: 176px;
-  border-top-color: #dbe3ee;
+  max-height: 196px;
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 .tools-drawer {
+  position: relative;
+  margin: 0;
   max-height: 0;
+  opacity: 0;
   overflow: hidden;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  border-top: 1px solid transparent;
-  transition: max-height 0.2s ease, border-color 0.2s ease;
+  background: #f7f9fc;
+  border: 0;
+  border-radius: 16px 16px 0 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  transform: translateY(8px) scale(0.985);
+  transform-origin: bottom center;
+  transition: max-height 0.25s ease, opacity 0.2s ease, transform 0.25s ease, border-color 0.2s ease;
 }
 
 .tools-drawer.open {
-  max-height: 114px;
-  border-top-color: #dbe3ee;
+  max-height: 124px;
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 .drawer-head {
@@ -103,7 +144,7 @@ body {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px 4px;
+  padding: 10px 12px 4px;
 }
 
 .drawer-title {
@@ -119,7 +160,7 @@ body {
 }
 
 .tools-panel {
-  padding: 6px 10px 10px;
+  padding: 6px 12px 12px;
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -359,7 +400,7 @@ body {
 .template-list {
   display: flex;
   gap: 10px;
-  padding: 8px 10px 10px;
+  padding: 8px 12px 12px;
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;

@@ -42,33 +42,35 @@
       </aside>
     </main>
 
-    <section id="templateDrawer" class="template-drawer" aria-label="模板库">
-      <div class="drawer-head">
-        <h3 class="drawer-title">模板库</h3>
-        <span class="drawer-meta">拖拽图片到画布可快速创建设备模块</span>
-      </div>
-      <div id="templateList" class="template-list"></div>
-    </section>
+    <section class="bottom-dock">
+      <section id="templateDrawer" class="template-drawer" aria-label="模板库">
+        <div class="drawer-head">
+          <h3 class="drawer-title">模板库</h3>
+          <span class="drawer-meta">拖拽图片到画布可快速创建设备模块</span>
+        </div>
+        <div id="templateList" class="template-list"></div>
+      </section>
 
-    <section id="toolsDrawer" class="tools-drawer" aria-label="工具">
-      <div class="drawer-head">
-        <h3 class="drawer-title">工具</h3>
-        <span class="drawer-meta">连线和手绘操作</span>
-      </div>
-      <div class="tools-panel">
-        <button id="penConnectBtn" class="btn">节点连线笔：关</button>
-        <button id="drawStrokeBtn" class="btn">自由画线：关</button>
-        <button id="undoStrokeBtn" class="btn">撤销一笔</button>
-      </div>
-    </section>
+      <section id="toolsDrawer" class="tools-drawer" aria-label="工具">
+        <div class="drawer-head">
+          <h3 class="drawer-title">工具</h3>
+          <span class="drawer-meta">连线和手绘操作</span>
+        </div>
+        <div class="tools-panel">
+          <button id="penConnectBtn" class="btn">节点连线笔：关</button>
+          <button id="drawStrokeBtn" class="btn">自由画线：关</button>
+          <button id="undoStrokeBtn" class="btn">撤销一笔</button>
+        </div>
+      </section>
 
-    <footer class="toolbar toolbar-bottom">
-      <button id="loadTemplateLibraryBtn" class="btn">模板库</button>
-      <button id="toolsBtn" class="btn">工具</button>
-      <button id="deleteSelectedBtn" class="btn">删除选中</button>
-      <button id="clearAllBtn" class="btn danger">清空</button>
-      <button id="saveBtn" class="btn">保存</button>
-    </footer>
+      <footer class="toolbar toolbar-bottom">
+        <button id="loadTemplateLibraryBtn" class="btn">模板库</button>
+        <button id="toolsBtn" class="btn">工具</button>
+        <button id="deleteSelectedBtn" class="btn">删除选中</button>
+        <button id="clearAllBtn" class="btn danger">清空</button>
+        <button id="saveBtn" class="btn">保存</button>
+      </footer>
+    </section>
   </div>
   <div id="canvasContextMenu" class="canvas-context-menu" aria-hidden="true">
     <button id="contextDeleteBtn" class="context-menu-item" type="button">删除选中</button>

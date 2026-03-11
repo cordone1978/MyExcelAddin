@@ -17,7 +17,27 @@ const {
 } = require("./serverConstants");
 
 const app = express();
-const authSessions = new Map();
+const AUTH_SESSION_TTL_DAYS = 7;
+const AUTH_COOKIE_NAME = "dc_auth_session";
+const AUTH_SESSIONS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  token CHAR(36) NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  username VARCHAR(50) NOT NULL,
+  full_name VARCHAR(100) NULL,
+  client_app VARCHAR(64) NULL,
+  expires_at DATETIME NOT NULL,
+  revoked_at DATETIME NULL,
+  last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_token (token),
+  KEY idx_user_id (user_id),
+  KEY idx_expires_at (expires_at),
+  KEY idx_revoked_at (revoked_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='统一登录会话表';
+`;
 
 // Middleware
 app.use(cors());
@@ -41,6 +61,41 @@ function getBearerToken(req) {
   return match ? match[1].trim() : "";
 }
 
+function parseCookieHeader(headerValue) {
+  const raw = String(headerValue || "");
+  if (!raw) return {};
+  const output = {};
+  for (const segment of raw.split(";")) {
+    const item = String(segment || "").trim();
+    if (!item) continue;
+    const index = item.indexOf("=");
+    if (index <= 0) continue;
+    const key = item.slice(0, index).trim();
+    const value = item.slice(index + 1).trim();
+    if (!key) continue;
+    output[key] = decodeURIComponent(value || "");
+  }
+  return output;
+}
+
+function getCookieToken(req) {
+  const cookies = parseCookieHeader(req?.headers?.cookie || "");
+  return String(cookies[AUTH_COOKIE_NAME] || "").trim();
+}
+
+function getRequestAuthToken(req) {
+  return getCookieToken(req) || getBearerToken(req);
+}
+
+function buildAuthCookie(token) {
+  const maxAge = AUTH_SESSION_TTL_DAYS * 24 * 60 * 60;
+  return `${AUTH_COOKIE_NAME}=${encodeURIComponent(String(token || ""))}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${maxAge}`;
+}
+
+function buildClearAuthCookie() {
+  return `${AUTH_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0`;
+}
+
 function hashSha256(text) {
   return crypto.createHash("sha256").update(String(text || ""), "utf8").digest("hex");
 }
@@ -56,12 +111,86 @@ function isSha256Hex(text) {
   return /^[a-f0-9]{64}$/i.test(String(text || ""));
 }
 
-function clearUserSessions(userId) {
-  for (const [token, session] of authSessions.entries()) {
-    if (Number(session?.userId) === Number(userId)) {
-      authSessions.delete(token);
-    }
-  }
+async function ensureAuthSessionsTable() {
+  await pool.query(AUTH_SESSIONS_TABLE_SQL);
+}
+
+function buildSessionExpiryDate() {
+  return new Date(Date.now() + AUTH_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+}
+
+async function createAuthSession(user, clientApp = "quotationaddin") {
+  const token = crypto.randomUUID();
+  const expiresAt = buildSessionExpiryDate();
+  await pool.query(
+    `
+    INSERT INTO auth_sessions
+      (token, user_id, username, full_name, client_app, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    [
+      token,
+      Number(user?.id || 0),
+      String(user?.username || ""),
+      String(user?.full_name || user?.username || ""),
+      String(clientApp || "quotationaddin"),
+      expiresAt
+    ]
+  );
+  return {
+    token,
+    userId: Number(user?.id || 0),
+    username: String(user?.username || ""),
+    fullName: String(user?.full_name || user?.username || "")
+  };
+}
+
+async function getAuthSession(token) {
+  const value = String(token || "").trim();
+  if (!value) return null;
+  const [rows] = await pool.query(
+    `
+    SELECT
+      s.token,
+      s.user_id,
+      s.username,
+      s.full_name,
+      u.is_active
+    FROM auth_sessions s
+    LEFT JOIN app_users u ON u.id = s.user_id
+    WHERE s.token = ?
+      AND s.revoked_at IS NULL
+      AND s.expires_at > NOW()
+    LIMIT 1
+    `,
+    [value]
+  );
+  if (!rows.length) return null;
+  const row = rows[0];
+  if (Number(row?.is_active) !== 1) return null;
+  await pool.query(`UPDATE auth_sessions SET last_seen_at = CURRENT_TIMESTAMP WHERE token = ?`, [value]);
+  return {
+    token: String(row.token || value),
+    userId: Number(row.user_id || 0),
+    username: String(row.username || ""),
+    fullName: String(row.full_name || row.username || "")
+  };
+}
+
+async function revokeSession(token) {
+  const value = String(token || "").trim();
+  if (!value) return;
+  await pool.query(
+    `UPDATE auth_sessions SET revoked_at = IFNULL(revoked_at, NOW()) WHERE token = ?`,
+    [value]
+  );
+}
+
+async function clearUserSessions(userId) {
+  await pool.query(
+    `UPDATE auth_sessions SET revoked_at = IFNULL(revoked_at, NOW()) WHERE user_id = ? AND revoked_at IS NULL`,
+    [Number(userId || 0)]
+  );
 }
 
 function sanitizeFileToken(value) {
@@ -122,10 +251,11 @@ app.get(API_ROUTES.projects, async (req, res) => {
       SELECT 
         product_id as id,
         product_model as name,
+        COALESCE(base_description, '') as base_description,
         '' as image_url
       FROM ht_sales_products
       WHERE product_type_id = ? AND is_active = 1
-      ORDER BY product_model
+      ORDER BY (sort_by IS NULL) ASC, sort_by ASC, product_model ASC
     `, [categoryId]);
     
     res.json({ success: true, data: rows });
@@ -400,18 +530,12 @@ app.get(API_ROUTES.warehouseCleanSearch, async (req, res) => {
     const [matchedSheets] = await pool.query(
       `
       SELECT DISTINCT sheet_name
-      FROM ht_sales_warehouse_statistics
-      WHERE sheet_name LIKE ?
-         OR key_param LIKE ?
-         OR category_name LIKE ?
-         OR content_spec LIKE ?
-         OR model_name LIKE ?
-         OR material_name LIKE ?
-         OR brand_name LIKE ?
+      FROM ht_sales_warehouse_sheet_meta
+      WHERE custom_product_model LIKE ?
       ORDER BY sheet_name
       LIMIT ?
       `,
-      [like, like, like, like, like, like, like, sheetLimit]
+      [like, sheetLimit]
     );
     const sheetNames = (matchedSheets || [])
       .map((x) => String(x.sheet_name || "").trim())
@@ -558,19 +682,20 @@ app.post(API_ROUTES.authLogin, async (req, res) => {
       }
     }
 
-    const token = crypto.randomUUID();
-    const session = {
-      userId: Number(user.id),
-      username: String(user.username || username),
-      fullName: String(user.full_name || user.username || username),
-      createdAt: new Date().toISOString(),
-    };
-    authSessions.set(token, session);
+    const session = await createAuthSession(
+      {
+        id: user.id,
+        username: String(user.username || username),
+        full_name: String(user.full_name || user.username || username)
+      },
+      "quotationaddin"
+    );
 
+    res.setHeader("Set-Cookie", buildAuthCookie(session.token));
     res.json({
       success: true,
       data: {
-        token,
+        token: session.token,
         userId: session.userId,
         username: session.username,
         fullName: session.fullName,
@@ -585,10 +710,11 @@ app.post(API_ROUTES.authLogin, async (req, res) => {
 // 8.5 Auth logout
 app.post(API_ROUTES.authLogout, async (req, res) => {
   try {
-    const token = getBearerToken(req);
+    const token = getRequestAuthToken(req);
     if (token) {
-      authSessions.delete(token);
+      await revokeSession(token);
     }
+    res.setHeader("Set-Cookie", buildClearAuthCookie());
     res.json({ success: true, data: { loggedOut: true } });
   } catch (error) {
     console.error(`${SERVER_LOGS.authLogoutFailed}:`, error);
@@ -599,8 +725,8 @@ app.post(API_ROUTES.authLogout, async (req, res) => {
 // 8.6 Auth me
 app.get(API_ROUTES.authMe, async (req, res) => {
   try {
-    const token = getBearerToken(req);
-    const session = token ? authSessions.get(token) : null;
+    const token = getRequestAuthToken(req);
+    const session = token ? await getAuthSession(token) : null;
     if (!session) {
       res.status(401).json({ success: false, error: SERVER_MESSAGES.authMissingToken });
       return;
@@ -671,7 +797,7 @@ app.post(API_ROUTES.authResetPassword, async (req, res) => {
       [hashSha256(newPassword), user.id]
     );
 
-    clearUserSessions(user.id);
+    await clearUserSessions(user.id);
 
     res.json({ success: true, data: { username } });
   } catch (error) {
@@ -876,21 +1002,38 @@ const httpsOptions = {
 
 // Start HTTPS server
 const PORT = SERVER_CONFIG.port;
-https.createServer(httpsOptions, app).listen(PORT, () => {
-  console.log(SERVER_LOGS.startupDivider);
-  console.log(`${SERVER_LOGS.startupServerRunning} ${URLS.serverOrigin}`);
-  console.log(SERVER_LOGS.startupSslLoaded);
-  console.log(`SSL cert dir: ${certBaseDir}`);
-  console.log(SERVER_LOGS.startupDivider);
-  console.log(SERVER_LOGS.startupApiEndpoints);
-  console.log(`   ${SERVER_LOGS.startupApiTest}: ${URLS.serverOrigin}/api/test`);
-  console.log(`   ${SERVER_LOGS.startupApiCategories}: ${URLS.serverOrigin}/api/categories`);
-  console.log(`   ${SERVER_LOGS.startupApiConfig}: ${URLS.serverOrigin}/api/config/:projectId`);
-  console.log(`   ${SERVER_LOGS.startupApiWarehouseCleanSearch}: ${URLS.serverOrigin}/api/warehouse-clean-search?keyword=xxx`);
-  console.log(`   ${SERVER_LOGS.startupApiSystemMapping}: ${URLS.serverOrigin}/api/system-mapping/:productModel`);
-  console.log(`   ${SERVER_LOGS.startupApiImages}: ${URLS.serverOrigin}/public/images/`);
-  console.log(`   ${SERVER_LOGS.startupApiStatic}: ${URLS.serverOrigin}/`);
-  console.log(SERVER_LOGS.startupDivider);
-  console.log(`${SERVER_LOGS.startupExample}: ${URLS.serverOrigin}/api/system-mapping/demo`);
-  console.log(SERVER_LOGS.startupDivider);
-});
+ensureAuthSessionsTable()
+  .then(() => {
+    const server = https.createServer(httpsOptions, app);
+    server.on("error", (error) => {
+      if (error && error.code === "EADDRINUSE") {
+        console.warn(`Port ${PORT} is already in use. Reusing existing API service.`);
+        process.exit(0);
+        return;
+      }
+      console.error("HTTPS server error:", error?.message || error);
+      process.exit(1);
+    });
+    server.listen(PORT, () => {
+      console.log(SERVER_LOGS.startupDivider);
+      console.log(`${SERVER_LOGS.startupServerRunning} ${URLS.serverOrigin}`);
+      console.log(SERVER_LOGS.startupSslLoaded);
+      console.log(`SSL cert dir: ${certBaseDir}`);
+      console.log(SERVER_LOGS.startupDivider);
+      console.log(SERVER_LOGS.startupApiEndpoints);
+      console.log(`   ${SERVER_LOGS.startupApiTest}: ${URLS.serverOrigin}/api/test`);
+      console.log(`   ${SERVER_LOGS.startupApiCategories}: ${URLS.serverOrigin}/api/categories`);
+      console.log(`   ${SERVER_LOGS.startupApiConfig}: ${URLS.serverOrigin}/api/config/:projectId`);
+      console.log(`   ${SERVER_LOGS.startupApiWarehouseCleanSearch}: ${URLS.serverOrigin}/api/warehouse-clean-search?keyword=xxx`);
+      console.log(`   ${SERVER_LOGS.startupApiSystemMapping}: ${URLS.serverOrigin}/api/system-mapping/:productModel`);
+      console.log(`   ${SERVER_LOGS.startupApiImages}: ${URLS.serverOrigin}/public/images/`);
+      console.log(`   ${SERVER_LOGS.startupApiStatic}: ${URLS.serverOrigin}/`);
+      console.log(SERVER_LOGS.startupDivider);
+      console.log(`${SERVER_LOGS.startupExample}: ${URLS.serverOrigin}/api/system-mapping/demo`);
+      console.log(SERVER_LOGS.startupDivider);
+    });
+  })
+  .catch((error) => {
+    console.error("Auth session table init failed:", error?.message || error);
+    process.exit(1);
+  });

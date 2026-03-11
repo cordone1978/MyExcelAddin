@@ -41,6 +41,8 @@ localhost+2.pem
 localhost+2-key.pem
 storage/暂存仓型号列表.xlsx
 storage/华通暂存仓.xlsx
+storage/tmp.xlsx
+public/graph-temp/
 
 # Generated deployment packages
 quotationaddin-deploy.tgz

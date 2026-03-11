@@ -10,9 +10,50 @@ interface SystemItem {
 }
 
 const RELATED_GRAPH_SHEET_NAMES = ["_graph_store", "_graph_store_dev"];
+const QUOTE_COMPANY_LOGO_NAME = "quote-company-logo";
+let quoteCompanyLogoBase64Cache: string | null = null;
 
-function buildConfigSectionTotalFormula(titleRow: number): string {
-  return `=IF($O${titleRow}<>"总价","",LET(s,ROW()+2,n,IFERROR(AGGREGATE(15,6,ROW($O$1:$O$9978)/(ROW($O$1:$O$9978)>=s)/($O$1:$O$9978="总价"),1),0),e,IF(n=0,LOOKUP(2,1/($B$1:$B$9978<>""),ROW($B$1:$B$9978)),n-1),IF(e<s,0,SUM(INDEX($P:$P,s):INDEX($P:$P,e)))))`;
+async function fetchImageAsBase64(url: string): Promise<string> {
+  if (quoteCompanyLogoBase64Cache) {
+    return quoteCompanyLogoBase64Cache;
+  }
+  const response = await fetch(url, { cache: "force-cache" });
+  if (!response.ok) {
+    throw new Error(`Failed to load image: ${response.status}`);
+  }
+  const buffer = await response.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  quoteCompanyLogoBase64Cache = btoa(binary);
+  return quoteCompanyLogoBase64Cache;
+}
+
+async function addCompanyLogoToQuoteSheet(context: Excel.RequestContext, sheet: Excel.Worksheet): Promise<void> {
+  const logoBase64 = await fetchImageAsBase64("/assets/logo-large.png");
+  const titleRange = sheet.getRange("A1:G1");
+  titleRange.load("left,top,height,width");
+  await context.sync();
+
+  const shape = sheet.shapes.addImage(logoBase64);
+  shape.name = QUOTE_COMPANY_LOGO_NAME;
+  shape.lockAspectRatio = true;
+  const logoHeight = Math.max(8, titleRange.height / 2);
+  shape.height = logoHeight;
+  shape.left = titleRange.left;
+  // 左对齐 + 在合并标题单元格内垂直居中
+  shape.top = titleRange.top + Math.max(0, (titleRange.height - logoHeight) / 2);
+}
+
+function buildConfigSectionTotalFormula(titleRow: number, labelColumn: string, sumColumn: string, labelText: string): string {
+  const labelCol = String(labelColumn || "O").toUpperCase();
+  const sumCol = String(sumColumn || "P").toUpperCase();
+  const text = String(labelText || "总价");
+  return `=IF($${labelCol}${titleRow}<>"${text}","",LET(s,ROW()+2,n,IFERROR(AGGREGATE(15,6,ROW($${labelCol}$1:$${labelCol}$9978)/(ROW($${labelCol}$1:$${labelCol}$9978)>=s)/($${labelCol}$1:$${labelCol}$9978="${text}"),1),0),e,IF(n=0,LOOKUP(2,1/($B$1:$B$9978<>""),ROW($B$1:$B$9978)),n-1),IF(e<s,0,SUM(INDEX($${sumCol}:$${sumCol},s):INDEX($${sumCol}:$${sumCol},e)))))`;
 }
 
 function splitSectionTitle(rawTitle: string): { ordinal: string; text: string } {
@@ -34,6 +75,17 @@ export async function createQuotationSheet(systems?: SystemItem[]) {
       await buildQuotationSheet(context, systems);
       await buildConfigSheet(context);
       await buildEasypartsSheet(context);
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+export async function createQuotationSummarySheet(systems?: SystemItem[]) {
+  try {
+    await Excel.run(async (context) => {
+      await cleanupRelatedHiddenSheets(context);
+      await buildQuotationSheet(context, systems);
     });
   } catch (error) {
     console.error(error);
@@ -70,19 +122,31 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
   sheet.showGridlines = false;
   context.application.suspendScreenUpdatingUntilNextSync();
 
-  sheet.getRange("A1:D1").merge();
+  sheet.getRange("A1:G1").merge();
   sheet.getRange("A1").values = [[BUILDSHEET_TEXT.companyName]];
   sheet.getRange("A1").format.font.bold = true;
-  sheet.getRange("A1").format.font.size = 20;
+  sheet.getRange("A1").format.font.size = 24;
   sheet.getRange("A1").format.horizontalAlignment = "Center";
   sheet.getRange("A1").format.verticalAlignment = "Center";
 
-  sheet.getRange("A2:D7").values = BUILDSHEET_TEXT.quoteInfoRows;
-  sheet.getRange("B2:D2").merge();
+  sheet.getRange("A2:G7").values = BUILDSHEET_TEXT.quoteInfoRows;
+  for (let row = 2; row <= 6; row += 1) {
+    sheet.getRange(`A${row}:B${row}`).merge();
+    if (row === 2) {
+      sheet.getRange("C2:G2").merge();
+    } else {
+      sheet.getRange(`C${row}:D${row}`).merge();
+      sheet.getRange(`E${row}:F${row}`).merge();
+    }
+  }
+  sheet.getRange("A2:G6").format.horizontalAlignment = "Center";
+  sheet.getRange("A2:G6").format.verticalAlignment = "Center";
+  // 明确回写，避免在合并过程中个别客户端丢失 E 列抬头文本。
+  sheet.getRange("E3").values = [[String(BUILDSHEET_TEXT.quoteInfoRows?.[1]?.[4] || "客户电话:")]];
+  sheet.getRange("E4").values = [[String(BUILDSHEET_TEXT.quoteInfoRows?.[2]?.[4] || "客户传真:")]];
 
-  sheet.getRange("A7:D7").merge();
+  sheet.getRange("A7:G7").merge();
   sheet.getRange("A7").values = [[BUILDSHEET_TEXT.quoteTitle]];
-  sheet.getRange("A7").format.font.size = 16;
   sheet.getRange("A7").format.font.bold = true;
   sheet.getRange("A7").format.horizontalAlignment = "Center";
 
@@ -93,20 +157,23 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
 
   const defaultItems = BUILDSHEET_TEXT.quoteDefaultItems;
   const items = systems && systems.length > 0
-    ? systems.slice(0, 13).map((s, i) => [i + 1, s.name || "", "", ""])
+    ? systems.slice(0, 13).map((s, i) => [i + 1, s.name || "", "", "", "", "", ""])
     : defaultItems;
 
   sheet.getRange(BUILDSHEET_RANGES.quoteItems).values = items;
+  for (let row = 8; row <= 21; row += 1) {
+    sheet.getRange(`B${row}:C${row}`).merge();
+  }
   sheet.getRange("A9:A21").format.horizontalAlignment = "Center";
-  sheet.getRange("C9:C21").format.horizontalAlignment = "Center";
+  sheet.getRange("D9:F21").format.horizontalAlignment = "Center";
 
-  sheet.getRange("A22:B22").merge();
+  sheet.getRange("A22:C22").merge();
   sheet.getRange("A22").values = [[BUILDSHEET_TEXT.totalLabel]];
-  sheet.getRange("C22").values = [[""]];
-  sheet.getRange("A22:D22").format.font.bold = true;
-  sheet.getRange("A22:D22").format.horizontalAlignment = "Center";
+  sheet.getRange("D22").values = [[""]];
+  sheet.getRange("A22:G22").format.font.bold = true;
+  sheet.getRange("A22:G22").format.horizontalAlignment = "Center";
 
-  sheet.getRange("A23:A29").merge();
+  sheet.getRange("A23:B29").merge();
   sheet.getRange("A23").values = [[BUILDSHEET_TEXT.remarkLabel]];
   sheet.getRange("A23").format.horizontalAlignment = "Center";
   sheet.getRange("A23").format.verticalAlignment = "Center";
@@ -115,8 +182,8 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
 
   notes.forEach((text, idx) => {
     const row = 23 + idx;
-    sheet.getRange(`B${row}:D${row}`).merge();
-    sheet.getRange(`B${row}`).values = [[text]];
+    sheet.getRange(`C${row}:G${row}`).merge();
+    sheet.getRange(`C${row}`).values = [[text]];
   });
 
   sheet.getRange(BUILDSHEET_RANGES.quoteNotes).format.wrapText = true;
@@ -124,7 +191,9 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
 
   sheet.getRange(BUILDSHEET_RANGES.quoteMain).format.font.name = BUILDSHEET_STYLE.fontName;
   sheet.getRange(BUILDSHEET_RANGES.quoteMain).format.font.size = BUILDSHEET_STYLE.fontSize;
-  sheet.getRange("A1").format.font.size = BUILDSHEET_STYLE.fontSize + 9;
+  // 统一字体后，重新覆盖标题字号，避免被上面的全局设置冲掉。
+  sheet.getRange("A1").format.font.size = 24;
+  sheet.getRange("A7").format.font.size = 14;
 
   const borderRange = sheet.getRange(BUILDSHEET_RANGES.quoteMain).format.borders;
   borderRange.getItem("InsideHorizontal").style = "Continuous";
@@ -142,6 +211,15 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
   sheet.getRange("B:B").format.columnWidth = BUILDSHEET_COLUMNS.quote.B;
   sheet.getRange("C:C").format.columnWidth = BUILDSHEET_COLUMNS.quote.C;
   sheet.getRange("D:D").format.columnWidth = BUILDSHEET_COLUMNS.quote.D;
+  sheet.getRange("E:E").format.columnWidth = BUILDSHEET_COLUMNS.quote.E;
+  sheet.getRange("F:F").format.columnWidth = BUILDSHEET_COLUMNS.quote.F;
+  sheet.getRange("G:G").format.columnWidth = BUILDSHEET_COLUMNS.quote.G;
+
+  try {
+    await addCompanyLogoToQuoteSheet(context, sheet);
+  } catch (error) {
+    console.warn("Failed to place company logo on quote sheet.", error);
+  }
 
   await context.sync();
 }
@@ -181,10 +259,18 @@ async function buildConfigSheet(context: Excel.RequestContext) {
     sheet.getRange(`A${row}`).format.verticalAlignment = "Center";
     titleRows.push(row);
 
+    sheet.getRange(`M${row}`).values = [["成本总价"]];
+    sheet.getRange(`M${row}`).format.horizontalAlignment = "Center";
+    sheet.getRange(`M${row}`).format.font.bold = true;
+
+    sheet.getRange(`N${row}`).formulas = [[buildConfigSectionTotalFormula(row, "M", "M", "成本总价")]];
+    sheet.getRange(`N${row}`).format.horizontalAlignment = "Center";
+    sheet.getRange(`N${row}`).format.font.bold = true;
+
     sheet.getRange(`O${row}`).values = [[BUILDSHEET_TEXT.configSectionTotalLabel]];
     sheet.getRange(`O${row}`).format.horizontalAlignment = "Center";
     sheet.getRange(`O${row}`).format.font.bold = true;
-    sheet.getRange(`P${row}`).formulas = [[buildConfigSectionTotalFormula(row)]];
+    sheet.getRange(`P${row}`).formulas = [[buildConfigSectionTotalFormula(row, "O", "P", "总价")]];
     sheet.getRange(`P${row}`).format.horizontalAlignment = "Center";
     sheet.getRange(`P${row}`).format.font.bold = true;
 

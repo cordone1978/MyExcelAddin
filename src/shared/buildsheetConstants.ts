@@ -7,10 +7,10 @@ export const BUILDSHEET_STYLE = {
 } as const;
 
 export const BUILDSHEET_RANGES = {
-  quoteMain: "A1:D29",
-  quoteNotes: "B23:D29",
-  quoteHeader: "A8:D8",
-  quoteItems: "A9:D21",
+  quoteMain: "A1:G29",
+  quoteNotes: "C23:G29",
+  quoteHeader: "A8:G8",
+  quoteItems: "A9:G21",
   configLongRows: "A1:R2000",
   easypartsHeader: "A2:O2",
   easypartsLongRows: "A2:O2000",
@@ -19,10 +19,13 @@ export const BUILDSHEET_RANGES = {
 
 export const BUILDSHEET_COLUMNS = {
   quote: {
-    A: 60,
-    B: 200,
+    A: 35,
+    B: 45,
     C: 120,
-    D: 200,
+    D: 100,
+    E: 120,
+    F: 60,
+    G: 180,
   },
   config: {
     A: 30,

@@ -73,12 +73,44 @@ async function initialize() {
 }
 
 function bindEvents() {
-  getDeviceList().addEventListener("change", () => {
+  const deviceList = getDeviceList();
+  const warehouseList = getWarehouseList();
+
+  deviceList.addEventListener("change", () => {
     void handleDeviceChanged();
   });
-  getWarehouseList().addEventListener("change", () => {
+  warehouseList.addEventListener("change", () => {
     renderDbDetailForSelected();
   });
+
+  // Office WebView 中 select 的滚轮行为不稳定，手动实现滚轮切换选中项。
+  bindListboxWheelSelection(warehouseList, () => {
+    renderDbDetailForSelected();
+  });
+  bindListboxWheelSelection(deviceList, () => {
+    void handleDeviceChanged();
+  });
+}
+
+function bindListboxWheelSelection(list: HTMLSelectElement, onChanged: () => void) {
+  list.addEventListener(
+    "wheel",
+    (event) => {
+      const total = list.options.length;
+      if (total <= 0) return;
+      const current = Math.max(0, list.selectedIndex);
+      const step = event.deltaY > 0 ? 1 : -1;
+      const next = Math.max(0, Math.min(total - 1, current + step));
+      if (next === current) {
+        event.preventDefault();
+        return;
+      }
+      list.selectedIndex = next;
+      onChanged();
+      event.preventDefault();
+    },
+    { passive: false }
+  );
 }
 
 async function loadDevices() {

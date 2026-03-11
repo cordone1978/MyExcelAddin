@@ -24,6 +24,8 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
     let currentCategoryName = null;
     let currentProjectId = null;
     let currentProjectName = null;
+    let currentProjectBaseDescription = "";
+    let currentMaterialPreset = "calcium";
     let selectedDetails = new Map(); // 改用 Map，key=id, value={name, imageUrl, layer}
     let selectedAnnotations = new Map(); // 改用 Map，key=id, value={name, posX, posY, imageUrl}
 
@@ -85,6 +87,7 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
     Office.onReady(() => {
         applyStaticText();
         console.log(DIALOG_TEXT.ready);
+        bindMaterialSelector();
 
         // 初始化 Canvas
         canvas = document.getElementById('mainCanvas');
@@ -101,6 +104,24 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
 
         loadCategories();
     });
+
+    function bindMaterialSelector() {
+        const track = document.getElementById("materialSelectorTrack");
+        const thumb = document.getElementById("materialSelectorThumb");
+        if (!track || !thumb) return;
+        const options = Array.from(track.querySelectorAll(".material-selector-option")) as HTMLButtonElement[];
+        const moveThumbTo = (idx: number) => {
+            (thumb as HTMLElement).style.transform = `translateX(${idx * 100}%)`;
+            options.forEach((btn, i) => btn.classList.toggle("active", i === idx));
+        };
+        options.forEach((btn, idx) => {
+            btn.addEventListener("click", () => {
+                currentMaterialPreset = String(btn.dataset.value || "calcium");
+                moveThumbTo(idx);
+            });
+        });
+        moveThumbTo(0);
+    }
 
     function applyStaticText() {
         document.title = DIALOG_HTML_TEXT.title;
@@ -172,6 +193,7 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
         currentCategoryName = categoryName;
         currentProjectId = null;
         currentProjectName = null;
+        currentProjectBaseDescription = "";
         selectedDetails.clear();
         selectedAnnotations.clear();
 
@@ -225,19 +247,21 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
             item.className = 'listbox-item';
             item.textContent = project.name;
             item.dataset.id = project.id;
-            item.onclick = () => selectProject(project.id, project.name, project.image_url);
+            item.onclick = () => selectProject(project.id, project.name, project.image_url, project.base_description);
             projectList.appendChild(item);
         });
     }
 
     // 5. 选择产品型号 → 加载组件详情
-    async function selectProject(projectId, projectName, imageUrl) {
+    async function selectProject(projectId, projectName, imageUrl, baseDescription) {
         if (!currentCategoryId) return;
 
         currentProjectId = projectId;
         currentProjectName = projectName;
+        currentProjectBaseDescription = String(baseDescription || "");
         selectedDetails.clear();
         selectedAnnotations.clear();
+        setDetailBaseDescription(currentProjectBaseDescription);
 
         // 更新选中状态
         document.querySelectorAll('#projectList .listbox-item').forEach(item => {
@@ -869,10 +893,18 @@ function normalizeAnnotations(annotations) {
         scheduleRender(currentHighlightedComponentId);
     }
 
+    function setDetailBaseDescription(text) {
+        const el = document.getElementById('detailBaseDescriptionValue');
+        if (!el) return;
+        const normalized = String(text || '').trim();
+        el.textContent = normalized || '-';
+    }
+
     // 13. 清空右侧面板
     function clearRightPanels() {
         document.getElementById('detailList').innerHTML = '';
         document.getElementById('annotationList').innerHTML = '';
+        setDetailBaseDescription('');
         showCanvasPlaceholder(DIALOG_TEXT.selectProductPlaceholder);
     }
 
@@ -882,6 +914,7 @@ function normalizeAnnotations(annotations) {
         currentCategoryName = null;
         currentProjectId = null;
         currentProjectName = null;
+        currentProjectBaseDescription = "";
         selectedDetails.clear();
         selectedAnnotations.clear();
         
@@ -1001,6 +1034,7 @@ function normalizeAnnotations(annotations) {
             category: currentCategoryName,
             projectId: currentProjectId,
             project: currentProjectName,
+            materialPreset: currentMaterialPreset,
             details: Array.from(selectedDetails.entries()).map(([id, data]) => ({ id, name: data.name })),
             annotations: Array.from(selectedAnnotations.entries()).map(([id, data]) => ({id, name: data.name})),
             compositeImage: compositeImageBase64  // 添加合成图片

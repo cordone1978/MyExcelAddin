@@ -1,5 +1,7 @@
 ﻿/* eslint-disable no-undef */
 
+const fs = require("fs");
+const path = require("path");
 const devCerts = require("office-addin-dev-certs");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
@@ -9,6 +11,27 @@ const urlProd = "https://www.hnhtft.com.cn/";
 const apiProxyTarget = process.env.QUOTATION_API_PROXY_TARGET || "https://localhost:3001";
 
 async function getHttpsOptions() {
+  const keyCandidates = [
+    process.env.DEV_CERT_KEY_PATH,
+    path.resolve(__dirname, "..", "localhost+2-key.pem"),
+    path.resolve(__dirname, "localhost+2-key.pem"),
+  ].filter(Boolean);
+  const certCandidates = [
+    process.env.DEV_CERT_PEM_PATH,
+    process.env.DEV_CERT_CERT_PATH,
+    path.resolve(__dirname, "..", "localhost+2.pem"),
+    path.resolve(__dirname, "localhost+2.pem"),
+  ].filter(Boolean);
+
+  const keyPath = keyCandidates.find((p) => fs.existsSync(p));
+  const certPath = certCandidates.find((p) => fs.existsSync(p));
+  if (keyPath && certPath) {
+    return {
+      key: fs.readFileSync(keyPath),
+      cert: fs.readFileSync(certPath),
+    };
+  }
+
   const httpsOptions = await devCerts.getHttpsServerOptions();
   return { ca: httpsOptions.ca, key: httpsOptions.key, cert: httpsOptions.cert };
 }

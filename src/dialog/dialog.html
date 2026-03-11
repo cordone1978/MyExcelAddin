@@ -10,6 +10,14 @@
   </head>
   <body>
 <div class="container">
+        <div class="material-selector-panel" id="materialSelectorPanel">
+            <div class="material-selector-track" id="materialSelectorTrack">
+                <div class="material-selector-thumb" id="materialSelectorThumb"></div>
+                <button class="material-selector-option active" type="button" data-value="calcium" data-index="0">碳酸钙</button>
+                <button class="material-selector-option" type="button" data-value="lfp" data-index="1">铁锂</button>
+                <button class="material-selector-option" type="button" data-value="lfp_raw" data-index="2">磷酸铁</button>
+            </div>
+        </div>
         <div class="left-panel">
             <h3 class="panel-title" id="categoryTitle"></h3>
             <div class="listbox" id="categoryList">
@@ -25,9 +33,13 @@
         </div>
 
         <div class="middle-right">
-            <div>
+            <div class="detail-panel">
                 <h3 class="panel-title" id="detailTitle"></h3>
                 <div class="listbox" id="detailList"></div>
+                <div class="detail-base-description-box" id="detailBaseDescriptionBox">
+                    <div class="detail-base-description-title">基础信息</div>
+                    <div class="detail-base-description-value" id="detailBaseDescriptionValue">-</div>
+                </div>
             </div>
             <div>
                 <h3 class="panel-title" id="annotationTitle"></h3>

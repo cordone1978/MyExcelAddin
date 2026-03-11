@@ -1,4 +1,4 @@
-﻿import { createQuotationSheet } from "../buildsheet";
+import { createQuotationSheet } from "../buildsheet";
 import { handleDialogData } from "../dialog/handleDialogData";
 import { API_PATHS, APP_URLS, DIALOG_PATHS, DIALOG_SIZES, UI_DEFAULTS } from "../shared/appConstants";
 import { createDevCraftController } from "./devCraftController";
@@ -61,16 +61,27 @@ Office.onReady((info) => {
     (window as any).handleResetPasswordClick = handleResetPasswordClick;
     (window as any).handleCancelResetPasswordClick = handleCancelResetPasswordClick;
     (window as any).handleConfirmResetPasswordClick = handleConfirmResetPasswordClick;
-    (window as any).handleAddDeviceClick = () => withLoginGuard(() => openDialog());
-    (window as any).handleModifyDeviceClick = () => withLoginGuard(() => devCraftController.openDevModifyDialog());
-    (window as any).handleGenerateSheetClick = () => withLoginGuard(() => handleGenerateSheetClick());
-    (window as any).handleGenerateQuoteClick = () => withLoginGuard(() => handleGenerateQuoteClick());
-    (window as any).handleQueryPriceClick = () => withLoginGuard(() => openQueryPriceDialog());
-    (window as any).handleGraphEditorClick = () => withLoginGuard(() => openGraphEditorDialog());
-    (window as any).handleInfoReferenceClick = () => withLoginGuard(() => openInfoReferenceDialog());
+    (window as any).handleAddDeviceClick = () => runGuarded(() => withLoginGuard(() => openDialog()));
+    (window as any).handleModifyDeviceClick = () =>
+      runGuardedWithModal(async () => {
+        ensureLoggedInOrThrow();
+        await devCraftController.openDevModifyDialog();
+      });
+    (window as any).handleGenerateSheetClick = () => runGuarded(() => withLoginGuard(() => handleGenerateSheetClick()));
+    (window as any).handleGenerateSimpleTemplateClick = () =>
+      runGuarded(() => withLoginGuard(() => handleGenerateSimpleTemplateClick()));
+    (window as any).handleGenerateDetailTemplateClick = () =>
+      runGuarded(() => withLoginGuard(() => handleGenerateDetailTemplateClick()));
+    (window as any).handleGenerateQuoteClick = () =>
+      runGuarded(() => withLoginGuard(() => handleGenerateQuoteClick()));
+    (window as any).handleQueryPriceClick = () => runGuarded(() => withLoginGuard(() => openQueryPriceDialog()));
+    (window as any).handleGraphEditorClick = () => runGuarded(() => withLoginGuard(() => openGraphEditorDialog()));
+    (window as any).handleInfoReferenceClick = () =>
+      runGuarded(() => withLoginGuard(() => openInfoReferenceDialog()));
     (window as any).handleAccountDockToggle = handleAccountDockToggle;
     restoreAuthState();
     bindLoginInputEvents();
+    bindGenerateTemplateDrawerAutoClose();
     void refreshLoginStatus();
     warmUpDialogResources();
   }
@@ -84,6 +95,8 @@ function applyStaticText() {
   setText("confirmResetPasswordBtn", TASKPANE_HTML_TEXT.confirmResetPasswordBtn);
   setText("modifyDeviceBtn", TASKPANE_HTML_TEXT.modifyDeviceBtn);
   setText("generateSheetBtn", TASKPANE_HTML_TEXT.generateSheetBtn);
+  setText("generateSimpleQuoteBtn", "初步报价");
+  setText("generateDetailQuoteBtn", "明细报价");
   setText("generateQuoteBtn", TASKPANE_HTML_TEXT.generateQuoteBtn);
   setText("queryPriceBtn", TASKPANE_HTML_TEXT.queryPriceBtn);
   setText("graphEditorBtn", TASKPANE_HTML_TEXT.graphEditorBtn);
@@ -95,6 +108,7 @@ function applyStaticText() {
   setAccountDockExpanded(false);
   setResetPasswordMode(false);
   setAuthFeedback("");
+  setActionFeedback("");
 }
 
 function setText(id: string, text: string) {
@@ -120,9 +134,47 @@ function toggleHidden(id: string, hidden: boolean) {
 
 function setAuthFeedback(message: string, kind: "error" | "success" | "pending" | "" = "") {
   const el = document.getElementById("authFeedbackLabel");
+  if (el) {
+    el.textContent = message;
+    el.className = kind ? `auth-feedback ${kind}` : "auth-feedback";
+  }
+  setActionFeedback(message, kind);
+}
+
+function setActionFeedback(message: string, kind: "error" | "success" | "pending" | "" = "") {
+  const el = document.getElementById("actionFeedbackLabel");
   if (!el) return;
   el.textContent = message;
-  el.className = kind ? `auth-feedback ${kind}` : "auth-feedback";
+  el.className = kind ? `action-feedback ${kind}` : "action-feedback";
+}
+
+function notifyVisibleError(message: string) {
+  const text = String(message || "").trim() || "操作失败";
+  setAuthFeedback(text, "error");
+  setActionFeedback(text, "error");
+}
+
+async function runGuarded(action: () => unknown | Promise<unknown>) {
+  try {
+    await Promise.resolve(action());
+  } catch (error: any) {
+    notifyVisibleError(String(error?.message || error || "操作失败"));
+  }
+}
+
+async function runGuardedWithModal(action: () => unknown | Promise<unknown>) {
+  try {
+    await Promise.resolve(action());
+  } catch (error: any) {
+    const message = String(error?.message || error || "操作失败");
+    await showOperationErrorModal(message);
+  }
+}
+
+function ensureLoggedInOrThrow() {
+  if (!currentUser || !authToken) {
+    throw new Error("请先输入用户名和密码并登录。");
+  }
 }
 
 function setAccountDockExpanded(expanded: boolean) {
@@ -177,6 +229,19 @@ function bindLoginInputEvents() {
       e.preventDefault();
       void handleConfirmResetPasswordClick();
     }
+  });
+}
+
+function bindGenerateTemplateDrawerAutoClose() {
+  const actionPanel = document.getElementById("actionPanel");
+  if (!actionPanel) return;
+  actionPanel.addEventListener("click", (evt) => {
+    const target = evt.target as HTMLElement | null;
+    const btn = target?.closest("button");
+    if (!btn) return;
+    const id = String((btn as HTMLButtonElement).id || "");
+    if (!id || id === "generateQuoteBtn") return;
+    toggleGenerateTemplateDrawer(false);
   });
 }
 
@@ -237,6 +302,7 @@ function openDialog(url?: string) {
           }
         });
       } else {
+        notifyVisibleError(result.error?.message || "打开窗口失败");
         console.error(
           `${TASKPANE_LOG_TEXT.dialogOpenFailedPrefix} ${elapsedMs}${TASKPANE_LOG_TEXT.dialogOpenFailedSuffix}`,
           result.error.message
@@ -284,6 +350,25 @@ async function handleGenerateSheetClick() {
   await createQuotationSheet();
 }
 
+function toggleGenerateTemplateDrawer(forceOpen?: boolean) {
+  const drawer = document.getElementById("generateTemplateDrawer");
+  const triggerBtn = document.getElementById("generateQuoteBtn");
+  if (!drawer) return;
+  const willOpen = typeof forceOpen === "boolean" ? forceOpen : drawer.classList.contains("is-hidden");
+  drawer.classList.toggle("is-hidden", !willOpen);
+  triggerBtn?.classList.toggle("active", willOpen);
+}
+
+async function handleGenerateSimpleTemplateClick() {
+  await executeGenerateQuoteFlow("preliminary");
+  toggleGenerateTemplateDrawer(false);
+}
+
+async function handleGenerateDetailTemplateClick() {
+  await showOperationErrorModal("明细报价功能待定。");
+  toggleGenerateTemplateDrawer(false);
+}
+
 function clearTemplateCachesBeforeGenerate() {
   try {
     localStorage.removeItem(GRAPH_STORE_DEV_CACHE_KEY);
@@ -328,6 +413,42 @@ function showGenerateTemplateConfirm(): Promise<boolean> {
     modal.classList.remove("is-hidden");
     okBtn.addEventListener("click", onOk, { once: true });
     cancelBtn.addEventListener("click", onCancel, { once: true });
+    document.addEventListener("keydown", onKeydown);
+  });
+}
+
+function showOperationErrorModal(message: string): Promise<void> {
+  const modal = document.getElementById("operationErrorModal");
+  const msg = document.getElementById("operationErrorMessage");
+  const okBtn = document.getElementById("operationErrorOk") as HTMLButtonElement | null;
+  if (!modal || !okBtn || !msg) {
+    return Promise.resolve();
+  }
+
+  msg.textContent = String(message || "操作失败，请稍后重试。");
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      okBtn.removeEventListener("click", onOk);
+      modal.classList.add("is-hidden");
+      document.removeEventListener("keydown", onKeydown);
+    };
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const onOk = () => settle();
+    const onKeydown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Enter") {
+        e.preventDefault();
+        settle();
+      }
+    };
+
+    modal.classList.remove("is-hidden");
+    okBtn.addEventListener("click", onOk, { once: true });
     document.addEventListener("keydown", onKeydown);
   });
 }
@@ -519,8 +640,17 @@ async function handleGraphEditorSaveRequest(dialog: Office.Dialog, payload: any)
 }
 
 async function handleGenerateQuoteClick() {
-  await syncQuoteSummaryAndCachePreview();
-  openDialog(DIALOG_PATHS.generateQuote);
+  toggleGenerateTemplateDrawer();
+}
+
+async function executeGenerateQuoteFlow(mode: "full" | "preliminary" = "full") {
+  try {
+    await syncQuoteSummaryAndCachePreview(mode);
+    openDialog(DIALOG_PATHS.generateQuote);
+  } catch (error: any) {
+    const message = String(error?.message || error || "生成报价失败");
+    await showOperationErrorModal(message);
+  }
 }
 
 function normalizeSystemName(value: unknown): string {
@@ -543,6 +673,12 @@ function parseCellNumber(value: unknown): number {
   return Number.isFinite(num) ? num : 0;
 }
 
+function hasCellValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "number") return true;
+  return String(value).trim().length > 0;
+}
+
 function isConfigSectionTitleRow(aValue: unknown, bValue: unknown) {
   const aText = String(aValue ?? "").trim();
   const bText = String(bValue ?? "").trim();
@@ -555,18 +691,12 @@ function formatCurrencyLikeText(value: unknown): string {
   return `¥${Math.round(num).toLocaleString("zh-CN")}`;
 }
 
-async function syncQuoteSummaryAndCachePreview() {
+async function syncQuoteSummaryAndCachePreview(mode: "full" | "preliminary" = "full") {
   const payload = await Excel.run(async (context) => {
     const quoteConfigSheet = context.workbook.worksheets.getItemOrNullObject(SHEET_NAMES.quoteConfig);
     const quoteSummarySheet = context.workbook.worksheets.getItemOrNullObject(SHEET_NAMES.quoteSummary);
     quoteConfigSheet.load("name");
     quoteSummarySheet.load("name");
-
-    const configUsedRange = quoteConfigSheet.getRange("A:P").getUsedRangeOrNullObject(false);
-    configUsedRange.load(["values", "isNullObject"]);
-    const summaryItemsRange = quoteSummarySheet.getRange("A9:D21");
-    summaryItemsRange.load(["values"]);
-
     await context.sync();
 
     if (quoteConfigSheet.isNullObject) {
@@ -575,24 +705,34 @@ async function syncQuoteSummaryAndCachePreview() {
     if (quoteSummarySheet.isNullObject) {
       throw new Error("报价汇总表不存在，请先生成报价模板。");
     }
+
+    const configUsedRange = quoteConfigSheet.getRange("A:P").getUsedRangeOrNullObject(false);
+    configUsedRange.load(["values", "isNullObject"]);
+    const summaryItemsRange = quoteSummarySheet.getRange("A9:G21");
+    summaryItemsRange.load(["values"]);
+    await context.sync();
+
     if (configUsedRange.isNullObject) {
       throw new Error("报价配置表为空，无法生成报价。");
     }
 
-    const sectionTotalMap = new Map<string, number>();
+    const sectionCostMap = new Map<string, number>();
+    const sectionPriceMap = new Map<string, number>();
     const configValues = configUsedRange.values || [];
     configValues.forEach((row) => {
       if (!isConfigSectionTitleRow(row?.[0], row?.[1])) return;
-      if (String(row?.[14] ?? "").trim() !== "总价") return;
-      sectionTotalMap.set(normalizeSystemName(row?.[1]), parseCellNumber(row?.[15]));
+      const normalized = normalizeSystemName(row?.[1]);
+      if (!normalized) return;
+      sectionCostMap.set(normalized, parseCellNumber(row?.[13])); // N 列：成本总价
+      sectionPriceMap.set(normalized, parseCellNumber(row?.[15])); // P 列：总价
     });
 
     const summaryRows = summaryItemsRange.values || [];
-    const summaryPriceValues = summaryRows.map((row) => {
+    const summaryCostValues = summaryRows.map((row) => {
       const normalized = normalizeSystemName(row?.[1]);
-      let amount = sectionTotalMap.get(normalized);
+      let amount = sectionCostMap.get(normalized);
       if (amount == null && normalized) {
-        for (const [k, v] of sectionTotalMap.entries()) {
+        for (const [k, v] of sectionCostMap.entries()) {
           if (k.includes(normalized) || normalized.includes(k)) {
             amount = v;
             break;
@@ -602,16 +742,64 @@ async function syncQuoteSummaryAndCachePreview() {
       return [amount && amount !== 0 ? Math.round(amount) : ""];
     });
 
-    quoteSummarySheet.getRange("C9:C21").values = summaryPriceValues;
-    quoteSummarySheet.getRange("C9:C22").format.numberFormat = "#,##0";
-    const totalAmount = summaryPriceValues.reduce((sum, item) => sum + parseCellNumber(item[0]), 0);
-    quoteSummarySheet.getRange("C22").values = [[Math.round(totalAmount)]];
+    const summaryPriceValues = summaryRows.map((row) => {
+      const normalized = normalizeSystemName(row?.[1]);
+      let amount = sectionPriceMap.get(normalized);
+      if (amount == null && normalized) {
+        for (const [k, v] of sectionPriceMap.entries()) {
+          if (k.includes(normalized) || normalized.includes(k)) {
+            amount = v;
+            break;
+          }
+        }
+      }
+      return [amount && amount !== 0 ? Math.round(amount) : ""];
+    });
 
-    const fullPreviewRange = quoteSummarySheet.getRange("A1:D29");
+    const summaryRatioRange = quoteSummarySheet.getRange("F9:F22");
+    summaryRatioRange.load(["values"]);
+    await context.sync();
+
+    quoteSummarySheet.getRange("D9:D21").values = summaryCostValues;
+    quoteSummarySheet.getRange("D9:D22").format.numberFormat = "#,##0";
+    quoteSummarySheet.getRange("D22").formulas = [["=SUM(D9:D21)"]];
+
+    if (mode === "preliminary") {
+      const suggestedRatios = Array.from({ length: 13 }, (_, i) => {
+        const rowNum = 9 + i;
+        const cost = parseCellNumber(summaryCostValues[i]?.[0]);
+        const price = parseCellNumber(summaryPriceValues[i]?.[0]);
+        if (!cost || !price) return "";
+        const ratio = Math.round((price / cost) * 10) / 10;
+        return ratio;
+      });
+
+      const existingRatioValues = summaryRatioRange.values || [];
+      const finalRatioValues = suggestedRatios.map((ratio, i) => {
+        const existing = existingRatioValues[i]?.[0];
+        if (hasCellValue(existing)) {
+          return [existing];
+        }
+        return [ratio];
+      });
+      quoteSummarySheet.getRange("F9:F21").values = finalRatioValues;
+      quoteSummarySheet.getRange("F9:F22").format.numberFormat = "0.0";
+    }
+
+    const priceFormulas = Array.from({ length: 13 }, (_, i) => {
+      const rowNum = 9 + i;
+      return [`=IF(OR(D${rowNum}=\"\",F${rowNum}=\"\"),\"\",D${rowNum}*F${rowNum})`];
+    });
+    quoteSummarySheet.getRange("E9:E21").formulas = priceFormulas;
+    quoteSummarySheet.getRange("E22").formulas = [["=SUM(E9:E21)"]];
+    quoteSummarySheet.getRange("E9:E22").format.numberFormat = "#,##0";
+    quoteSummarySheet.getRange("F22").formulas = [["=IF(OR(D22=\"\",D22=0,E22=\"\"),\"\",E22/D22)"]];
+
+    const fullPreviewRange = quoteSummarySheet.getRange("A1:G29");
     fullPreviewRange.load(["values", "text"]);
     const rowRanges = Array.from({ length: 29 }, (_, i) => quoteSummarySheet.getRange(`${i + 1}:${i + 1}`));
     rowRanges.forEach((r) => r.format.load("rowHeight"));
-    const colKeys = ["A", "B", "C", "D"];
+    const colKeys = ["A", "B", "C", "D", "E", "F", "G"];
     const colRanges = colKeys.map((col) => quoteSummarySheet.getRange(`${col}:${col}`));
     colRanges.forEach((r) => r.format.load("columnWidth"));
     const mergedAreas = (fullPreviewRange as any).getMergedAreasOrNullObject ? (fullPreviewRange as any).getMergedAreasOrNullObject() : null;
@@ -647,19 +835,71 @@ async function syncQuoteSummaryAndCachePreview() {
       (fullPreviewRange.values as unknown[][]) ||
       [];
 
-    return {
-      quoteSheetGrid: previewGridRaw.map((r) => (Array.isArray(r) ? r.map((c) => String(c ?? "")) : ["", "", "", ""])),
+    const basePayload = {
+      quoteSheetGrid: previewGridRaw.map((r) =>
+        Array.isArray(r) ? r.map((c) => String(c ?? "")) : ["", "", "", "", "", "", ""]
+      ),
       quoteSheetLayout: {
         rowHeights,
         colWidths,
         merges: mergeCells,
       },
-      totalPriceText: formatCurrencyLikeText(totalAmount),
+      totalPriceText: formatCurrencyLikeText(parseCellNumber(summaryPriceValues.reduce((sum, item) => sum + parseCellNumber(item[0]), 0))),
       generatedAt: new Date().toISOString(),
+      quotePreviewMode: mode,
     };
+    return mode === "preliminary" ? toPreliminaryPreviewPayload(basePayload as any) : basePayload;
   });
 
   localStorage.setItem(QUOTE_PREVIEW_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function toPreliminaryPreviewPayload(payload: {
+  quoteSheetGrid: string[][];
+  quoteSheetLayout: { rowHeights?: number[]; colWidths?: number[]; merges?: Array<{ row: number; col: number; rowspan: number; colspan: number }> };
+  totalPriceText: string;
+  generatedAt: string;
+  quotePreviewMode: "full" | "preliminary";
+}) {
+  // Hide D(成本) and F(系数) columns in preliminary preview.
+  const keptIdx = [0, 1, 2, 4, 6];
+  const removedCols = new Set([4, 6]); // 1-based
+  const remCount = (col: number) => {
+    let n = 0;
+    removedCols.forEach((x) => {
+      if (x <= col) n += 1;
+    });
+    return n;
+  };
+
+  const nextGrid = (payload.quoteSheetGrid || []).map((row) => keptIdx.map((i) => String(row?.[i] ?? "")));
+  const nextColWidths = keptIdx.map((i) => Number(payload.quoteSheetLayout?.colWidths?.[i] || 0));
+  const nextMerges = (payload.quoteSheetLayout?.merges || [])
+    .map((m) => {
+      const oldStart = Number(m.col || 1);
+      const oldEnd = oldStart + Number(m.colspan || 1) - 1;
+      const newStart = oldStart - remCount(oldStart);
+      const newEnd = oldEnd - remCount(oldEnd);
+      const colspan = Math.max(0, newEnd - newStart + 1);
+      return {
+        row: Number(m.row || 1),
+        col: Math.max(1, newStart),
+        rowspan: Math.max(1, Number(m.rowspan || 1)),
+        colspan,
+      };
+    })
+    .filter((m) => m.colspan > 0);
+
+  return {
+    ...payload,
+    quoteSheetGrid: nextGrid,
+    quoteSheetLayout: {
+      ...(payload.quoteSheetLayout || {}),
+      colWidths: nextColWidths,
+      merges: nextMerges,
+    },
+    quotePreviewMode: "preliminary" as const,
+  };
 }
 
 function parseA1MergeAddress(address: string):
@@ -674,11 +914,11 @@ function parseA1MergeAddress(address: string):
   const start = parseCellRef(parts[0]);
   const end = parseCellRef(parts[1]);
   if (!start || !end) return null;
-  if (start.row > 29 || end.row < 1 || start.col > 4 || end.col < 1) return null;
+  if (start.row > 29 || end.row < 1 || start.col > 7 || end.col < 1) return null;
   const row = Math.max(1, start.row);
   const col = Math.max(1, start.col);
   const endRow = Math.min(29, end.row);
-  const endCol = Math.min(4, end.col);
+  const endCol = Math.min(7, end.col);
   return {
     row,
     col,
@@ -1016,6 +1256,7 @@ async function authRequest(path: string, init?: RequestInit) {
   const response = await fetch(`${APP_URLS.apiBase}${path}`, {
     ...init,
     headers,
+    credentials: "include",
   });
   const result = await response.json();
   if (!response.ok || !result?.success) {
@@ -1156,7 +1397,7 @@ async function handleConfirmResetPasswordClick() {
 
 function withLoginGuard<T>(action: () => T): T | void {
   if (!currentUser || !authToken) {
-    setAuthFeedback("请先输入用户名和密码并登录。", "error");
+    notifyVisibleError("请先输入用户名和密码并登录。");
     return;
   }
   return action();
@@ -1192,3 +1433,6 @@ function displayDialog(
     );
   });
 }
+
+
+

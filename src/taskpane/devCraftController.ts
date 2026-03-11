@@ -49,14 +49,18 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
 
   async function openDevModifyDialog() {
     const selection = await getSelectionContext();
-    if (!selection) return;
+    if (!selection) {
+      throw new Error(FLOW_MESSAGES.selectQuoteConfigColumnsPrefix);
+    }
 
     try {
       const initData = await buildDevModifyInit(selection);
       devModifyState = initData.state;
       await openDevModifyDialogWithData(initData.data, selection);
-    } catch (error) {
+    } catch (error: any) {
       console.error(FLOW_MESSAGES.openDevDialogFailed, error);
+      const message = String(error?.message || FLOW_MESSAGES.openDevDialogFailed);
+      throw new Error(message);
     }
   }
 
@@ -280,4 +284,3 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
     openCraftModifyDialog,
   };
 }
-
