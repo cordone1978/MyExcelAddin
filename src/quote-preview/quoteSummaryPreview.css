@@ -9,7 +9,7 @@ html, body {
 body { min-height: 100vh; padding: 10px; }
 .page-wrap { display: flex; justify-content: center; }
 .page {
-  width: min(calc((100vh - 20px) * 210 / 297), calc(100vw - 20px));
+  width: min(calc((100vh - 20px) * 210 / 297), calc(100vw - 72px));
   min-height: calc(100vh - 20px);
   background: #fff;
   box-shadow: 0 2px 12px rgba(0,0,0,.12);
@@ -29,6 +29,25 @@ body { min-height: 100vh; padding: 10px; }
 .quote-row-1 td { font-size: 24px; font-weight: 700; text-align: center; }
 .quote-row-7 td { font-size: 14px; font-weight: 700; text-align: center; }
 .quote-row-1 td { padding: 0; }
+.section-row {
+  background: #16a6dc;
+  color: #fff;
+  font-weight: 700;
+}
+.child-row {
+  background: #f3f3f3;
+}
+.total-row {
+  font-weight: 700;
+}
+.note-row td {
+  vertical-align: middle;
+}
+.note-text {
+  text-align: left;
+  padding-left: 12px !important;
+  line-height: 1.55;
+}
 .title-cell {
   position: relative;
   height: 100%;
@@ -51,22 +70,33 @@ body { min-height: 100vh; padding: 10px; }
 #contextMenu {
   position: fixed;
   display: none;
-  min-width: 140px;
-  background: #fff;
-  border: 1px solid #ccc;
-  box-shadow: 0 6px 18px rgba(0,0,0,.15);
+  min-width: 156px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(10px);
   z-index: 9999;
 }
 #contextMenu button {
   width: 100%;
   border: 0;
-  background: #fff;
+  border-radius: 8px;
+  background: transparent;
   padding: 10px 12px;
   text-align: left;
   cursor: pointer;
   font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
-#contextMenu button:hover { background: #f0f0f0; }
+#contextMenu button:hover {
+  background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);
+  color: #fff;
+  transform: translateY(-1px);
+}
 @media print {
   html, body { background: #fff; padding: 0; }
   .page { width: 100%; min-height: auto; box-shadow: none; padding: 0; }

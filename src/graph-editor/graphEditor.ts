@@ -1002,6 +1002,22 @@ function toggleDrawMode() {
   setStatus(drawMode ? "自由画线已开启：按住鼠标左键可直接绘制线条。" : "自由画线已关闭。", "success");
 }
 
+function resetToolModes(message = "工具抽屉已关闭。") {
+  connectMode = false;
+  drawMode = false;
+  isPenDrawing = false;
+  isStrokeDrawing = false;
+  penSourceNodeId = "";
+  activeStrokeId = "";
+  getButton("penConnectBtn").textContent = "节点连线笔：关";
+  getButton("penConnectBtn").classList.remove("active");
+  getButton("drawStrokeBtn").textContent = "自由画线：关";
+  getButton("drawStrokeBtn").classList.remove("active");
+  setStatus(message, "success");
+  renderEdges();
+  renderStrokes();
+}
+
 function undoLastStroke() {
   if (state.strokes.length === 0) {
     setStatus("暂无可撤销的画线。", "error");
@@ -2155,6 +2171,9 @@ function setToolsDrawerOpen(open: boolean) {
   drawer.classList.toggle("open", open);
   const btn = document.getElementById("toolsBtn");
   btn?.classList.toggle("active", open);
+  if (!open) {
+    resetToolModes();
+  }
 }
 
 function isToolsDrawerOpen() {

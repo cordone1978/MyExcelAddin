@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Single-script server updater:
 # - optional package extraction (tgz)
-# - patch/build/restart
+# - patch/build/db-migrate/restart
 # - best-effort manifest sync to Samba shared folder
 # - local health check
 
@@ -20,7 +20,7 @@ TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 
 usage() {
   cat <<EOF
-Usage: $0 [package.tgz] [--no-patch] [--no-build] [--no-restart] [--no-share-sync] [--keep-package] [--dry-run]
+Usage: $0 [package.tgz] [--no-patch] [--no-build] [--no-migrate-db] [--no-restart] [--no-share-sync] [--keep-package] [--dry-run]
 
 Examples:
   # Update current code in place
@@ -49,6 +49,7 @@ die() { printf '[%s] [ERR] %s\n' "$(date '+%F %T')" "$*" >&2; exit 1; }
 
 NO_PATCH=0
 NO_BUILD=0
+NO_MIGRATE_DB=0
 NO_RESTART=0
 NO_SHARE_SYNC=0
 KEEP_PACKAGE=0
@@ -59,6 +60,7 @@ for arg in "$@"; do
   case "$arg" in
     --no-patch) NO_PATCH=1 ;;
     --no-build) NO_BUILD=1 ;;
+    --no-migrate-db) NO_MIGRATE_DB=1 ;;
     --no-restart) NO_RESTART=1 ;;
     --no-share-sync) NO_SHARE_SYNC=1 ;;
     --keep-package) KEEP_PACKAGE=1 ;;
@@ -121,7 +123,7 @@ extract_package_if_needed() {
 
 run_update_steps() {
   if [[ "${DRY_RUN}" == "1" ]]; then
-    log "Dry run enabled; skip patch/build/restart/share-sync/health-check"
+    log "Dry run enabled; skip patch/build/db-migrate/restart/share-sync/health-check"
     return 0
   fi
 
@@ -131,10 +133,10 @@ run_update_steps() {
   fi
 
   if [[ "${NO_PATCH}" != "1" ]]; then
-    log "Step 1/4: render deployment manifest"
+    log "Step 1/5: render deployment manifest"
     APP_HOST="${APP_HOST}" APP_PORT="${APP_PORT}" DB_PROFILE="${DB_PROFILE}" CERT_BASE_DIR="${CERT_BASE_DIR}" "${DEPLOY_SCRIPT}" patch
   else
-    log "Step 1/4: manifest render skipped (--no-patch)"
+    log "Step 1/5: manifest render skipped (--no-patch)"
   fi
 
   if [[ "${NO_BUILD}" != "1" ]]; then
@@ -142,22 +144,29 @@ run_update_steps() {
       log "Removing existing dist before rebuild: ${WORKDIR}/dist"
       rm -rf "${WORKDIR}/dist"
     fi
-    log "Step 2/4: install/build"
+    log "Step 2/5: install/build"
     APP_HOST="${APP_HOST}" APP_PORT="${APP_PORT}" DB_PROFILE="${DB_PROFILE}" CERT_BASE_DIR="${CERT_BASE_DIR}" "${DEPLOY_SCRIPT}" build
   else
-    log "Step 2/4: build skipped (--no-build)"
+    log "Step 2/5: build skipped (--no-build)"
+  fi
+
+  if [[ "${NO_MIGRATE_DB}" != "1" ]]; then
+    log "Step 3/5: run DB migrations"
+    APP_HOST="${APP_HOST}" APP_PORT="${APP_PORT}" DB_PROFILE="${DB_PROFILE}" CERT_BASE_DIR="${CERT_BASE_DIR}" "${DEPLOY_SCRIPT}" migrate-db
+  else
+    log "Step 3/5: DB migration skipped (--no-migrate-db)"
   fi
 
   if [[ "${NO_RESTART}" != "1" ]]; then
-    log "Step 3/4: restart service"
+    log "Step 4/5: restart service"
     APP_HOST="${APP_HOST}" APP_PORT="${APP_PORT}" DB_PROFILE="${DB_PROFILE}" CERT_BASE_DIR="${CERT_BASE_DIR}" "${DEPLOY_SCRIPT}" restart
     "${DEPLOY_SCRIPT}" status || true
   else
-    log "Step 3/4: restart skipped (--no-restart)"
+    log "Step 4/5: restart skipped (--no-restart)"
   fi
 
   if [[ "${NO_SHARE_SYNC}" != "1" ]]; then
-    log "Step 4/4: sync manifest to shared folder (best effort)"
+    log "Step 5/5: sync manifest to shared folder (best effort)"
     if [[ -f "${WORKDIR}/manifest.xml" ]]; then
       if cp -f "${WORKDIR}/manifest.xml" "${SHARE_MANIFEST_PATH}" 2>/dev/null; then
         log "manifest synced -> ${SHARE_MANIFEST_PATH}"
@@ -168,7 +177,7 @@ run_update_steps() {
       warn "manifest.xml not found in WORKDIR"
     fi
   else
-    log "Step 4/4: share sync skipped (--no-share-sync)"
+    log "Step 5/5: share sync skipped (--no-share-sync)"
   fi
 
   log "Health check (localhost)"

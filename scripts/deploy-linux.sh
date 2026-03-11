@@ -22,6 +22,7 @@ Usage: $0 <command>
 
 Commands:
   deploy    Replace production config, install deps, build, and restart service
+  migrate-db Run DB migration scripts required by current release
   start     Start server (pm2 preferred, fallback nohup)
   stop      Stop server
   restart   Restart server
@@ -168,6 +169,13 @@ install_and_build() {
   "${NPM_BIN}" run build
 }
 
+migrate_db() {
+  cd "${WORKDIR}"
+  require_node
+  log "Running DB migration: assembly group codes"
+  DB_PROFILE="${DB_PROFILE}" "${NODE_BIN}" "${WORKDIR}/scripts/migrate-assembly-group-codes.js"
+}
+
 pm2_available() {
   command -v pm2 >/dev/null 2>&1
 }
@@ -259,6 +267,7 @@ restart_service() {
 deploy_all() {
   patch_config_files
   install_and_build
+  migrate_db
   restart_service
   log "Deploy completed."
   log "Health check: curl -k ${APP_BASE_URL}/api/test"
@@ -275,6 +284,9 @@ main() {
       ;;
     build)
       install_and_build
+      ;;
+    migrate-db)
+      migrate_db
       ;;
     start)
       start_service

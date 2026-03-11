@@ -138,7 +138,6 @@ function setAuthFeedback(message: string, kind: "error" | "success" | "pending" 
     el.textContent = message;
     el.className = kind ? `auth-feedback ${kind}` : "auth-feedback";
   }
-  setActionFeedback(message, kind);
 }
 
 function setActionFeedback(message: string, kind: "error" | "success" | "pending" | "" = "") {
@@ -685,6 +684,195 @@ function isConfigSectionTitleRow(aValue: unknown, bValue: unknown) {
   return !!aText && !!bText && CHINESE_ORDINAL_REGEX.test(aText);
 }
 
+function isConfigHeaderRow(row: unknown[]) {
+  const aText = String(row?.[0] ?? "").trim();
+  const bText = String(row?.[1] ?? "").trim();
+  return (
+    aText === String(BUILDSHEET_TEXT.configHeaders?.[0] || "").trim() &&
+    bText === String(BUILDSHEET_TEXT.configHeaders?.[1] || "").trim()
+  );
+}
+
+type QuoteSummaryChildRow = {
+  serial: string;
+  name: string;
+  quantity: number;
+  cost: number;
+  price: number;
+  ratio: number;
+  remark: string;
+};
+
+type QuoteSummarySectionRow = {
+  serial: string;
+  name: string;
+  children: QuoteSummaryChildRow[];
+  quantity: number;
+  cost: number;
+  price: number;
+  ratio: number;
+};
+
+type QuotePreviewMergeCell = {
+  row: number;
+  col: number;
+  rowspan: number;
+  colspan: number;
+};
+
+function roundRatio(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.round(value * 10) / 10;
+}
+
+function toChineseSectionOrdinal(value: number): string {
+  const map = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五"];
+  return map[value] || String(value);
+}
+
+function buildQuoteSummarySections(configValues: unknown[][]): QuoteSummarySectionRow[] {
+  const sections: QuoteSummarySectionRow[] = [];
+  let currentSection: QuoteSummarySectionRow | null = null;
+  let sectionIndex = 0;
+
+  configValues.forEach((row) => {
+    const aText = String(row?.[0] ?? "").trim();
+    const bText = String(row?.[1] ?? "").trim();
+
+    if (isConfigSectionTitleRow(aText, bText)) {
+      if (currentSection) {
+        currentSection.quantity = currentSection.children.reduce((sum, item) => sum + item.quantity, 0);
+        currentSection.cost = currentSection.children.reduce((sum, item) => sum + item.cost, 0);
+        currentSection.price = currentSection.children.reduce((sum, item) => sum + item.price, 0);
+        currentSection.ratio = currentSection.cost > 0 ? roundRatio(currentSection.price / currentSection.cost) : 0;
+      }
+      sectionIndex += 1;
+      currentSection = {
+        serial: toChineseSectionOrdinal(sectionIndex),
+        name: bText,
+        children: [],
+        quantity: 0,
+        cost: 0,
+        price: 0,
+        ratio: 0,
+      };
+      sections.push(currentSection);
+      return;
+    }
+
+    if (!currentSection || isConfigHeaderRow(row)) {
+      return;
+    }
+
+    const deviceName = bText;
+    if (!deviceName) {
+      return;
+    }
+
+    currentSection.children.push({
+      serial: `${sectionIndex}.${currentSection.children.length + 1}`,
+      name: deviceName,
+      quantity: parseCellNumber(row?.[9]),
+      cost: parseCellNumber(row?.[13]),
+      price: parseCellNumber(row?.[15]),
+      ratio: roundRatio(parseCellNumber(row?.[16])),
+      remark: String(row?.[17] ?? "").trim(),
+    });
+  });
+
+  if (currentSection) {
+    currentSection.quantity = currentSection.children.reduce((sum, item) => sum + item.quantity, 0);
+    currentSection.cost = currentSection.children.reduce((sum, item) => sum + item.cost, 0);
+    currentSection.price = currentSection.children.reduce((sum, item) => sum + item.price, 0);
+    currentSection.ratio = currentSection.cost > 0 ? roundRatio(currentSection.price / currentSection.cost) : 0;
+  }
+
+  return sections;
+}
+
+function buildQuoteSummaryDisplayRows(sections: QuoteSummarySectionRow[]) {
+  const rows: Array<{
+    level: "section" | "child";
+    values: (string | number)[][];
+  }> = [];
+
+  sections.forEach((section) => {
+    rows.push({
+      level: "section",
+      values: [[
+        section.serial,
+        section.name,
+        "",
+        1,
+        section.cost ? Math.round(section.cost) : "",
+        section.price ? Math.round(section.price) : "",
+        section.ratio ? section.ratio : "",
+        "",
+      ]],
+    });
+
+    section.children.forEach((child) => {
+      rows.push({
+        level: "child",
+        values: [[
+          child.serial,
+          `    ${child.name}`,
+          "",
+          child.quantity ? Math.round(child.quantity) : "",
+          child.cost ? Math.round(child.cost) : "",
+          child.price ? Math.round(child.price) : "",
+          child.ratio ? child.ratio : "",
+          child.remark,
+        ]],
+      });
+    });
+  });
+
+  return rows;
+}
+
+function buildQuoteSummaryMergeCells(
+  dataStartRow: number,
+  displayRowCount: number,
+  totalRow: number,
+  notesStartRow: number,
+  notesEndRow: number
+): QuotePreviewMergeCell[] {
+  const merges: QuotePreviewMergeCell[] = [
+    { row: 1, col: 1, rowspan: 1, colspan: 8 },
+    { row: 2, col: 1, rowspan: 1, colspan: 2 },
+    { row: 2, col: 3, rowspan: 1, colspan: 6 },
+    { row: 3, col: 1, rowspan: 1, colspan: 2 },
+    { row: 3, col: 3, rowspan: 1, colspan: 3 },
+    { row: 3, col: 6, rowspan: 1, colspan: 2 },
+    { row: 4, col: 1, rowspan: 1, colspan: 2 },
+    { row: 4, col: 3, rowspan: 1, colspan: 3 },
+    { row: 4, col: 6, rowspan: 1, colspan: 2 },
+    { row: 5, col: 1, rowspan: 1, colspan: 2 },
+    { row: 5, col: 3, rowspan: 1, colspan: 3 },
+    { row: 5, col: 6, rowspan: 1, colspan: 2 },
+    { row: 6, col: 1, rowspan: 1, colspan: 2 },
+    { row: 6, col: 3, rowspan: 1, colspan: 3 },
+    { row: 6, col: 6, rowspan: 1, colspan: 2 },
+    { row: 7, col: 1, rowspan: 1, colspan: 8 },
+    { row: 8, col: 2, rowspan: 1, colspan: 2 },
+    { row: totalRow, col: 1, rowspan: 1, colspan: 4 },
+  ];
+
+  for (let i = 0; i < displayRowCount; i += 1) {
+    merges.push({ row: dataStartRow + i, col: 2, rowspan: 1, colspan: 2 });
+  }
+
+  if (notesEndRow >= notesStartRow) {
+      merges.push({ row: notesStartRow, col: 1, rowspan: notesEndRow - notesStartRow + 1, colspan: 2 });
+      for (let row = notesStartRow; row <= notesEndRow; row += 1) {
+      merges.push({ row, col: 3, rowspan: 1, colspan: 6 });
+      }
+    }
+
+  return merges;
+}
+
 function formatCurrencyLikeText(value: unknown): string {
   const num = parseCellNumber(value);
   if (!num) return "";
@@ -708,126 +896,111 @@ async function syncQuoteSummaryAndCachePreview(mode: "full" | "preliminary" = "f
 
     const configUsedRange = quoteConfigSheet.getRange("A:P").getUsedRangeOrNullObject(false);
     configUsedRange.load(["values", "isNullObject"]);
-    const summaryItemsRange = quoteSummarySheet.getRange("A9:G21");
-    summaryItemsRange.load(["values"]);
+    const summaryUsedRange = quoteSummarySheet.getUsedRangeOrNullObject(false);
+    summaryUsedRange.load(["rowCount", "isNullObject"]);
     await context.sync();
 
     if (configUsedRange.isNullObject) {
       throw new Error("报价配置表为空，无法生成报价。");
     }
-
-    const sectionCostMap = new Map<string, number>();
-    const sectionPriceMap = new Map<string, number>();
     const configValues = configUsedRange.values || [];
-    configValues.forEach((row) => {
-      if (!isConfigSectionTitleRow(row?.[0], row?.[1])) return;
-      const normalized = normalizeSystemName(row?.[1]);
-      if (!normalized) return;
-      sectionCostMap.set(normalized, parseCellNumber(row?.[13])); // N 列：成本总价
-      sectionPriceMap.set(normalized, parseCellNumber(row?.[15])); // P 列：总价
-    });
 
-    const summaryRows = summaryItemsRange.values || [];
-    const summaryCostValues = summaryRows.map((row) => {
-      const normalized = normalizeSystemName(row?.[1]);
-      let amount = sectionCostMap.get(normalized);
-      if (amount == null && normalized) {
-        for (const [k, v] of sectionCostMap.entries()) {
-          if (k.includes(normalized) || normalized.includes(k)) {
-            amount = v;
-            break;
-          }
-        }
+    const summarySections = buildQuoteSummarySections(configValues);
+    const displayRows = buildQuoteSummaryDisplayRows(summarySections);
+    const dataStartRow = 9;
+    const dataEndRow = dataStartRow + Math.max(displayRows.length - 1, 0);
+    const totalRow = dataEndRow + 1;
+    const notesStartRow = totalRow + 1;
+    const notes = BUILDSHEET_TEXT.quoteNotes || [];
+    const notesEndRow = notesStartRow + Math.max(notes.length - 1, 0);
+    const usedRowCount = summaryUsedRange.isNullObject ? 0 : Number(summaryUsedRange.rowCount || 0);
+    const clearEndRow = Math.max(usedRowCount, notesEndRow, 29);
+
+    const bodyRange = quoteSummarySheet.getRange(`A8:H${clearEndRow}`);
+    bodyRange.unmerge();
+    bodyRange.clear();
+
+    quoteSummarySheet.getRange("A8:H8").values = [BUILDSHEET_TEXT.quoteHeader];
+    quoteSummarySheet.getRange("A8:H8").format.font.bold = true;
+    quoteSummarySheet.getRange("A8:H8").format.horizontalAlignment = "Center";
+    quoteSummarySheet.getRange("A8:H8").format.verticalAlignment = "Center";
+    quoteSummarySheet.getRange("B8:C8").merge();
+
+    displayRows.forEach((item, index) => {
+      const rowNum = dataStartRow + index;
+      quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).values = item.values;
+      quoteSummarySheet.getRange(`B${rowNum}:C${rowNum}`).merge();
+      quoteSummarySheet.getRange(`A${rowNum}`).format.horizontalAlignment = "Center";
+      quoteSummarySheet.getRange(`B${rowNum}:C${rowNum}`).format.horizontalAlignment = item.level === "section" ? "Left" : "Center";
+      quoteSummarySheet.getRange(`D${rowNum}:G${rowNum}`).format.horizontalAlignment = "Center";
+      quoteSummarySheet.getRange(`H${rowNum}`).format.horizontalAlignment = "Left";
+      if (item.level === "section") {
+        quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).format.fill.color = "#16a6dc";
+        quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).format.font.bold = true;
+        quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).format.font.color = "#ffffff";
+      } else {
+        quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).format.fill.color = "#f3f3f3";
       }
-      return [amount && amount !== 0 ? Math.round(amount) : ""];
     });
 
-    const summaryPriceValues = summaryRows.map((row) => {
-      const normalized = normalizeSystemName(row?.[1]);
-      let amount = sectionPriceMap.get(normalized);
-      if (amount == null && normalized) {
-        for (const [k, v] of sectionPriceMap.entries()) {
-          if (k.includes(normalized) || normalized.includes(k)) {
-            amount = v;
-            break;
-          }
-        }
-      }
-      return [amount && amount !== 0 ? Math.round(amount) : ""];
-    });
+    const totalCost = summarySections.reduce((sum, item) => sum + item.cost, 0);
+    const totalPrice = summarySections.reduce((sum, item) => sum + item.price, 0);
+    const totalRatio = totalCost > 0 ? roundRatio(totalPrice / totalCost) : 0;
 
-    const summaryRatioRange = quoteSummarySheet.getRange("F9:F22");
-    summaryRatioRange.load(["values"]);
-    await context.sync();
+    quoteSummarySheet.getRange(`A${totalRow}:D${totalRow}`).merge();
+    quoteSummarySheet.getRange(`A${totalRow}`).values = [[BUILDSHEET_TEXT.totalLabel]];
+    quoteSummarySheet.getRange(`E${totalRow}`).values = [[totalCost ? Math.round(totalCost) : ""]];
+    quoteSummarySheet.getRange(`F${totalRow}`).values = [[totalPrice ? Math.round(totalPrice) : ""]];
+    quoteSummarySheet.getRange(`G${totalRow}`).values = [[totalRatio ? totalRatio : ""]];
+    quoteSummarySheet.getRange(`H${totalRow}`).values = [[""]];
+    quoteSummarySheet.getRange(`A${totalRow}:H${totalRow}`).format.font.bold = true;
+    quoteSummarySheet.getRange(`A${totalRow}:H${totalRow}`).format.horizontalAlignment = "Center";
 
-    quoteSummarySheet.getRange("D9:D21").values = summaryCostValues;
-    quoteSummarySheet.getRange("D9:D22").format.numberFormat = "#,##0";
-    quoteSummarySheet.getRange("D22").formulas = [["=SUM(D9:D21)"]];
+    if (notes.length > 0) {
+      quoteSummarySheet.getRange(`A${notesStartRow}:B${notesEndRow}`).merge();
+      quoteSummarySheet.getRange(`A${notesStartRow}`).values = [[BUILDSHEET_TEXT.remarkLabel]];
+      quoteSummarySheet.getRange(`A${notesStartRow}`).format.horizontalAlignment = "Center";
+      quoteSummarySheet.getRange(`A${notesStartRow}`).format.verticalAlignment = "Center";
 
-    if (mode === "preliminary") {
-      const suggestedRatios = Array.from({ length: 13 }, (_, i) => {
-        const rowNum = 9 + i;
-        const cost = parseCellNumber(summaryCostValues[i]?.[0]);
-        const price = parseCellNumber(summaryPriceValues[i]?.[0]);
-        if (!cost || !price) return "";
-        const ratio = Math.round((price / cost) * 10) / 10;
-        return ratio;
+      notes.forEach((text, idx) => {
+        const rowNum = notesStartRow + idx;
+        quoteSummarySheet.getRange(`C${rowNum}:H${rowNum}`).merge();
+        quoteSummarySheet.getRange(`C${rowNum}`).values = [[text]];
       });
-
-      const existingRatioValues = summaryRatioRange.values || [];
-      const finalRatioValues = suggestedRatios.map((ratio, i) => {
-        const existing = existingRatioValues[i]?.[0];
-        if (hasCellValue(existing)) {
-          return [existing];
-        }
-        return [ratio];
-      });
-      quoteSummarySheet.getRange("F9:F21").values = finalRatioValues;
-      quoteSummarySheet.getRange("F9:F22").format.numberFormat = "0.0";
+      quoteSummarySheet.getRange(`C${notesStartRow}:H${notesEndRow}`).format.wrapText = true;
+      quoteSummarySheet.getRange(`C${notesStartRow}:H${notesEndRow}`).format.verticalAlignment = "Center";
     }
 
-    const priceFormulas = Array.from({ length: 13 }, (_, i) => {
-      const rowNum = 9 + i;
-      return [`=IF(OR(D${rowNum}=\"\",F${rowNum}=\"\"),\"\",D${rowNum}*F${rowNum})`];
-    });
-    quoteSummarySheet.getRange("E9:E21").formulas = priceFormulas;
-    quoteSummarySheet.getRange("E22").formulas = [["=SUM(E9:E21)"]];
-    quoteSummarySheet.getRange("E9:E22").format.numberFormat = "#,##0";
-    quoteSummarySheet.getRange("F22").formulas = [["=IF(OR(D22=\"\",D22=0,E22=\"\"),\"\",E22/D22)"]];
+    const activeRange = quoteSummarySheet.getRange(`A8:H${notesEndRow}`);
+    activeRange.format.font.name = "Microsoft YaHei";
+    activeRange.format.font.size = 11;
+    activeRange.format.borders.getItem("InsideHorizontal").style = "Continuous";
+    activeRange.format.borders.getItem("InsideVertical").style = "Continuous";
+    activeRange.format.borders.getItem("EdgeTop").style = "Continuous";
+    activeRange.format.borders.getItem("EdgeBottom").style = "Continuous";
+    activeRange.format.borders.getItem("EdgeLeft").style = "Continuous";
+    activeRange.format.borders.getItem("EdgeRight").style = "Continuous";
+    quoteSummarySheet.getRange(`D${dataStartRow}:F${totalRow}`).format.numberFormat = "#,##0";
+    quoteSummarySheet.getRange(`G${dataStartRow}:G${totalRow}`).format.numberFormat = "0.0";
 
-    const fullPreviewRange = quoteSummarySheet.getRange("A1:G29");
+    const fullPreviewRange = quoteSummarySheet.getRange(`A1:H${notesEndRow}`);
     fullPreviewRange.load(["values", "text"]);
-    const rowRanges = Array.from({ length: 29 }, (_, i) => quoteSummarySheet.getRange(`${i + 1}:${i + 1}`));
+    const rowRanges = Array.from({ length: notesEndRow }, (_, i) => quoteSummarySheet.getRange(`${i + 1}:${i + 1}`));
     rowRanges.forEach((r) => r.format.load("rowHeight"));
-    const colKeys = ["A", "B", "C", "D", "E", "F", "G"];
+    const colKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
     const colRanges = colKeys.map((col) => quoteSummarySheet.getRange(`${col}:${col}`));
     colRanges.forEach((r) => r.format.load("columnWidth"));
-    const mergedAreas = (fullPreviewRange as any).getMergedAreasOrNullObject ? (fullPreviewRange as any).getMergedAreasOrNullObject() : null;
-    if (mergedAreas) {
-      try {
-        mergedAreas.load("areas/items/address");
-      } catch {
-        // ignore merged areas load incompatibility; preview will use fallback merges
-      }
-    }
-
     await context.sync();
 
     const rowHeights = rowRanges.map((r) => Number((r.format as any).rowHeight || 0));
     const colWidths = colRanges.map((r) => Number((r.format as any).columnWidth || 0));
-    const mergeCells: Array<{ row: number; col: number; rowspan: number; colspan: number }> = [];
-    try {
-      const areas = (mergedAreas as any)?.areas?.items || [];
-      areas.forEach((area: any) => {
-        const address = String(area?.address || "");
-        const merge = parseA1MergeAddress(address);
-        if (merge) {
-          mergeCells.push(merge);
-        }
-      });
-    } catch {
-      // ignore merge parsing issues; preview will fallback to default merge config
-    }
+    const mergeCells = buildQuoteSummaryMergeCells(
+      dataStartRow,
+      displayRows.length,
+      totalRow,
+      notesStartRow,
+      notesEndRow
+    );
 
     const previewGridRaw =
       ((fullPreviewRange as any).text as unknown[][]) ||
@@ -844,7 +1017,7 @@ async function syncQuoteSummaryAndCachePreview(mode: "full" | "preliminary" = "f
         colWidths,
         merges: mergeCells,
       },
-      totalPriceText: formatCurrencyLikeText(parseCellNumber(summaryPriceValues.reduce((sum, item) => sum + parseCellNumber(item[0]), 0))),
+      totalPriceText: formatCurrencyLikeText(totalPrice),
       generatedAt: new Date().toISOString(),
       quotePreviewMode: mode,
     };
@@ -861,9 +1034,8 @@ function toPreliminaryPreviewPayload(payload: {
   generatedAt: string;
   quotePreviewMode: "full" | "preliminary";
 }) {
-  // Hide D(成本) and F(系数) columns in preliminary preview.
-  const keptIdx = [0, 1, 2, 4, 6];
-  const removedCols = new Set([4, 6]); // 1-based
+  const keptIdx = [0, 1, 2, 3, 5, 7];
+  const removedCols = new Set([5, 7]); // 1-based: E(成本), G(系数)
   const remCount = (col: number) => {
     let n = 0;
     removedCols.forEach((x) => {
@@ -914,10 +1086,10 @@ function parseA1MergeAddress(address: string):
   const start = parseCellRef(parts[0]);
   const end = parseCellRef(parts[1]);
   if (!start || !end) return null;
-  if (start.row > 29 || end.row < 1 || start.col > 7 || end.col < 1) return null;
+  if (end.row < 1 || start.col > 7 || end.col < 1) return null;
   const row = Math.max(1, start.row);
   const col = Math.max(1, start.col);
-  const endRow = Math.min(29, end.row);
+  const endRow = Math.max(row, end.row);
   const endCol = Math.min(7, end.col);
   return {
     row,
@@ -1025,8 +1197,7 @@ async function saveDialogCompositeToDevSheet(data: any) {
       sheet = sheets.add(GRAPH_STORE_DEV_SHEET);
     }
 
-    // 开发阶段保持可见，便于直接验证
-    sheet.visibility = Excel.SheetVisibility.visible;
+    sheet.visibility = Excel.SheetVisibility.hidden;
 
     const meta = {
       savedAt: entry.savedAt,

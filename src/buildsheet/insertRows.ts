@@ -15,6 +15,15 @@ type DeviceMergeGroup = {
   label: string;
 };
 
+function getAssemblyGroupValue(component: any): number {
+  const explicitGroup = Number(component?.assembly_group || component?.assemblyGroup || 0);
+  if (explicitGroup > 0) return explicitGroup;
+  const assemblyValue = Number(component?.is_Assembly || 0);
+  if (assemblyValue >= 100) return Math.floor(assemblyValue / 10);
+  if (assemblyValue >= 1) return assemblyValue;
+  return 0;
+}
+
 export async function insertComponentsToConfigSheet(
   categoryName: string,
   projectName: string,
@@ -388,8 +397,11 @@ function buildDeviceMergeGroups(
 }
 
 function getDeviceGroupKey(component: any, projectName: string): string {
-  const isAssembly = Number(component?.is_Assembly || 0) >= 1;
+  const assemblyValue = Number(component?.is_Assembly || 0);
+  const assemblyGroup = getAssemblyGroupValue(component);
+  const isAssembly = assemblyValue >= 1;
   if (!isAssembly) return `main:${projectName}`;
+  if (assemblyGroup > 0) return `anno-group:${assemblyGroup}`;
   const componentName = String(component?.component_name || "").trim();
   return `anno:${componentName}`;
 }

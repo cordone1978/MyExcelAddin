@@ -27,7 +27,7 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
     let currentProjectBaseDescription = "";
     let currentMaterialPreset = "calcium";
     let selectedDetails = new Map(); // 改用 Map，key=id, value={name, imageUrl, layer}
-    let selectedAnnotations = new Map(); // 改用 Map，key=id, value={name, posX, posY, imageUrl}
+    let selectedAnnotations = new Map(); // key=id, value={name, posX, posY, imageUrl, assemblyGroup}
 
     // Canvas 相关变量
     let canvas = null;
@@ -482,6 +482,7 @@ function displayAnnotations(annotations) {
             annotation.position_x,
             annotation.position_y,
             imageUrl,
+            annotation.assembly_group,
             checkbox.checked
         );
 
@@ -502,6 +503,7 @@ function displayAnnotations(annotations) {
                 annotation.position_x,
                 annotation.position_y,
                 imageUrl,
+                annotation.assembly_group,
                 checkbox.checked
             );
         };
@@ -516,11 +518,23 @@ function displayAnnotations(annotations) {
 function normalizeAnnotations(annotations) {
     const map = new Map();
     annotations.forEach((anno) => {
-        const key = (anno.name || '').trim() || `__id_${anno.id}`;
+        const groupKey = Number(anno.assembly_group || 0);
+        const idKey = String(anno.id || '').trim();
+        const key = groupKey > 0
+            ? `group_${groupKey}`
+            : (idKey || ((anno.name || '').trim() ? `${(anno.name || '').trim()}_${groupKey}` : `__idx_${map.size}`));
         const existing = map.get(key);
         if (!existing) {
-            map.set(key, { ...anno, key });
+            map.set(key, { ...anno, key, assembly_group: groupKey });
             return;
+        }
+
+        const existingAssemblyValue = Number(existing.is_Assembly || 0);
+        const candidateAssemblyValue = Number(anno.is_Assembly || 0);
+        if (groupKey > 0 && candidateAssemblyValue > 0 && (existingAssemblyValue <= 0 || candidateAssemblyValue < existingAssemblyValue)) {
+            existing.id = anno.id;
+            existing.name = anno.name;
+            existing.is_Assembly = anno.is_Assembly;
         }
 
         const existingHasImage = !!(existing.image_url || existing.component_pic);
@@ -539,6 +553,10 @@ function normalizeAnnotations(annotations) {
         if ((existing.position_y === null || existing.position_y === undefined || existing.position_y === '') &&
             (anno.position_y !== null && anno.position_y !== undefined && anno.position_y !== '')) {
             existing.position_y = anno.position_y;
+        }
+
+        if (!existing.assembly_group && groupKey > 0) {
+            existing.assembly_group = groupKey;
         }
     });
     return Array.from(map.values());
@@ -874,13 +892,14 @@ function normalizeAnnotations(annotations) {
     }
 
     // 12. 切换标注选项
-    function toggleAnnotation(annotationKey, annotationName, posX, posY, imageUrl, isChecked) {
+    function toggleAnnotation(annotationKey, annotationName, posX, posY, imageUrl, assemblyGroup, isChecked) {
         if (isChecked) {
             selectedAnnotations.set(annotationKey, {
                 name: annotationName,
                 posX,
                 posY,
-                imageUrl
+                imageUrl,
+                assemblyGroup: Number(assemblyGroup || 0)
             });
             // 可选配件同样叠加到 Canvas
             addComponentToCanvas(annotationKey, annotationName, imageUrl, posX || 0);
@@ -1036,7 +1055,11 @@ function normalizeAnnotations(annotations) {
             project: currentProjectName,
             materialPreset: currentMaterialPreset,
             details: Array.from(selectedDetails.entries()).map(([id, data]) => ({ id, name: data.name })),
-            annotations: Array.from(selectedAnnotations.entries()).map(([id, data]) => ({id, name: data.name})),
+            annotations: Array.from(selectedAnnotations.entries()).map(([id, data]) => ({
+                id,
+                name: data.name,
+                assemblyGroup: Number(data.assemblyGroup || 0)
+            })),
             compositeImage: compositeImageBase64  // 添加合成图片
         };
 
@@ -1078,8 +1101,7 @@ function normalizeAnnotations(annotations) {
                 sheet = sheets.add(DEV_GRAPH_SHEET_NAME);
             }
 
-            // 开发阶段故意设为可见，方便你直接查看内容
-            sheet.visibility = Excel.SheetVisibility.visible;
+            sheet.visibility = Excel.SheetVisibility.hidden;
 
             const meta = {
                 savedAt: new Date().toISOString(),

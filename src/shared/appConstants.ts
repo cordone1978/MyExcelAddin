@@ -102,7 +102,7 @@ export const DIALOG_SIZES = {
   devModify: { width: 70, height: 50 },
   queryPrice: { width: 75, height: 60 },
   infoReference: { width: 99, height: 99 },
-  generateQuote: { width: 71, height: 100 },
+  generateQuote: { width: 52, height: 100 },
   graphEditor: { width: 99, height: 99 },
   default: { width: 50, height: 60 },
   toast: { width: 30, height: 20 },

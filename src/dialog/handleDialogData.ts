@@ -70,6 +70,15 @@ async function getSystemNameForType(typeName: string): Promise<string | null> {
   }
 }
 
+function getAssemblyGroupValue(item: any): number {
+  const explicitGroup = Number(item?.assembly_group || item?.assemblyGroup || 0);
+  if (explicitGroup > 0) return explicitGroup;
+  const assemblyValue = Number(item?.is_Assembly || 0);
+  if (assemblyValue >= 100) return Math.floor(assemblyValue / 10);
+  if (assemblyValue >= 1) return assemblyValue;
+  return 0;
+}
+
 function filterDetailComponents(configData: any[], selectedDetails: any[]): any[] {
   const selectedIds = selectedDetails.map((detail) => detail.id);
   const selectedNames = selectedDetails
@@ -89,13 +98,23 @@ function filterDetailComponents(configData: any[], selectedDetails: any[]): any[
 }
 
 function filterAnnotationComponents(configData: any[], selectedAnnotations: any[]): any[] {
+  const selectedAssemblyGroups = selectedAnnotations
+    .map((anno) => Number(anno?.assemblyGroup || 0))
+    .filter((value) => value > 0);
+  const selectedAssemblyGroupSet = new Set(selectedAssemblyGroups);
+
   const selectedNames = selectedAnnotations
     .map((anno) => (anno?.name || "").trim().toLowerCase())
     .filter((name) => name.length > 0);
   const selectedNameSet = new Set(selectedNames);
 
   const components = configData.filter((comp: any) => {
-    if (Number(comp?.is_Assembly || 0) < 1) return false;
+    const assemblyValue = Number(comp?.is_Assembly || 0);
+    const assemblyGroup = getAssemblyGroupValue(comp);
+    if (assemblyValue < 1) return false;
+    if (selectedAssemblyGroupSet.size > 0 && assemblyGroup > 0) {
+      return selectedAssemblyGroupSet.has(assemblyGroup);
+    }
     const compName = (comp?.component_name || comp?.name || "").trim().toLowerCase();
     return compName.length > 0 && selectedNameSet.has(compName);
   });

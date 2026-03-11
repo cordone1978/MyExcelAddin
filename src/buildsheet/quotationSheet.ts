@@ -35,7 +35,7 @@ async function fetchImageAsBase64(url: string): Promise<string> {
 
 async function addCompanyLogoToQuoteSheet(context: Excel.RequestContext, sheet: Excel.Worksheet): Promise<void> {
   const logoBase64 = await fetchImageAsBase64("/assets/logo-large.png");
-  const titleRange = sheet.getRange("A1:G1");
+  const titleRange = sheet.getRange("A1:H1");
   titleRange.load("left,top,height,width");
   await context.sync();
 
@@ -122,30 +122,27 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
   sheet.showGridlines = false;
   context.application.suspendScreenUpdatingUntilNextSync();
 
-  sheet.getRange("A1:G1").merge();
+  sheet.getRange("A1:H1").merge();
   sheet.getRange("A1").values = [[BUILDSHEET_TEXT.companyName]];
   sheet.getRange("A1").format.font.bold = true;
   sheet.getRange("A1").format.font.size = 24;
   sheet.getRange("A1").format.horizontalAlignment = "Center";
   sheet.getRange("A1").format.verticalAlignment = "Center";
 
-  sheet.getRange("A2:G7").values = BUILDSHEET_TEXT.quoteInfoRows;
+  sheet.getRange("A2:H6").values = BUILDSHEET_TEXT.quoteInfoRows;
   for (let row = 2; row <= 6; row += 1) {
     sheet.getRange(`A${row}:B${row}`).merge();
     if (row === 2) {
-      sheet.getRange("C2:G2").merge();
+      sheet.getRange("C2:H2").merge();
     } else {
-      sheet.getRange(`C${row}:D${row}`).merge();
-      sheet.getRange(`E${row}:F${row}`).merge();
+      sheet.getRange(`C${row}:E${row}`).merge();
+      sheet.getRange(`F${row}:G${row}`).merge();
     }
   }
-  sheet.getRange("A2:G6").format.horizontalAlignment = "Center";
-  sheet.getRange("A2:G6").format.verticalAlignment = "Center";
-  // 明确回写，避免在合并过程中个别客户端丢失 E 列抬头文本。
-  sheet.getRange("E3").values = [[String(BUILDSHEET_TEXT.quoteInfoRows?.[1]?.[4] || "客户电话:")]];
-  sheet.getRange("E4").values = [[String(BUILDSHEET_TEXT.quoteInfoRows?.[2]?.[4] || "客户传真:")]];
+  sheet.getRange("A2:H6").format.horizontalAlignment = "Center";
+  sheet.getRange("A2:H6").format.verticalAlignment = "Center";
 
-  sheet.getRange("A7:G7").merge();
+  sheet.getRange("A7:H7").merge();
   sheet.getRange("A7").values = [[BUILDSHEET_TEXT.quoteTitle]];
   sheet.getRange("A7").format.font.bold = true;
   sheet.getRange("A7").format.horizontalAlignment = "Center";
@@ -157,7 +154,7 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
 
   const defaultItems = BUILDSHEET_TEXT.quoteDefaultItems;
   const items = systems && systems.length > 0
-    ? systems.slice(0, 13).map((s, i) => [i + 1, s.name || "", "", "", "", "", ""])
+    ? systems.slice(0, 13).map((s, i) => [i + 1, s.name || "", "", "", "", "", "", ""])
     : defaultItems;
 
   sheet.getRange(BUILDSHEET_RANGES.quoteItems).values = items;
@@ -165,13 +162,13 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
     sheet.getRange(`B${row}:C${row}`).merge();
   }
   sheet.getRange("A9:A21").format.horizontalAlignment = "Center";
-  sheet.getRange("D9:F21").format.horizontalAlignment = "Center";
+  sheet.getRange("D9:G21").format.horizontalAlignment = "Center";
 
-  sheet.getRange("A22:C22").merge();
+  sheet.getRange("A22:D22").merge();
   sheet.getRange("A22").values = [[BUILDSHEET_TEXT.totalLabel]];
-  sheet.getRange("D22").values = [[""]];
-  sheet.getRange("A22:G22").format.font.bold = true;
-  sheet.getRange("A22:G22").format.horizontalAlignment = "Center";
+  sheet.getRange("E22").values = [[""]];
+  sheet.getRange("A22:H22").format.font.bold = true;
+  sheet.getRange("A22:H22").format.horizontalAlignment = "Center";
 
   sheet.getRange("A23:B29").merge();
   sheet.getRange("A23").values = [[BUILDSHEET_TEXT.remarkLabel]];
@@ -182,7 +179,7 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
 
   notes.forEach((text, idx) => {
     const row = 23 + idx;
-    sheet.getRange(`C${row}:G${row}`).merge();
+    sheet.getRange(`C${row}:H${row}`).merge();
     sheet.getRange(`C${row}`).values = [[text]];
   });
 
@@ -214,6 +211,7 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
   sheet.getRange("E:E").format.columnWidth = BUILDSHEET_COLUMNS.quote.E;
   sheet.getRange("F:F").format.columnWidth = BUILDSHEET_COLUMNS.quote.F;
   sheet.getRange("G:G").format.columnWidth = BUILDSHEET_COLUMNS.quote.G;
+  sheet.getRange("H:H").format.columnWidth = BUILDSHEET_COLUMNS.quote.H;
 
   try {
     await addCompanyLogoToQuoteSheet(context, sheet);

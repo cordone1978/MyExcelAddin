@@ -13,6 +13,7 @@ type QuoteSheetLayout = {
 };
 
 let quoteLogoDataUrlCache: string | null = null;
+let isExportingPdf = false;
 
 async function getQuoteLogoDataUrl(): Promise<string> {
   if (quoteLogoDataUrlCache) {
@@ -32,6 +33,36 @@ async function getQuoteLogoDataUrl(): Promise<string> {
   return quoteLogoDataUrlCache;
 }
 
+async function savePdfBlob(blob: Blob, fileName: string) {
+  const picker = (window as any).showSaveFilePicker;
+  if (typeof picker === "function") {
+    const handle = await picker({
+      suggestedName: fileName,
+      types: [
+        {
+          description: "PDF 文件",
+          accept: {
+            "application/pdf": [".pdf"],
+          },
+        },
+      ],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function escapeHtml(text: unknown) {
   return String(text ?? "")
     .replace(/&/g, "&amp;")
@@ -41,15 +72,26 @@ function escapeHtml(text: unknown) {
     .replace(/'/g, "&#39;");
 }
 
+function buildPdfFileName(grid: GridRow[]): string {
+  const customerRow = Array.isArray(grid?.[1]) ? grid[1] : [];
+  const customerName = customerRow
+    .map((cell) => String(cell || "").trim())
+    .find((cell) => cell && cell !== "客户名称:");
+  if (!customerName) {
+    return "报价汇总表.pdf";
+  }
+  return `报价汇总表（${customerName}）.pdf`;
+}
+
 function defaultGrid(colCount = 7): GridRow[] {
-  const count = Math.max(1, Number(colCount || 7));
+  const count = Math.max(1, Number(colCount || 8));
   const rows: GridRow[] = Array.from({ length: 29 }, () => Array.from({ length: count }, () => ""));
   rows[0][0] = "湖南华通众智科技有限公司";
   rows[6][0] = "报价汇总表";
-  if (count >= 7) {
-    rows[7] = ["序号", "项目", "", "成本（元）", "单价（元）", "系数", "备注"];
+  if (count >= 8) {
+    rows[7] = ["序号", "项目", "", "数量", "成本（元）", "单价（元）", "系数", "备注"];
   } else {
-    rows[7] = ["序号", "项目", "", "单价（元）", "备注"];
+    rows[7] = ["序号", "项目", "", "数量", "单价（元）", "备注"];
   }
   rows[21][0] = "总计（元）";
   rows[22][0] = "备注";
@@ -61,9 +103,8 @@ function loadGrid(): GridRow[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
     const grid = parsed && Array.isArray(parsed.quoteSheetGrid) ? parsed.quoteSheetGrid : null;
-    const mode = String(parsed?.quotePreviewMode || "").trim().toLowerCase();
     const inferredCols = Array.isArray(grid?.[0]) ? grid[0].length : 0;
-    const colCount = mode === "preliminary" ? 5 : inferredCols >= 5 ? Math.min(7, inferredCols) : 7;
+    const colCount = inferredCols >= 1 ? Math.min(8, inferredCols) : 8;
     if (!grid || !grid.length) return defaultGrid(colCount);
     const normalized = grid.map((row: unknown) => {
       const r = Array.isArray(row) ? row.slice(0, colCount).map((cell) => String(cell ?? "")) : [];
@@ -76,49 +117,6 @@ function loadGrid(): GridRow[] {
     console.error("读取报价汇总表预览数据失败", e);
     return defaultGrid();
   }
-}
-
-function getDefaultMergeConfig(colCount: number): MergeCell[] {
-  if (colCount <= 5) {
-    return [
-      { row: 1, col: 1, rowspan: 1, colspan: 5 },
-      { row: 2, col: 1, rowspan: 1, colspan: 2 },
-      { row: 2, col: 3, rowspan: 1, colspan: 3 },
-      { row: 3, col: 1, rowspan: 1, colspan: 2 },
-      { row: 4, col: 1, rowspan: 1, colspan: 2 },
-      { row: 5, col: 1, rowspan: 1, colspan: 2 },
-      { row: 6, col: 1, rowspan: 1, colspan: 2 },
-      { row: 7, col: 1, rowspan: 1, colspan: 5 },
-      { row: 8, col: 2, rowspan: 1, colspan: 2 },
-      ...Array.from({ length: 13 }, (_, i) => ({ row: 9 + i, col: 2, rowspan: 1, colspan: 2 })),
-      { row: 22, col: 1, rowspan: 1, colspan: 3 },
-      { row: 23, col: 1, rowspan: 7, colspan: 2 },
-      ...Array.from({ length: 7 }, (_, i) => ({ row: 23 + i, col: 3, rowspan: 1, colspan: 3 })),
-    ];
-  }
-  return [
-    { row: 1, col: 1, rowspan: 1, colspan: 7 },
-    { row: 2, col: 1, rowspan: 1, colspan: 2 },
-    { row: 2, col: 3, rowspan: 1, colspan: 5 },
-    { row: 3, col: 1, rowspan: 1, colspan: 2 },
-    { row: 3, col: 3, rowspan: 1, colspan: 2 },
-    { row: 3, col: 5, rowspan: 1, colspan: 2 },
-    { row: 4, col: 1, rowspan: 1, colspan: 2 },
-    { row: 4, col: 3, rowspan: 1, colspan: 2 },
-    { row: 4, col: 5, rowspan: 1, colspan: 2 },
-    { row: 5, col: 1, rowspan: 1, colspan: 2 },
-    { row: 5, col: 3, rowspan: 1, colspan: 2 },
-    { row: 5, col: 5, rowspan: 1, colspan: 2 },
-    { row: 6, col: 1, rowspan: 1, colspan: 2 },
-    { row: 6, col: 3, rowspan: 1, colspan: 2 },
-    { row: 6, col: 5, rowspan: 1, colspan: 2 },
-    { row: 7, col: 1, rowspan: 1, colspan: 7 },
-    { row: 8, col: 2, rowspan: 1, colspan: 2 },
-    ...Array.from({ length: 13 }, (_, i) => ({ row: 9 + i, col: 2, rowspan: 1, colspan: 2 })),
-    { row: 22, col: 1, rowspan: 1, colspan: 3 },
-    { row: 23, col: 1, rowspan: 7, colspan: 2 },
-    ...Array.from({ length: 7 }, (_, i) => ({ row: 23 + i, col: 3, rowspan: 1, colspan: 5 })),
-  ];
 }
 
 function getLayout(): QuoteSheetLayout {
@@ -139,7 +137,7 @@ function getLayout(): QuoteSheetLayout {
 function buildMergeMaps(merges: MergeCell[] | undefined, colCount: number) {
   const starts = new Map<string, MergeCell>();
   const covered = new Set<string>();
-  const sourceList = merges && merges.length ? merges : getDefaultMergeConfig(colCount);
+  const sourceList = merges && merges.length ? merges : [];
   const mergeList = sourceList
     .map((m) => {
       const startCol = Math.max(1, Number(m.col || 1));
@@ -167,19 +165,39 @@ function buildMergeMaps(merges: MergeCell[] | undefined, colCount: number) {
   return { starts, covered };
 }
 
-function cellClass(row: number, col: number, colCount: number) {
+function cellClass(row: number, col: number, colCount: number, grid: GridRow[]) {
   const classes: string[] = [];
-  if (row === 1 || row === 7 || row === 8 || row === 22) classes.push("bold");
+  const noteStartRow = grid.findIndex((gridRow) => String(gridRow?.[0] || "").trim() === "备注") + 1;
+  const inNotesBlock = noteStartRow > 0 && row >= noteStartRow;
+  if (row === 1 || row === 7 || row === 8) classes.push("bold");
   if (row === 1) classes.push("title", "center");
-  if (row === 7 || row === 8 || row === 22) classes.push("center");
-  const dataCenterCols = colCount === 5 ? new Set([1, 4]) : new Set([1, 4, 5, 6]);
-  if ((row >= 9 && row <= 21 && dataCenterCols.has(col)) || (row >= 2 && row <= 6)) {
+  if (row === 7 || row === 8) classes.push("center");
+  const dataCenterCols = colCount <= 6 ? new Set([1, 4, 5]) : new Set([1, 4, 5, 6, 7]);
+  if ((row >= 9 && dataCenterCols.has(col)) || (row >= 2 && row <= 6)) {
     classes.push("center");
   }
-  if (row === 23 && col === 1) {
+  if (row >= 9) {
+    const serialCell = String(grid?.[row - 1]?.[0] || "").trim();
+    const labelCell = String(grid?.[row - 1]?.[1] || "").trim();
+    if ((/^\d+$/.test(serialCell) || /^[一二三四五六七八九十]+$/.test(serialCell)) && labelCell) {
+      classes.push("section-row");
+    } else if (/^\d+\.\d+$/.test(serialCell) && labelCell) {
+      classes.push("child-row");
+    } else if (serialCell.includes("总计")) {
+      classes.push("bold", "center", "total-row");
+    } else if (serialCell === "备注") {
+      classes.push("notes-title", "center");
+    }
+  }
+  if (String(grid?.[row - 1]?.[0] || "").trim() === "备注" && col === 1) {
     classes.push("center");
   }
-  if (row >= 23) classes.push("notes");
+  if (inNotesBlock) {
+    classes.push("note-row");
+    if (col >= 3) {
+      classes.push("note-text");
+    }
+  }
   return classes.join(" ");
 }
 
@@ -210,7 +228,7 @@ async function renderGrid() {
     }
     html += "</colgroup>";
   }
-  for (let r = 1; r <= Math.min(29, grid.length); r++) {
+  for (let r = 1; r <= grid.length; r++) {
     const rowHeight = Number(layout.rowHeights?.[r - 1] || 0);
     const rowStyle = rowHeight > 0 ? ` style="height:${Math.round(rowHeight)}px"` : "";
     html += `<tr class="quote-row-${r}"${rowStyle}>`;
@@ -221,7 +239,7 @@ async function renderGrid() {
       const attrs: string[] = [];
       if (merge && merge.rowspan > 1) attrs.push(`rowspan="${merge.rowspan}"`);
       if (merge && merge.colspan > 1) attrs.push(`colspan="${merge.colspan}"`);
-      const cls = cellClass(r, c, colCount);
+      const cls = cellClass(r, c, colCount, grid);
       if (cls) attrs.push(`class="${cls}"`);
       const text = grid[r - 1]?.[c - 1] || "";
       if (r === 1 && c === 1 && logoDataUrl) {
@@ -246,6 +264,10 @@ function bindExportMenu() {
   };
 
   document.addEventListener("contextmenu", (event) => {
+    if (isExportingPdf) {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     menu.style.left = `${event.clientX}px`;
     menu.style.top = `${event.clientY}px`;
@@ -257,9 +279,15 @@ function bindExportMenu() {
 
   exportBtn.addEventListener("click", async (e) => {
     e.stopPropagation();
+    if (isExportingPdf) return;
     hideMenu();
     try {
-      const docTitle = (document.title || "报价汇总表").trim() || "报价汇总表";
+      isExportingPdf = true;
+      exportBtn.disabled = true;
+      exportBtn.textContent = "正在导出...";
+      const grid = loadGrid();
+      const fileName = buildPdfFileName(grid);
+      const docTitle = fileName.replace(/\.pdf$/i, "");
       const exportHtml = await buildExportHtmlWithInlineStyles();
       const response = await fetch(EXPORT_PDF_URL, {
         method: "POST",
@@ -282,20 +310,21 @@ function bindExportMenu() {
       }
 
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${docTitle}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      await savePdfBlob(blob, fileName);
     } catch (err: any) {
       console.error(err);
       exportBtn.textContent = err?.message || "导出PDF失败";
       setTimeout(() => {
         exportBtn.textContent = "导出为PDF";
       }, 2000);
+    } finally {
+      window.setTimeout(() => {
+        isExportingPdf = false;
+        exportBtn.disabled = false;
+        if (exportBtn.textContent === "正在导出...") {
+          exportBtn.textContent = "导出为PDF";
+        }
+      }, 200);
     }
   });
 }

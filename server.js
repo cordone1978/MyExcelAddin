@@ -210,6 +210,14 @@ function inferExtFromUrl(urlOrPath) {
   return ".png";
 }
 
+const ASSEMBLY_GROUP_SQL = `
+CASE
+  WHEN CAST(is_Assembly AS SIGNED) >= 100 THEN FLOOR(CAST(is_Assembly AS SIGNED) / 10)
+  WHEN CAST(is_Assembly AS SIGNED) >= 1 THEN CAST(is_Assembly AS SIGNED)
+  ELSE 0
+END
+`;
+
 // API routes (must be defined before static file serving)
 
 // 0. Test DB connection
@@ -308,6 +316,8 @@ app.get(API_ROUTES.annotations, async (req, res) => {
         component_pic,
         pic_level as position_x,
         NULL as position_y,
+        CAST(is_Assembly AS SIGNED) as is_Assembly,
+        ${ASSEMBLY_GROUP_SQL} as assembly_group,
         CASE 
           WHEN component_pic IS NOT NULL AND component_pic != '' 
           THEN CONCAT('${URLS.imageBase}', component_pic, '.png')
@@ -315,7 +325,7 @@ app.get(API_ROUTES.annotations, async (req, res) => {
         END as image_url
       FROM ht_sales_product_default_config
       WHERE product_id = ?
-        AND CAST(is_Assembly AS SIGNED) = 1
+        AND CAST(is_Assembly AS SIGNED) >= 1
       ORDER BY component_sn
     `, [projectId]);
     
@@ -349,7 +359,8 @@ app.get(API_ROUTES.config, async (req, res) => {
         pic_level,
         whatkind,
         CAST(is_active AS SIGNED) as is_active,
-        CAST(is_Assembly AS SIGNED) as is_Assembly
+        CAST(is_Assembly AS SIGNED) as is_Assembly,
+        ${ASSEMBLY_GROUP_SQL} as assembly_group
       FROM ht_sales_product_default_config
       WHERE product_id = ?
       ORDER BY component_sn

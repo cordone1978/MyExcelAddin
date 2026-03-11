@@ -26,13 +26,10 @@
         <p class="app-meta"><label id="item-subject"></label></p>
 
         <section class="panel panel-auth" id="authPanel" aria-labelledby="authPanelTitle">
-            <div class="panel-head">
-                <h2 class="panel-title" id="authPanelTitle">登录系统</h2>
-                <span class="panel-badge">账户</span>
+            <div class="auth-hero">
+                <h2 class="panel-title auth-title" id="authPanelTitle">账号登录</h2>
+                <p class="auth-subtitle">登录后可继续设备配置、报价生成和信息参考。</p>
             </div>
-            <p class="panel-status"><label id="loginStatusLabel"></label></p>
-            <p class="user-info" id="userInfoLabel"></p>
-            <p class="auth-feedback" id="authFeedbackLabel"></p>
             <div class="field-list">
                 <input class="login-input" id="usernameInput" type="text" placeholder="用户名" autocomplete="username" />
                 <input class="login-input" id="passwordInput" type="password" placeholder="密码" autocomplete="current-password" />
@@ -47,10 +44,10 @@
                 <button class="dialog-btn btn-secondary is-hidden" id="cancelResetPasswordBtn" onclick="handleCancelResetPasswordClick()"></button>
                 <button class="dialog-btn btn-primary is-hidden" id="confirmResetPasswordBtn" onclick="handleConfirmResetPasswordClick()"></button>
             </div>
+            <p class="auth-feedback" id="authFeedbackLabel"></p>
         </section>
 
         <section class="panel panel-actions is-hidden" id="actionPanel" aria-label="功能区">
-            <p class="action-feedback" id="actionFeedbackLabel" role="alert"></p>
             <div class="btn-grid">
                 <button class="dialog-btn btn-secondary" id="addDeviceBtn" onclick="handleAddDeviceClick()"></button>
                 <button class="dialog-btn btn-secondary" id="modifyDeviceBtn" onclick="handleModifyDeviceClick()"></button>
