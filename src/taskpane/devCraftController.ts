@@ -5,9 +5,9 @@ import {
   fetchJson,
   findComponent,
   getCraftFieldNumber,
-  getStandardPartPrice,
   resolveProjectId,
 } from "./devCraftDataService";
+import { openQueryPriceDialogControllerWithOptions } from "./querypriceController";
 import {
   ComponentRecord,
   CraftModifySubmitPayload,
@@ -27,14 +27,18 @@ type DevModifyState = {
   projectId: number;
   componentId: number;
   materialPrice: number | null;
-  standardPrice: number | null;
 };
 
 type CraftModifyState = {
   selection: SelectionContext;
   initData: Record<string, unknown>;
-  standardPrice: number | null;
   materialPrice: number | null;
+};
+
+type SelectedComponentContext = {
+  projectId: number;
+  configData: ComponentRecord[];
+  component: ComponentRecord;
 };
 
 type DisplayDialogFn = (
@@ -49,12 +53,16 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
 
   async function openDevModifyDialog() {
     const selection = await getSelectionContext();
-    if (!selection) {
-      throw new Error(FLOW_MESSAGES.selectQuoteConfigColumnsPrefix);
-    }
 
     try {
-      const initData = await buildDevModifyInit(selection);
+      const componentContext = await resolveSelectedComponentContext(selection);
+      if (String(componentContext.component.whatkind || "").trim() === CRAFTING_CONSTANTS.outsourcedKind) {
+        await openQueryPriceDialogControllerWithOptions(displayDialog, {
+          initialKeyword: selection.componentName,
+        });
+        return;
+      }
+      const initData = await buildDevModifyInit(selection, componentContext);
       devModifyState = initData.state;
       await openDevModifyDialogWithData(initData.data, selection);
     } catch (error: any) {
@@ -94,7 +102,6 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
 
   async function openCraftModifyDialog(selection?: SelectionContext) {
     const targetSelection = selection || (await getSelectionContext());
-    if (!targetSelection) return;
 
     try {
       const initData = await buildCraftModifyInit(targetSelection);
@@ -159,10 +166,7 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
 
     if (!craftModifyState) return;
 
-    const price =
-      (craftModifyState.standardPrice || 0) +
-      (craftModifyState.materialPrice || 0) +
-      craftPrice;
+    const price = (craftModifyState.materialPrice || 0) + craftPrice;
 
     await writeToSheet(craftModifyState.selection, {
       desc: desc || craftModifyState.selection.componentDesc,
@@ -174,14 +178,19 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
     });
   }
 
-  async function buildDevModifyInit(selection: SelectionContext) {
+  async function resolveSelectedComponentContext(selection: SelectionContext): Promise<SelectedComponentContext> {
     const projectId = await resolveProjectId(selection.categoryName, selection.projectModel);
     const configData = await fetchJson<ComponentRecord[]>(`${API_PATHS.config}/${projectId}`);
     const component = findComponent(configData, selection.componentName);
-
     if (!component) {
       throw new Error(`${FLOW_MESSAGES.componentNotFoundPrefix}: ${selection.componentName}`);
     }
+    return { projectId, configData, component };
+  }
+
+  async function buildDevModifyInit(selection: SelectionContext, componentContext?: SelectedComponentContext) {
+    const resolvedContext = componentContext || (await resolveSelectedComponentContext(selection));
+    const { projectId, configData, component } = resolvedContext;
 
     const componentId = Number(component.config_id || component.component_id);
     const materialOptions = await fetchJson<MaterialOptionRecord[]>(`${API_PATHS.materials}/${componentId}`);
@@ -190,9 +199,8 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
     const craftPrices = await fetchJson<CraftPriceRecord[]>(API_PATHS.craftPrices);
 
     const materialPrice = getCraftFieldNumber(craftingConfig, "MaterialsPrice");
-    const standardPrice = getStandardPartPrice(configData);
     const currentPrice = selection.currentPrice ?? 0;
-    const craftPrice = currentPrice - (materialPrice || 0) - (standardPrice || 0);
+    const craftPrice = currentPrice - (materialPrice || 0);
 
     const materialList = (materialOptions || []).map((item) => ({
       name: item.material_type,
@@ -212,7 +220,6 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
       selectedMaterial: selection.componentMaterial,
       materialPrice: materialPrice || 0,
       craftPrice: Number.isFinite(craftPrice) ? craftPrice : 0,
-      standardPrice: standardPrice || 0,
       desc: selection.componentDesc,
       type: selection.componentType,
       unit: selection.componentUnit,
@@ -238,19 +245,12 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
         projectId,
         componentId,
         materialPrice,
-        standardPrice,
       } as DevModifyState,
     };
   }
 
   async function buildCraftModifyInit(selection: SelectionContext) {
-    const projectId = await resolveProjectId(selection.categoryName, selection.projectModel);
-    const configData = await fetchJson<ComponentRecord[]>(`${API_PATHS.config}/${projectId}`);
-    const component = findComponent(configData, selection.componentName);
-
-    if (!component) {
-      throw new Error(`${FLOW_MESSAGES.componentNotFoundPrefix}: ${selection.componentName}`);
-    }
+    const { configData, component } = await resolveSelectedComponentContext(selection);
 
     const componentId = Number(component.config_id || component.component_id);
     const craftingConfigList = await fetchJson<Record<string, unknown>[]>(`${API_PATHS.crafting}/${componentId}`);
@@ -273,7 +273,6 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
       state: {
         selection,
         initData: data,
-        standardPrice: getStandardPartPrice(configData),
         materialPrice: getCraftFieldNumber(craftingConfig, "MaterialsPrice"),
       } as CraftModifyState,
     };

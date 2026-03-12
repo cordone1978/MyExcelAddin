@@ -23,7 +23,40 @@ export type SelectionContext = {
   currentPrice: number | null;
 };
 
-export async function getSelectionContext(): Promise<SelectionContext | null> {
+function isSelectionAllowedSheet(sheetName: string): boolean {
+  const normalized = String(sheetName || "").trim();
+  return normalized === SHEET_NAMES.quoteConfig || SHEET_NAME_ALIASES.wearParts.includes(normalized);
+}
+
+function findNearestProjectModel(values: unknown[][], selectedIndex: number, currentComponentName: string): string {
+  const normalizedCurrentComponentName = String(currentComponentName || "").trim();
+  for (let i = selectedIndex; i >= 0; i -= 1) {
+    const projectModel = String(values[i]?.[1] || "").trim();
+    const componentName = String(values[i]?.[2] || "").trim();
+    const aValue = String(values[i]?.[0] || "").trim();
+
+    if (projectModel && projectModel !== componentName && projectModel !== normalizedCurrentComponentName) {
+      return projectModel;
+    }
+
+    // 碰到新的分区标题/表头，说明已经越过当前设备块。
+    if (
+      /^[一二三四五六七八九十百零]+$/.test(aValue) ||
+      aValue === "序号" ||
+      (aValue && !componentName)
+    ) {
+      break;
+    }
+  }
+  return "";
+}
+
+function isLikelyInvalidComponentRow(projectModel: string, componentName: string, rowValues: unknown[]): boolean {
+  if (projectModel || componentName) return false;
+  return rowValues.some((value) => String(value ?? "").trim().length > 0);
+}
+
+export async function getSelectionContext(): Promise<SelectionContext> {
   try {
     return await Excel.run(async (context) => {
       const range = context.workbook.getSelectedRange();
@@ -37,20 +70,33 @@ export async function getSelectionContext(): Promise<SelectionContext | null> {
       const targetColumn =
         column === 3 || column === 4 || column === 5 || column === 6 ? "C" : "";
 
+      if (!isSelectionAllowedSheet(sheet.name)) {
+        throw new Error(`${FLOW_MESSAGES.selectQuoteConfigSheetPrefix}。当前工作表：${sheet.name}`);
+      }
+
       if (!targetColumn) {
-        console.warn(FLOW_MESSAGES.selectQuoteConfigColumnsPrefix);
-        return null;
+        throw new Error(FLOW_MESSAGES.selectQuoteConfigColumnsPrefix);
       }
 
       const rowRange = sheet.getRange(`A${row}:R${row}`);
+      const usedRange = sheet.getUsedRangeOrNullObject(false);
       rowRange.load("values");
+      usedRange.load(["values", "rowIndex", "rowCount", "isNullObject"]);
       await context.sync();
 
       const values = rowRange.values[0] || [];
+      const usedValues = usedRange.isNullObject ? [] : usedRange.values || [];
+      const usedRowOffset = usedRange.isNullObject ? 0 : usedRange.rowIndex;
+      const selectedIndex = row - usedRowOffset - 1;
+      const componentName = String(values[2] || "").trim();
       const rawCategoryValue = String(values[0] || "").trim();
       const categoryName = /^\d+$/.test(rawCategoryValue) ? "" : rawCategoryValue;
-      const projectModel = String(values[1] || "").trim();
-      const componentName = String(values[2] || "").trim();
+      const directProjectModel = String(values[1] || "").trim();
+      const projectModel =
+        (directProjectModel && directProjectModel !== componentName ? directProjectModel : "") ||
+        (selectedIndex >= 0 && selectedIndex < usedValues.length
+          ? findNearestProjectModel(usedValues, selectedIndex, componentName)
+          : "");
       const componentDesc = String(values[3] || "").trim();
       const componentType = String(values[4] || "").trim();
       const componentMaterial = String(values[5] || "").trim();
@@ -61,8 +107,10 @@ export async function getSelectionContext(): Promise<SelectionContext | null> {
       const currentPrice = parseNumber(priceCellValue);
 
       if (!projectModel || !componentName) {
-        console.warn(FLOW_MESSAGES.missingRequiredSelection);
-        return null;
+        if (isLikelyInvalidComponentRow(projectModel, componentName, values)) {
+          throw new Error(FLOW_MESSAGES.invalidComponentSelectionRow);
+        }
+        throw new Error(FLOW_MESSAGES.missingProjectOrComponentPrefix);
       }
 
       return {
@@ -82,9 +130,12 @@ export async function getSelectionContext(): Promise<SelectionContext | null> {
         currentPrice,
       };
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error(FLOW_MESSAGES.selectionReadFailed, error);
-    return null;
+    if (error instanceof Error && error.message) {
+      throw error;
+    }
+    throw new Error(FLOW_MESSAGES.selectionReadRetryPrefix);
   }
 }
 
@@ -110,8 +161,15 @@ export async function writeToSheet(selection: SelectionContext, payload: CellWri
     const priceValue = payload.price ?? "";
     if (selection.isEasyparts) {
       targetCell.getOffsetRange(0, 9).values = [[priceValue]];
+      targetCell.getOffsetRange(0, 9).format.numberFormat = "#,##0";
+      targetCell.getOffsetRange(0, 10).format.numberFormat = "#,##0";
     } else {
       targetCell.getOffsetRange(0, 9).values = [[priceValue]];
+      targetCell.getOffsetRange(0, 9).format.numberFormat = "#,##0";
+      targetCell.getOffsetRange(0, 10).format.numberFormat = "#,##0";
+      targetCell.getOffsetRange(0, 11).format.numberFormat = "#,##0";
+      targetCell.getOffsetRange(0, 12).format.numberFormat = "#,##0";
+      targetCell.getOffsetRange(0, 13).format.numberFormat = "#,##0";
     }
 
     await context.sync();

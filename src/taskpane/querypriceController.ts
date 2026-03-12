@@ -20,8 +20,16 @@ type DisplayDialogFn = (
 ) => Promise<Office.Dialog>;
 
 export async function openQueryPriceDialogController(displayDialog: DisplayDialogFn) {
+  return openQueryPriceDialogControllerWithOptions(displayDialog);
+}
+
+export async function openQueryPriceDialogControllerWithOptions(
+  displayDialog: DisplayDialogFn,
+  options?: { initialKeyword?: string }
+) {
   try {
-    const dialog = await displayDialog(DIALOG_PATHS.queryPrice, DIALOG_SIZES.queryPrice);
+    const path = buildQueryPriceDialogPath(options?.initialKeyword);
+    const dialog = await displayDialog(path, DIALOG_SIZES.queryPrice);
 
     dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
       const payload = JSON.parse(args.message || "{}");
@@ -61,6 +69,15 @@ export async function openQueryPriceDialogController(displayDialog: DisplayDialo
     console.error(`${FLOW_MESSAGES.openQueryPriceFailed}:`, error);
     alert(FLOW_MESSAGES.openQueryPriceDialogFailed);
   }
+}
+
+function buildQueryPriceDialogPath(initialKeyword?: string) {
+  const keyword = String(initialKeyword || "").trim();
+  if (!keyword) {
+    return DIALOG_PATHS.queryPrice;
+  }
+  const query = new URLSearchParams({ keyword });
+  return `${DIALOG_PATHS.queryPrice}?${query.toString()}`;
 }
 
 async function validateSelectionForQueryPrice(): Promise<QueryPriceSelectionCheck> {
@@ -173,6 +190,7 @@ async function applyWearSheetReplace(
   sheet.getRange(`I${row}`).values = [[rowData.price || 0]];
   sheet.getRange(`J${row}`).formulas = [[`=IF(OR(G${row}="",I${row}=""),"",G${row}*I${row})`]];
   sheet.getRange(`K${row}`).values = [[rowData.price || 0]];
+  sheet.getRange(`I${row}:K${row}`).format.numberFormat = "#,##0";
 
   if (!serialCell.values[0][0]) {
     serialCell.values = [[row - 2]];
@@ -210,6 +228,7 @@ async function applyQuoteConfigReplace(
   currentRowRange.format.load("rowHeight");
   sheet.getRange(`I${row}`).values = [[rowData.unit || UI_DEFAULTS.defaultUnit]];
   sheet.getRange(`L${row}`).values = [[rowData.price || 0]];
+  sheet.getRange(`L${row}:P${row}`).format.numberFormat = "#,##0";
 
   if (!configQtyCell.values[0][0]) {
     configQtyCell.values = [[UI_DEFAULTS.defaultQuantity]];
@@ -268,4 +287,3 @@ async function assertReplaceAllowed(
     throw new Error(FLOW_MESSAGES.replaceOnHeaderOrSectionForbidden);
   }
 }
-

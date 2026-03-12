@@ -364,7 +364,7 @@ async function handleGenerateSimpleTemplateClick() {
 }
 
 async function handleGenerateDetailTemplateClick() {
-  await showOperationErrorModal("明细报价功能待定。");
+  await executeGenerateQuoteFlow("detail");
   toggleGenerateTemplateDrawer(false);
 }
 
@@ -642,7 +642,7 @@ async function handleGenerateQuoteClick() {
   toggleGenerateTemplateDrawer();
 }
 
-async function executeGenerateQuoteFlow(mode: "full" | "preliminary" = "full") {
+async function executeGenerateQuoteFlow(mode: "detail" | "preliminary" = "detail") {
   try {
     await syncQuoteSummaryAndCachePreview(mode);
     openDialog(DIALOG_PATHS.generateQuote);
@@ -879,19 +879,162 @@ function formatCurrencyLikeText(value: unknown): string {
   return `¥${Math.round(num).toLocaleString("zh-CN")}`;
 }
 
-async function syncQuoteSummaryAndCachePreview(mode: "full" | "preliminary" = "full") {
+function buildPreviewPdfFileName(
+  customerMatrix: unknown[][] | null | undefined,
+  mode: "detail" | "preliminary"
+) {
+  const customerRow = Array.isArray(customerMatrix?.[1]) ? customerMatrix[1] : [];
+  const customerName = (customerRow || [])
+    .map((cell) => String(cell || "").trim())
+    .find((cell) => cell && cell !== "客户名称:");
+  const sheetTitle = mode === "detail" ? "报价配置表" : "报价汇总表";
+  return customerName ? `${sheetTitle}（${customerName}）.pdf` : `${sheetTitle}.pdf`;
+}
+
+function isQuoteConfigDetailHeaderRow(row: unknown[]) {
+  const expected = BUILDSHEET_TEXT.configHeaders || [];
+  return (
+    String(row?.[0] ?? "").trim() === String(expected[0] || "").trim() &&
+    String(row?.[1] ?? "").trim() === String(expected[1] || "").trim() &&
+    String(row?.[2] ?? "").trim() === String(expected[2] || "").trim()
+  );
+}
+
+function isQuoteConfigDetailSectionRow(row: unknown[]) {
+  const aText = String(row?.[0] ?? "").trim();
+  const bText = String(row?.[1] ?? "").trim();
+  return !!aText && !!bText && CHINESE_ORDINAL_REGEX.test(aText);
+}
+
+function hasAnyConfigRowContent(row: unknown[]) {
+  return Array.isArray(row) && row.some((cell) => String(cell ?? "").trim().length > 0);
+}
+
+function getLastMeaningfulConfigRowIndex(values: unknown[][]) {
+  for (let i = (values || []).length - 1; i >= 0; i -= 1) {
+    if (hasAnyConfigRowContent(values[i])) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function mapOriginalConfigColToDetailPreviewCol(originalCol: number, removedCols: Set<number>) {
+  if (removedCols.has(originalCol)) return 0;
+  let nextCol = originalCol;
+  removedCols.forEach((removedCol) => {
+    if (removedCol < originalCol) {
+      nextCol -= 1;
+    }
+  });
+  return nextCol;
+}
+
+function buildDetailQuotePreviewMerges(values: string[][], removedCols: Set<number>) {
+  const merges: QuotePreviewMergeCell[] = [];
+  const verticalMergeCols = [1, 2, 10, 11, 15, 16, 18];
+
+  for (let rowIndex = 0; rowIndex < values.length; rowIndex += 1) {
+    const row = values[rowIndex] || [];
+    const isSection = isQuoteConfigDetailSectionRow(row);
+    const isHeader = isQuoteConfigDetailHeaderRow(row);
+
+    if (isSection) {
+      const startCol = mapOriginalConfigColToDetailPreviewCol(2, removedCols);
+      const endCol = mapOriginalConfigColToDetailPreviewCol(11, removedCols);
+      if (startCol > 0 && endCol >= startCol) {
+        merges.push({
+          row: rowIndex + 1,
+          col: startCol,
+          rowspan: 1,
+          colspan: endCol - startCol + 1,
+        });
+      }
+      continue;
+    }
+
+    if (isHeader) continue;
+
+    verticalMergeCols.forEach((originalCol) => {
+      const previewCol = mapOriginalConfigColToDetailPreviewCol(originalCol, removedCols);
+      if (!previewCol) return;
+      const cellValue = String(row[originalCol - 1] || "").trim();
+      if (!cellValue) return;
+
+      let rowspan = 1;
+      for (let nextRowIndex = rowIndex + 1; nextRowIndex < values.length; nextRowIndex += 1) {
+        const nextRow = values[nextRowIndex] || [];
+        if (isQuoteConfigDetailSectionRow(nextRow) || isQuoteConfigDetailHeaderRow(nextRow)) break;
+        if (String(nextRow[originalCol - 1] || "").trim()) break;
+        rowspan += 1;
+      }
+
+      if (rowspan > 1) {
+        merges.push({
+          row: rowIndex + 1,
+          col: previewCol,
+          rowspan,
+          colspan: 1,
+        });
+      }
+    });
+  }
+
+  return merges;
+}
+
+function buildDetailQuotePreviewPayload(
+  values: unknown[][],
+  rowHeights: number[],
+  colWidths: number[],
+  alignments: string[][]
+) {
+  const removedCols = new Set([12, 13, 14, 17]); // L/M/N/Q
+  const keptIndexes = Array.from({ length: 18 }, (_, idx) => idx).filter((idx) => !removedCols.has(idx + 1));
+  const lastMeaningfulIndex = getLastMeaningfulConfigRowIndex(values);
+  const trimmedValues = (values || [])
+    .slice(0, lastMeaningfulIndex + 1)
+    .map((row) => Array.from({ length: 18 }, (_, idx) => String(row?.[idx] ?? "")));
+  const renderedRows = trimmedValues.map((row) => keptIndexes.map((idx) => String(row[idx] ?? "")));
+  const merges = buildDetailQuotePreviewMerges(trimmedValues, removedCols);
+
+  return {
+    quoteSheetGrid: renderedRows,
+    quoteSheetLayout: {
+      rowHeights: rowHeights.slice(0, renderedRows.length),
+      colWidths: keptIndexes.map((idx) => Number(colWidths[idx] || 0)),
+      merges,
+    },
+    cellAlignments: alignments
+      .slice(0, renderedRows.length)
+      .map((row) => keptIndexes.map((idx) => String(row?.[idx] || ""))),
+    totalPriceText: "",
+    generatedAt: new Date().toISOString(),
+    quotePreviewMode: "detail" as const,
+  };
+}
+
+async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = "detail") {
   const payload = await Excel.run(async (context) => {
     const quoteConfigSheet = context.workbook.worksheets.getItemOrNullObject(SHEET_NAMES.quoteConfig);
     const quoteSummarySheet = context.workbook.worksheets.getItemOrNullObject(SHEET_NAMES.quoteSummary);
     quoteConfigSheet.load("name");
-    quoteSummarySheet.load("name");
+    quoteSummarySheet.load("name,isNullObject");
     await context.sync();
 
     if (quoteConfigSheet.isNullObject) {
       throw new Error("报价配置表不存在，请先生成并填写报价配置表。");
     }
-    if (quoteSummarySheet.isNullObject) {
+    if (mode !== "detail" && quoteSummarySheet.isNullObject) {
       throw new Error("报价汇总表不存在，请先生成报价模板。");
+    }
+
+    let summaryCustomerMatrix: unknown[][] = [];
+    if (!quoteSummarySheet.isNullObject) {
+      const summaryCustomerRange = quoteSummarySheet.getRange("A1:H6");
+      summaryCustomerRange.load(["values", "text"]);
+      await context.sync();
+      summaryCustomerMatrix = ((summaryCustomerRange as any).text || summaryCustomerRange.values || []) as unknown[][];
     }
 
     const configUsedRange = quoteConfigSheet.getRange("A:P").getUsedRangeOrNullObject(false);
@@ -904,6 +1047,40 @@ async function syncQuoteSummaryAndCachePreview(mode: "full" | "preliminary" = "f
       throw new Error("报价配置表为空，无法生成报价。");
     }
     const configValues = configUsedRange.values || [];
+
+    if (mode === "detail") {
+      const detailPreviewRange = quoteConfigSheet.getRange("A:R").getUsedRangeOrNullObject(false);
+      detailPreviewRange.load(["values", "rowCount", "isNullObject"]);
+      const detailAlignmentRange = quoteConfigSheet.getRange(`A1:R${Math.max(1, Number(configValues.length || 0))}`);
+      const alignmentCells = Array.from({ length: Math.max(1, Number(configValues.length || 0)) }, (_, rowIdx) =>
+        Array.from({ length: 18 }, (_, colIdx) => detailAlignmentRange.getCell(rowIdx, colIdx))
+      );
+      alignmentCells.forEach((row) => row.forEach((cell) => cell.format.load("horizontalAlignment")));
+      const rowRanges = Array.from({ length: Math.max(1, Number(configValues.length || 0)) }, (_, i) =>
+        quoteConfigSheet.getRange(`${i + 1}:${i + 1}`)
+      );
+      rowRanges.forEach((r) => r.format.load("rowHeight"));
+      const colKeys = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"];
+      const colRanges = colKeys.map((col) => quoteConfigSheet.getRange(`${col}:${col}`));
+      colRanges.forEach((r) => r.format.load("columnWidth"));
+      await context.sync();
+
+      if (detailPreviewRange.isNullObject) {
+        throw new Error("报价配置表为空，无法生成明细报价。");
+      }
+
+      const detailValues = detailPreviewRange.values || [];
+      const detailAlignments = alignmentCells
+        .slice(0, detailValues.length)
+        .map((row) => row.map((cell) => String((cell.format as any).horizontalAlignment || "")));
+      const detailRowHeights = rowRanges
+        .slice(0, detailValues.length)
+        .map((r) => Number((r.format as any).rowHeight || 0));
+      const detailColWidths = colRanges.map((r) => Number((r.format as any).columnWidth || 0));
+      const detailPayload = buildDetailQuotePreviewPayload(detailValues, detailRowHeights, detailColWidths, detailAlignments) as any;
+      detailPayload.pdfFileName = buildPreviewPdfFileName(summaryCustomerMatrix, "detail");
+      return detailPayload;
+    }
 
     const summarySections = buildQuoteSummarySections(configValues);
     const displayRows = buildQuoteSummaryDisplayRows(summarySections);
@@ -1020,6 +1197,7 @@ async function syncQuoteSummaryAndCachePreview(mode: "full" | "preliminary" = "f
       totalPriceText: formatCurrencyLikeText(totalPrice),
       generatedAt: new Date().toISOString(),
       quotePreviewMode: mode,
+      pdfFileName: buildPreviewPdfFileName(summaryCustomerMatrix, mode),
     };
     return mode === "preliminary" ? toPreliminaryPreviewPayload(basePayload as any) : basePayload;
   });
@@ -1032,7 +1210,7 @@ function toPreliminaryPreviewPayload(payload: {
   quoteSheetLayout: { rowHeights?: number[]; colWidths?: number[]; merges?: Array<{ row: number; col: number; rowspan: number; colspan: number }> };
   totalPriceText: string;
   generatedAt: string;
-  quotePreviewMode: "full" | "preliminary";
+  quotePreviewMode: "detail" | "preliminary";
 }) {
   const keptIdx = [0, 1, 2, 3, 5, 7];
   const removedCols = new Set([5, 7]); // 1-based: E(成本), G(系数)

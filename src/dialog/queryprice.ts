@@ -46,7 +46,15 @@ Office.onReady(() => {
     }
   });
 
-  (document.getElementById("mainKeyword") as HTMLInputElement | null)?.focus();
+  const mainKeywordInput = document.getElementById("mainKeyword") as HTMLInputElement | null;
+  const initialKeyword = new URLSearchParams(window.location.search).get("keyword") || "";
+  if (mainKeywordInput) {
+    mainKeywordInput.focus();
+    if (initialKeyword.trim()) {
+      mainKeywordInput.value = initialKeyword.trim();
+      void handleSearch();
+    }
+  }
 });
 
 function applyStaticText() {
@@ -267,5 +275,4 @@ function escapeHtml(value: string): string {
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
-
 

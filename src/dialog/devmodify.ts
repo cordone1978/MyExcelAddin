@@ -11,7 +11,6 @@ type DevModifyInit = {
   selectedMaterial?: string;
   materialPrice?: number | null;
   craftPrice?: number | null;
-  standardPrice?: number | null;
   desc?: string;
   type?: string;
   unit?: string;
@@ -76,7 +75,6 @@ const craftTotalLabels = [
 
 let basePrice: number | null = null;
 let craftPrice: number | null = null;
-let standardPrice: number | null = null;
 let currentMaterialValue: number | null = null;
 let currentDesc = "";
 let currentType = "";
@@ -171,11 +169,8 @@ function bindEvents() {
   });
 
   craftChangeBtn.addEventListener("click", () => {
-    if (isOutsourced()) {
-      openPriceModal();
-      return;
-    }
-    craftPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!isOutsourced()) return;
+    openPriceModal();
   });
 
   submitBtn.addEventListener("click", () => {
@@ -191,7 +186,6 @@ function bindEvents() {
       unit: currentUnit,
       brand: currentBrand,
       whatKind: currentWhatKind,
-      standardPrice,
       material: isOutsourced() ? currentMaterial : materialSelect.value,
       materialPrice: getSelectedMaterialPrice(),
       craftPrice,
@@ -222,10 +216,11 @@ function bindEvents() {
 }
 
 function applyInit(data: DevModifyInit) {
-  deviceNameEl.textContent = data.deviceName || "-";
+  const deviceName = String(data.deviceName || "").trim();
+  deviceNameEl.textContent = deviceName || "-";
+  setText("devPanelTitle", deviceName || DEVMODIFY_HTML_TEXT.panelTitle);
   basePrice = typeof data.currentPrice === "number" ? data.currentPrice : null;
   craftPrice = typeof data.craftPrice === "number" ? data.craftPrice : null;
-  standardPrice = typeof data.standardPrice === "number" ? data.standardPrice : null;
   currentDesc = data.desc || "";
   baseDesc = data.baseDesc || currentDesc;
   currentType = data.type || "";
@@ -291,6 +286,8 @@ function updateDisplay() {
     : craftPrice === null
     ? DEVMODIFY_TEXT.clickToModify
     : formatPrice(craftPrice);
+  craftChangeBtn.classList.toggle("readonly", !isOutsourced());
+  craftChangeBtn.setAttribute("aria-disabled", !isOutsourced() ? "true" : "false");
   refreshedPriceEl.textContent = formatPrice(getRefreshedPrice());
 }
 
@@ -300,10 +297,10 @@ function getSelectedMaterialPrice(): number | null {
 
 function getRefreshedPrice(): number | null {
   const material = getSelectedMaterialPrice();
-  if (material === null && craftPrice === null && standardPrice === null) {
+  if (material === null && craftPrice === null) {
     return basePrice;
   }
-  return (standardPrice || 0) + (material || 0) + (craftPrice || 0);
+  return (material || 0) + (craftPrice || 0);
 }
 
 function formatPrice(value: number | null): string {
@@ -543,8 +540,6 @@ function appendSegment(text: string, segment: string): string {
 }
 
 let currentMaterial = "";
-
-
 
 
 

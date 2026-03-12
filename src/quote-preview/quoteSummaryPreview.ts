@@ -2,7 +2,7 @@ import { API_PATHS, APP_URLS } from "../shared/appConstants";
 import logoLargeUrl from "../../assets/logo-large.png";
 
 const STORAGE_KEY = "quotation_addin_quote_preview_payload";
-const EXPORT_PDF_URL = `${APP_URLS.apiBase}${API_PATHS.exportQuotePdf}`;
+const EXPORT_PDF_URL = `${APP_URLS.serverOrigin}${APP_URLS.apiBase}${API_PATHS.exportQuotePdf}`;
 
 type GridRow = string[];
 type MergeCell = { row: number; col: number; rowspan: number; colspan: number };
@@ -10,6 +10,15 @@ type QuoteSheetLayout = {
   rowHeights?: number[];
   colWidths?: number[];
   merges?: MergeCell[];
+};
+type QuotePreviewPayload = {
+  quoteSheetGrid?: GridRow[];
+  quoteSheetLayout?: QuoteSheetLayout;
+  cellAlignments?: string[][];
+  totalPriceText?: string;
+  generatedAt?: string;
+  quotePreviewMode?: "detail" | "preliminary";
+  pdfFileName?: string;
 };
 
 let quoteLogoDataUrlCache: string | null = null;
@@ -72,18 +81,28 @@ function escapeHtml(text: unknown) {
     .replace(/'/g, "&#39;");
 }
 
-function buildPdfFileName(grid: GridRow[]): string {
+function getSheetTitle(mode: "detail" | "preliminary") {
+  return mode === "detail" ? "报价配置表" : "报价汇总表";
+}
+
+function buildPdfFileName(grid: GridRow[], payload?: QuotePreviewPayload): string {
+  const explicitName = String(payload?.pdfFileName || "").trim();
+  if (explicitName) {
+    return explicitName.toLowerCase().endsWith(".pdf") ? explicitName : `${explicitName}.pdf`;
+  }
+  const mode = String(payload?.quotePreviewMode || "preliminary").trim().toLowerCase();
+  const sheetTitle = getSheetTitle(mode === "detail" ? "detail" : "preliminary");
   const customerRow = Array.isArray(grid?.[1]) ? grid[1] : [];
   const customerName = customerRow
     .map((cell) => String(cell || "").trim())
     .find((cell) => cell && cell !== "客户名称:");
   if (!customerName) {
-    return "报价汇总表.pdf";
+    return `${sheetTitle}.pdf`;
   }
-  return `报价汇总表（${customerName}）.pdf`;
+  return `${sheetTitle}（${customerName}）.pdf`;
 }
 
-function defaultGrid(colCount = 7): GridRow[] {
+function defaultPreliminaryGrid(colCount = 7): GridRow[] {
   const count = Math.max(1, Number(colCount || 8));
   const rows: GridRow[] = Array.from({ length: 29 }, () => Array.from({ length: count }, () => ""));
   rows[0][0] = "湖南华通众智科技有限公司";
@@ -98,31 +117,53 @@ function defaultGrid(colCount = 7): GridRow[] {
   return rows;
 }
 
-function loadGrid(): GridRow[] {
+function defaultDetailGrid(colCount = 14): GridRow[] {
+  const count = Math.max(1, Number(colCount || 14));
+  const rows: GridRow[] = Array.from({ length: 2 }, () => Array.from({ length: count }, () => ""));
+  rows[0] = ["序号", "设备名称", "组件名称", "内容及规格", "型号", "主体材质", "品牌", "组件数量", "单位"]
+    .concat(Array.from({ length: Math.max(0, count - 9) }, () => ""));
+  return rows;
+}
+
+function defaultGrid(mode: "detail" | "preliminary", colCount = 7): GridRow[] {
+  return mode === "detail" ? defaultDetailGrid(colCount) : defaultPreliminaryGrid(colCount);
+}
+
+function loadPayload(): QuotePreviewPayload {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
+    return raw ? (JSON.parse(raw) as QuotePreviewPayload) : {};
+  } catch (e) {
+    console.error("读取报价汇总表预览数据失败", e);
+    return {};
+  }
+}
+
+function loadGrid(payload?: QuotePreviewPayload): GridRow[] {
+  try {
+    const parsed = payload || loadPayload();
     const grid = parsed && Array.isArray(parsed.quoteSheetGrid) ? parsed.quoteSheetGrid : null;
+    const mode = String(parsed?.quotePreviewMode || "preliminary").trim().toLowerCase() === "detail" ? "detail" : "preliminary";
     const inferredCols = Array.isArray(grid?.[0]) ? grid[0].length : 0;
-    const colCount = inferredCols >= 1 ? Math.min(8, inferredCols) : 8;
-    if (!grid || !grid.length) return defaultGrid(colCount);
+    const maxColCount = mode === "detail" ? 18 : 8;
+    const colCount = inferredCols >= 1 ? Math.min(maxColCount, inferredCols) : 8;
+    if (!grid || !grid.length) return defaultGrid(mode, colCount);
     const normalized = grid.map((row: unknown) => {
       const r = Array.isArray(row) ? row.slice(0, colCount).map((cell) => String(cell ?? "")) : [];
       while (r.length < colCount) r.push("");
       return r;
     });
     const hasAnyText = normalized.some((row: string[]) => row.some((cell) => String(cell || "").trim().length > 0));
-    return hasAnyText ? normalized : defaultGrid(colCount);
+    return hasAnyText ? normalized : defaultGrid(mode, colCount);
   } catch (e) {
     console.error("读取报价汇总表预览数据失败", e);
-    return defaultGrid();
+    return defaultGrid("preliminary");
   }
 }
 
-function getLayout(): QuoteSheetLayout {
+function getLayout(payload?: QuotePreviewPayload): QuoteSheetLayout {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
+    const parsed = payload || loadPayload();
     const layout = (parsed?.quoteSheetLayout || {}) as QuoteSheetLayout;
     return {
       rowHeights: Array.isArray(layout.rowHeights) ? layout.rowHeights.map((n) => Number(n || 0)) : [],
@@ -165,8 +206,44 @@ function buildMergeMaps(merges: MergeCell[] | undefined, colCount: number) {
   return { starts, covered };
 }
 
-function cellClass(row: number, col: number, colCount: number, grid: GridRow[]) {
+function normalizeAlignment(value: string) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized.includes("center")) return "center";
+  if (normalized.includes("right")) return "right";
+  if (normalized.includes("left")) return "left";
+  return "";
+}
+
+function cellClass(
+  row: number,
+  col: number,
+  colCount: number,
+  grid: GridRow[],
+  mode: "detail" | "preliminary",
+  alignments?: string[][]
+) {
   const classes: string[] = [];
+  if (mode === "detail") {
+    const aText = String(grid?.[row - 1]?.[0] || "").trim();
+    const bText = String(grid?.[row - 1]?.[1] || "").trim();
+    const cText = String(grid?.[row - 1]?.[2] || "").trim();
+    if (row === 1) classes.push("bold", "center");
+    if (aText === "序号" && bText === "设备名称" && cText === "组件名称") {
+      classes.push("bold", "center", "detail-header-row");
+    } else if (/^[一二三四五六七八九十百零]+$/.test(aText) && bText) {
+      classes.push("bold", "center", "detail-section-row");
+    } else {
+      const excelAlign = normalizeAlignment(String(alignments?.[row - 1]?.[col - 1] || ""));
+      if (excelAlign) {
+        classes.push(excelAlign);
+      } else if (col === 3 || col === 4 || col === 14) {
+        classes.push("left");
+      } else {
+        classes.push("center");
+      }
+    }
+    return classes.join(" ");
+  }
   const noteStartRow = grid.findIndex((gridRow) => String(gridRow?.[0] || "").trim() === "备注") + 1;
   const inNotesBlock = noteStartRow > 0 && row >= noteStartRow;
   if (row === 1 || row === 7 || row === 8) classes.push("bold");
@@ -202,17 +279,24 @@ function cellClass(row: number, col: number, colCount: number, grid: GridRow[]) 
 }
 
 async function renderGrid() {
-  const grid = loadGrid();
-  const layout = getLayout();
+  const payload = loadPayload();
+  const mode = String(payload?.quotePreviewMode || "preliminary").trim().toLowerCase() === "detail" ? "detail" : "preliminary";
+  const grid = loadGrid(payload);
+  const alignments = Array.isArray(payload?.cellAlignments) ? payload.cellAlignments : [];
+  const layout = getLayout(payload);
   const table = document.getElementById("quoteSheet") as HTMLTableElement | null;
   if (!table) return;
+  document.body.classList.toggle("detail-mode", mode === "detail");
+  document.body.classList.toggle("preliminary-mode", mode !== "detail");
   const row1Height = Number(layout.rowHeights?.[0] || 0);
   const logoHeightPx = row1Height > 0 ? Math.max(8, Math.round(row1Height / 2)) : 24;
   let logoDataUrl = "";
-  try {
-    logoDataUrl = await getQuoteLogoDataUrl();
-  } catch (error) {
-    console.warn("加载报价Logo失败，预览将不显示Logo。", error);
+  if (mode !== "detail") {
+    try {
+      logoDataUrl = await getQuoteLogoDataUrl();
+    } catch (error) {
+      console.warn("加载报价Logo失败，预览将不显示Logo。", error);
+    }
   }
 
   const colCount = Math.max(1, Number(grid?.[0]?.length || 7));
@@ -239,10 +323,10 @@ async function renderGrid() {
       const attrs: string[] = [];
       if (merge && merge.rowspan > 1) attrs.push(`rowspan="${merge.rowspan}"`);
       if (merge && merge.colspan > 1) attrs.push(`colspan="${merge.colspan}"`);
-      const cls = cellClass(r, c, colCount, grid);
+      const cls = cellClass(r, c, colCount, grid, mode, alignments);
       if (cls) attrs.push(`class="${cls}"`);
       const text = grid[r - 1]?.[c - 1] || "";
-      if (r === 1 && c === 1 && logoDataUrl) {
+      if (mode !== "detail" && r === 1 && c === 1 && logoDataUrl) {
         html += `<td ${attrs.join(" ")}><div class="title-cell"><img class="title-logo" src="${logoDataUrl}" alt="logo" style="height:${logoHeightPx}px" /><span class="title-text">${escapeHtml(text)}</span></div></td>`;
       } else {
         html += `<td ${attrs.join(" ")}>${escapeHtml(text)}</td>`;
@@ -251,7 +335,7 @@ async function renderGrid() {
     html += "</tr>";
   }
   table.innerHTML = html;
-  document.title = (grid[6]?.[0] || "报价汇总表").trim() || "报价汇总表";
+  document.title = getSheetTitle(mode);
 }
 
 function bindExportMenu() {
@@ -283,18 +367,19 @@ function bindExportMenu() {
     hideMenu();
     try {
       isExportingPdf = true;
-      exportBtn.disabled = true;
-      exportBtn.textContent = "正在导出...";
-      const grid = loadGrid();
-      const fileName = buildPdfFileName(grid);
+      const payload = loadPayload();
+      const grid = loadGrid(payload);
+      const fileName = buildPdfFileName(grid, payload);
       const docTitle = fileName.replace(/\.pdf$/i, "");
       const exportHtml = await buildExportHtmlWithInlineStyles();
+      exportBtn.disabled = true;
       const response = await fetch(EXPORT_PDF_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileName: docTitle,
           html: exportHtml,
+          landscape: String(payload?.quotePreviewMode || "").trim().toLowerCase() === "detail",
         }),
       });
 
@@ -313,17 +398,10 @@ function bindExportMenu() {
       await savePdfBlob(blob, fileName);
     } catch (err: any) {
       console.error(err);
-      exportBtn.textContent = err?.message || "导出PDF失败";
-      setTimeout(() => {
-        exportBtn.textContent = "导出为PDF";
-      }, 2000);
     } finally {
       window.setTimeout(() => {
         isExportingPdf = false;
         exportBtn.disabled = false;
-        if (exportBtn.textContent === "正在导出...") {
-          exportBtn.textContent = "导出为PDF";
-        }
       }, 200);
     }
   });
@@ -335,6 +413,7 @@ async function buildExportHtmlWithInlineStyles(): Promise<string> {
   if (!clonedHead) {
     return "<!DOCTYPE html>" + document.documentElement.outerHTML;
   }
+  Array.from(htmlEl.querySelectorAll("#contextMenu")).forEach((node) => node.remove());
 
   const inlineCssParts: string[] = [];
   const styleNodes = Array.from(document.querySelectorAll("style"));
@@ -349,7 +428,7 @@ async function buildExportHtmlWithInlineStyles(): Promise<string> {
     if (!href) continue;
     try {
       const cssUrl = new URL(href, window.location.href).toString();
-      const resp = await fetch(cssUrl, { cache: "no-store" });
+      const resp = await fetch(cssUrl, { cache: "force-cache" });
       if (!resp.ok) continue;
       const cssText = String(await resp.text() || "").trim();
       if (cssText) inlineCssParts.push(cssText);

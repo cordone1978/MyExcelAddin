@@ -12,7 +12,7 @@ export async function handleDialogData(data: any) {
     throw new Error(FLOW_MESSAGES.noDetailSelected);
   }
 
-  const configData = await fetchProjectConfig(data.projectId);
+  const configData = await fetchProjectConfig(data.projectId, data.materialPreset);
   const detailComponents = filterDetailComponents(configData, data.details);
   const annotationComponents =
     data.annotations && data.annotations.length > 0
@@ -23,20 +23,17 @@ export async function handleDialogData(data: any) {
   const systemName = await getSystemNameForType(data.category);
   const categoryForInsert = data.category;
 
-  console.log(FLOW_MESSAGES.preparingInsert);
-  console.log("category:", JSON.stringify(data.category));
-  console.log("project:", JSON.stringify(data.project));
-  console.log("details count:", detailComponents.length);
-  console.log("annotations count:", annotationComponents.length);
-  console.log("all components:", allComponents.length);
-  console.log("systemName:", JSON.stringify(systemName));
-
   await insertComponentsToConfigSheet(categoryForInsert, data.project, allComponents, systemName);
 }
 
-async function fetchProjectConfig(projectId: number): Promise<any[]> {
+async function fetchProjectConfig(projectId: number, materialPreset?: string): Promise<any[]> {
   try {
-    const response = await fetch(`${APP_URLS.apiBase}${API_PATHS.config}/${projectId}`);
+    const url = new URL(`${APP_URLS.apiBase}${API_PATHS.config}/${projectId}`, window.location.origin);
+    if (materialPreset) {
+      url.searchParams.set("industryType", String(materialPreset));
+    }
+
+    const response = await fetch(`${url.pathname}${url.search}`);
     const result = await response.json();
 
     if (!result.success) {
@@ -52,17 +49,13 @@ async function fetchProjectConfig(projectId: number): Promise<any[]> {
 
 async function getSystemNameForType(typeName: string): Promise<string | null> {
   try {
-    console.log(`${FLOW_MESSAGES.querySystemMapping}:`, typeName);
-
     const response = await fetch(`${APP_URLS.apiBase}${API_PATHS.systemMapping}/${encodeURIComponent(typeName)}`);
     const result = await response.json();
 
     if (result.success && result.data) {
-      console.log(`${FLOW_MESSAGES.foundSystemMapping}:`, result.data.systemName);
       return result.data.systemName;
     }
 
-    console.log(FLOW_MESSAGES.notFoundSystemMapping);
     return null;
   } catch (error: any) {
     console.error(`${FLOW_MESSAGES.querySystemMappingFailed}:`, error);

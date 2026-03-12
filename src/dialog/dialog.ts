@@ -12,7 +12,7 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
 
     // 简单缓存
     const cache = {
-        categories: null,
+        categories: {},
         projects: {}, // categoryId -> projects
         details: {}, // projectId -> details
         annotations: {}, // projectId -> annotations
@@ -25,7 +25,7 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
     let currentProjectId = null;
     let currentProjectName = null;
     let currentProjectBaseDescription = "";
-    let currentMaterialPreset = "calcium";
+    let currentMaterialPreset = "lfp";
     let selectedDetails = new Map(); // 改用 Map，key=id, value={name, imageUrl, layer}
     let selectedAnnotations = new Map(); // key=id, value={name, posX, posY, imageUrl, assemblyGroup}
 
@@ -116,11 +116,46 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
         };
         options.forEach((btn, idx) => {
             btn.addEventListener("click", () => {
-                currentMaterialPreset = String(btn.dataset.value || "calcium");
+                const nextMaterialPreset = String(btn.dataset.value || "lfp");
+                if (nextMaterialPreset === currentMaterialPreset) {
+                    moveThumbTo(idx);
+                    return;
+                }
+                currentMaterialPreset = nextMaterialPreset;
                 moveThumbTo(idx);
+                resetSelectionState({ preserveCategory: true });
+                clearRightPanels();
+                if (currentCategoryId && currentCategoryName) {
+                    void selectCategory(currentCategoryId, currentCategoryName);
+                } else {
+                    document.getElementById('projectList').innerHTML = `<div class="placeholder">${DIALOG_TEXT.noProjectData}</div>`;
+                }
             });
         });
-        moveThumbTo(0);
+        moveThumbTo(1);
+    }
+
+    function buildApiUrl(path: string) {
+        const url = new URL(`${API_BASE}${path}`, window.location.origin);
+        if (currentMaterialPreset) {
+            url.searchParams.set("industryType", currentMaterialPreset);
+        }
+        return `${url.pathname}${url.search}`;
+    }
+
+    function resetSelectionState(options?: { preserveCategory?: boolean }) {
+        if (!options?.preserveCategory) {
+            currentCategoryId = null;
+            currentCategoryName = null;
+        }
+        currentProjectId = null;
+        currentProjectName = null;
+        currentProjectBaseDescription = "";
+        selectedDetails.clear();
+        selectedAnnotations.clear();
+        document.querySelectorAll('#categoryList .listbox-item, #projectList .listbox-item').forEach(item => {
+            item.classList.remove('selected');
+        });
     }
 
     function applyStaticText() {
@@ -141,10 +176,9 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
     }
 
     // 1. 加载产品类型（带缓存）
-    async function loadCategories() {
-        // 检查缓存
-        if (cache.categories) {
-            displayCategories(cache.categories);
+    async function loadCategories(options?: { preserveCategoryId?: number | null; preserveCategoryName?: string | null }) {
+        if (cache.categories.default) {
+            displayCategories(cache.categories.default, options);
             return;
         }
 
@@ -153,8 +187,8 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
             const result = await response.json();
 
             if (result.success) {
-                cache.categories = result.data; // 缓存
-                displayCategories(result.data);
+                cache.categories.default = result.data; // 缓存
+                displayCategories(result.data, options);
             } else {
                 console.error(`${DIALOG_TEXT.loadCategoryFailed}:`, result.error || result.message);
                 showError(`${DIALOG_TEXT.loadCategoryFailed}: ` + (result.error || result.message || DIALOG_TEXT.unknownError));
@@ -166,11 +200,14 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
     }
 
     // 2. 显示产品类型列表
-    function displayCategories(categories) {
+    function displayCategories(categories, options?: { preserveCategoryId?: number | null; preserveCategoryName?: string | null }) {
         const categoryList = document.getElementById('categoryList');
         categoryList.innerHTML = '';
 
         if (categories.length === 0) {
+            resetSelectionState();
+            document.getElementById('projectList').innerHTML = `<div class="placeholder">${DIALOG_TEXT.noProjectData}</div>`;
+            clearRightPanels();
             categoryList.innerHTML = `<div class="placeholder">${DIALOG_TEXT.noCategoryData}</div>`;
             return;
         }
@@ -184,7 +221,18 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
             categoryList.appendChild(item);
         });
 
-        // 不再自动选中第一个，让用户手动选择
+        const preservedCategory = (categories || []).find(category =>
+            (options?.preserveCategoryId && Number(category.id) === Number(options.preserveCategoryId)) ||
+            (options?.preserveCategoryName && String(category.name || "").trim() === String(options.preserveCategoryName || "").trim())
+        );
+
+        if (preservedCategory) {
+            void selectCategory(preservedCategory.id, preservedCategory.name);
+            return;
+        }
+
+        document.getElementById('projectList').innerHTML = `<div class="placeholder">${DIALOG_TEXT.noProjectData}</div>`;
+        clearRightPanels();
     }
 
     // 3. 选择产品类型 → 加载产品型号
@@ -208,13 +256,14 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
 
         try {
             // 检查缓存
-            let result = cache.projects[categoryId];
+            const cacheKey = `${currentMaterialPreset}:${categoryId}`;
+            let result = cache.projects[cacheKey];
             if (!result) {
-                const response = await fetch(`${API_BASE}${API_PATHS.projects}/${categoryId}`);
+                const response = await fetch(buildApiUrl(`${API_PATHS.projects}/${categoryId}`));
                 const data = await response.json();
                 if (data.success) {
                     result = data;
-                    cache.projects[categoryId] = data; // 缓存
+                    cache.projects[cacheKey] = data; // 缓存
                 }
             }
 
@@ -280,9 +329,9 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
         try {
             // 并行加载详细信息和标注
             const [detailsRes, annotationsRes, configRes] = await Promise.all([
-                fetch(`${API_BASE}${API_PATHS.details}/${projectId}`),
-                fetch(`${API_BASE}${API_PATHS.annotations}/${projectId}`),
-                fetch(`${API_BASE}${API_PATHS.config}/${projectId}`)
+                fetch(buildApiUrl(`${API_PATHS.details}/${projectId}`)),
+                fetch(buildApiUrl(`${API_PATHS.annotations}/${projectId}`)),
+                fetch(buildApiUrl(`${API_PATHS.config}/${projectId}`))
             ]);
 
             const detailsResult = await detailsRes.json();
@@ -421,7 +470,7 @@ function displayDetails(details) {
         const label = document.createElement('label');
         label.htmlFor = `detail-${index}`;
         label.textContent = detail.name + (detail.is_required === 1 ? DIALOG_TEXT.requiredSuffix : '');
-        label.style.cursor = 'pointer';
+        label.style.cursor = detail.is_required === 1 ? 'default' : 'pointer';
         label.style.flex = '1';
 
         if (detail.is_required === 1) {
@@ -431,6 +480,7 @@ function displayDetails(details) {
 
         // 单击列表项：仅切换勾选，保持叠加显示
         item.onclick = (e) => {
+            if (checkbox.disabled) return;
             if (e.target && e.target.type === 'checkbox') return;
             checkbox.checked = !checkbox.checked;
             checkbox.dispatchEvent(new Event('change'));

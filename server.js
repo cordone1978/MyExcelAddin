@@ -218,6 +218,51 @@ CASE
 END
 `;
 
+const ALLOWED_INDUSTRY_TYPES = new Set(["calcium", "lfp", "lfp_raw"]);
+
+function normalizeIndustryType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return ALLOWED_INDUSTRY_TYPES.has(normalized) ? normalized : "";
+}
+
+async function resolveProductIndustryConfigContext(productId, industryType) {
+  const numericProductId = Number(productId || 0);
+  const normalizedIndustryType = normalizeIndustryType(industryType);
+  if (!numericProductId) {
+    return { productId: 0, configProductId: null, industryType: normalizedIndustryType };
+  }
+
+  if (normalizedIndustryType) {
+    const [mappingRows] = await pool.query(
+      `
+      SELECT product_id, config_product_id
+      FROM ht_sales_product_industry_config
+      WHERE product_id = ?
+        AND industry_type = ?
+        AND is_active = 1
+      LIMIT 1
+      `,
+      [numericProductId, normalizedIndustryType]
+    );
+    if (mappingRows.length) {
+      const mappedConfigProductId = mappingRows[0].config_product_id;
+      return {
+        productId: numericProductId,
+        configProductId:
+          mappedConfigProductId === null || mappedConfigProductId === undefined
+            ? null
+            : Number(mappedConfigProductId || 0) || null,
+        industryType: normalizedIndustryType,
+      };
+    }
+  }
+  return {
+    productId: numericProductId,
+    configProductId: numericProductId,
+    industryType: normalizedIndustryType,
+  };
+}
+
 // API routes (must be defined before static file serving)
 
 // 0. Test DB connection
@@ -254,17 +299,42 @@ app.get(API_ROUTES.categories, async (req, res) => {
 app.get(API_ROUTES.projects, async (req, res) => {
   try {
     const { categoryId } = req.params;
-    
-    const [rows] = await pool.query(`
-      SELECT 
-        product_id as id,
-        product_model as name,
-        COALESCE(base_description, '') as base_description,
-        '' as image_url
-      FROM ht_sales_products
-      WHERE product_type_id = ? AND is_active = 1
-      ORDER BY (sort_by IS NULL) ASC, sort_by ASC, product_model ASC
-    `, [categoryId]);
+    const industryType = normalizeIndustryType(req.query.industryType);
+    let rows;
+    if (industryType) {
+      [rows] = await pool.query(
+        `
+        SELECT 
+          p.product_id as id,
+          p.product_model as name,
+          COALESCE(p.base_description, '') as base_description,
+          '' as image_url
+        FROM ht_sales_products p
+        INNER JOIN ht_sales_product_industry_config pi
+          ON pi.product_id = p.product_id
+         AND pi.industry_type = ?
+         AND pi.is_active = 1
+        WHERE p.product_type_id = ?
+          AND p.is_active = 1
+        ORDER BY (p.sort_by IS NULL) ASC, p.sort_by ASC, p.product_model ASC
+        `,
+        [industryType, categoryId]
+      );
+    } else {
+      [rows] = await pool.query(
+        `
+        SELECT 
+          product_id as id,
+          product_model as name,
+          COALESCE(base_description, '') as base_description,
+          '' as image_url
+        FROM ht_sales_products
+        WHERE product_type_id = ? AND is_active = 1
+        ORDER BY (sort_by IS NULL) ASC, sort_by ASC, product_model ASC
+        `,
+        [categoryId]
+      );
+    }
     
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -277,7 +347,13 @@ app.get(API_ROUTES.projects, async (req, res) => {
 app.get(API_ROUTES.details, async (req, res) => {
   try {
     const { projectId } = req.params;
-    
+    const context = await resolveProductIndustryConfigContext(projectId, req.query.industryType);
+    if (!context.configProductId) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+    const scope = { whereSql: "product_id = ?", params: [Number(context.configProductId || projectId)] };
+
     const [rows] = await pool.query(`
       SELECT 
         config_id as id,
@@ -291,11 +367,11 @@ app.get(API_ROUTES.details, async (req, res) => {
           ELSE NULL
         END as image_url
       FROM ht_sales_product_default_config
-      WHERE product_id = ?
+      WHERE ${scope.whereSql}
         AND CAST(is_Assembly AS SIGNED) = 0
         AND whatkind NOT IN (?, ?)
       ORDER BY component_sn
-    `, [projectId, DOMAIN_TERMS.craftingKind, DOMAIN_TERMS.standardPartKind]);
+    `, [...scope.params, DOMAIN_TERMS.craftingKind, DOMAIN_TERMS.standardPartKind]);
     
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -308,7 +384,13 @@ app.get(API_ROUTES.details, async (req, res) => {
 app.get(API_ROUTES.annotations, async (req, res) => {
   try {
     const { projectId } = req.params;
-    
+    const context = await resolveProductIndustryConfigContext(projectId, req.query.industryType);
+    if (!context.configProductId) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+    const scope = { whereSql: "product_id = ?", params: [Number(context.configProductId || projectId)] };
+
     const [rows] = await pool.query(`
       SELECT 
         config_id as id,
@@ -324,10 +406,10 @@ app.get(API_ROUTES.annotations, async (req, res) => {
           ELSE NULL
         END as image_url
       FROM ht_sales_product_default_config
-      WHERE product_id = ?
+      WHERE ${scope.whereSql}
         AND CAST(is_Assembly AS SIGNED) >= 1
       ORDER BY component_sn
-    `, [projectId]);
+    `, scope.params);
     
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -340,7 +422,13 @@ app.get(API_ROUTES.annotations, async (req, res) => {
 app.get(API_ROUTES.config, async (req, res) => {
   try {
     const { projectId } = req.params;
-    
+    const context = await resolveProductIndustryConfigContext(projectId, req.query.industryType);
+    if (!context.configProductId) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+    const scope = { whereSql: "product_id = ?", params: [Number(context.configProductId || projectId)] };
+
     const [rows] = await pool.query(`
       SELECT 
         config_id,
@@ -362,9 +450,9 @@ app.get(API_ROUTES.config, async (req, res) => {
         CAST(is_Assembly AS SIGNED) as is_Assembly,
         ${ASSEMBLY_GROUP_SQL} as assembly_group
       FROM ht_sales_product_default_config
-      WHERE product_id = ?
+      WHERE ${scope.whereSql}
       ORDER BY component_sn
-    `, [projectId]);
+    `, scope.params);
     
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -466,12 +554,34 @@ app.get(API_ROUTES.craftPrices, async (req, res) => {
 app.get(API_ROUTES.projectByModel, async (req, res) => {
   try {
     const { productModel } = req.params;
-    const [rows] = await pool.query(`
-      SELECT product_id, product_model, product_type_id
-      FROM ht_sales_products
-      WHERE product_model = ?
-      LIMIT 1
-    `, [productModel]);
+    const industryType = normalizeIndustryType(req.query.industryType);
+    let rows;
+    if (industryType) {
+      [rows] = await pool.query(
+        `
+        SELECT p.product_id, p.product_model, p.product_type_id
+        FROM ht_sales_products p
+        INNER JOIN ht_sales_product_industry_config pi
+          ON pi.product_id = p.product_id
+         AND pi.industry_type = ?
+         AND pi.is_active = 1
+        WHERE p.product_model = ?
+        ORDER BY p.product_id ASC
+        LIMIT 1
+        `,
+        [industryType, productModel]
+      );
+    } else {
+      [rows] = await pool.query(
+        `
+        SELECT product_id, product_model, product_type_id
+        FROM ht_sales_products
+        WHERE product_model = ?
+        LIMIT 1
+        `,
+        [productModel]
+      );
+    }
 
     if (rows.length === 0) {
       res.json({ success: false, message: SERVER_MESSAGES.projectModelNotFound });
@@ -822,8 +932,6 @@ app.get(API_ROUTES.systemMapping, async (req, res) => {
   try {
     const { typeName } = req.params;
 
-    console.log(`${SERVER_LOGS.querySystemMapping}:`, typeName);
-
     const [rows] = await pool.query(`
       SELECT DISTINCT
         system_name,
@@ -833,10 +941,7 @@ app.get(API_ROUTES.systemMapping, async (req, res) => {
       LIMIT 1
     `, [typeName]);
 
-    console.log(`${SERVER_LOGS.querySystemMappingResult}:`, rows);
-
     if (rows.length > 0) {
-      console.log(`${SERVER_LOGS.foundSystemMapping}:`, rows[0].system_name);
       res.json({
         success: true,
         data: {
@@ -845,7 +950,6 @@ app.get(API_ROUTES.systemMapping, async (req, res) => {
         }
       });
     } else {
-      console.log(SERVER_MESSAGES.systemMappingNotFound);
       res.json({
         success: false,
         message: SERVER_MESSAGES.systemMappingNotFound
@@ -863,6 +967,7 @@ app.post(API_ROUTES.exportQuotePdf, async (req, res) => {
   try {
     const html = String(req.body?.html || "").trim();
     const fileName = String(req.body?.fileName || "报价汇总表").trim() || "报价汇总表";
+    const landscape = Boolean(req.body?.landscape);
 
     if (!html) {
       res.status(400).json({ success: false, error: "缺少导出内容" });
@@ -891,6 +996,7 @@ app.post(API_ROUTES.exportQuotePdf, async (req, res) => {
 
     const pdfBuffer = await page.pdf({
       format: "A4",
+      landscape,
       printBackground: true,
       margin: {
         top: "10mm",

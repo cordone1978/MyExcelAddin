@@ -105,7 +105,7 @@
         .middle-right {
             grid-row: 2;
             display: grid;
-            grid-template-rows: 2fr 1fr;
+            grid-template-rows: 2.3fr 0.7fr;
             gap: 12px;
             border-right: 1px solid #e0e0e0;
             padding-right: 12px;

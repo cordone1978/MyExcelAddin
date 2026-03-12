@@ -3,7 +3,7 @@ export const BUILDSHEET_STYLE = {
   fontSize: 11,
   defaultRowHeight: 30,
   costAreaColor: "#cfe8b9",
-  numberFormat: "#,##0.00",
+  numberFormat: "#,##0",
 } as const;
 
 export const BUILDSHEET_RANGES = {
@@ -30,11 +30,11 @@ export const BUILDSHEET_COLUMNS = {
   },
   config: {
     A: 30,
-    B: 120,
-    C: 120,
+    B: 100,
+    C: 100,
     D: 220,
-    E: 150,
-    F: 120,
+    E: 120,
+    F: 100,
     G: 80,
     H: 50,
     I: 40,
@@ -46,7 +46,7 @@ export const BUILDSHEET_COLUMNS = {
     O: 80,
     P: 80,
     Q: 50,
-    R: 200,
+    R: 180,
   },
   easyparts: {
     A: 30,

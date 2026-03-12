@@ -35,6 +35,8 @@ let deviceItems: DeviceItem[] = [];
 let warehouseRows: WarehouseStatRow[] = [];
 let warehouseMetaBySheet: Record<string, MetaInfoRow> = {};
 let quoteCostByComponent = new Map<string, number>();
+let selectedDeviceIndex = -1;
+let selectedWarehouseKey = "";
 const INFO_REF_DEBUG_PREFIX = "[InfoReferenceDebug]";
 const INFO_REF_REQUEST_DEVICES_MSG = "info_reference_request_devices";
 const INFO_REF_DEVICES_MSG = "info_reference_devices";
@@ -76,37 +78,29 @@ function bindEvents() {
   const deviceList = getDeviceList();
   const warehouseList = getWarehouseList();
 
-  deviceList.addEventListener("change", () => {
-    void handleDeviceChanged();
-  });
-  warehouseList.addEventListener("change", () => {
-    renderDbDetailForSelected();
-  });
-
-  // Office WebView 中 select 的滚轮行为不稳定，手动实现滚轮切换选中项。
-  bindListboxWheelSelection(warehouseList, () => {
-    renderDbDetailForSelected();
-  });
-  bindListboxWheelSelection(deviceList, () => {
-    void handleDeviceChanged();
-  });
+  bindListboxWheelSelection(warehouseList, "warehouse");
+  bindListboxWheelSelection(deviceList, "device");
 }
 
-function bindListboxWheelSelection(list: HTMLSelectElement, onChanged: () => void) {
+function bindListboxWheelSelection(list: HTMLDivElement, kind: "device" | "warehouse") {
   list.addEventListener(
     "wheel",
     (event) => {
-      const total = list.options.length;
+      const warehouseKeys = getWarehouseKeys();
+      const total = kind === "device" ? deviceItems.length : warehouseKeys.length;
       if (total <= 0) return;
-      const current = Math.max(0, list.selectedIndex);
+      const current = Math.max(0, kind === "device" ? selectedDeviceIndex : warehouseKeys.findIndex((x) => x === selectedWarehouseKey));
       const step = event.deltaY > 0 ? 1 : -1;
       const next = Math.max(0, Math.min(total - 1, current + step));
       if (next === current) {
         event.preventDefault();
         return;
       }
-      list.selectedIndex = next;
-      onChanged();
+      if (kind === "device") {
+        selectDeviceByIndex(next);
+      } else {
+        selectWarehouseKey(warehouseKeys[next] || "");
+      }
       event.preventDefault();
     },
     { passive: false }
@@ -150,8 +144,7 @@ function bindParentMessageEvents() {
           setStatus("报价配置表未识别到设备。", true);
           return;
         }
-        getDeviceList().selectedIndex = 0;
-        void handleDeviceChanged();
+        selectDeviceByIndex(0);
         return;
       }
       if (payload?.type === INFO_REF_ERROR_MSG) {
@@ -165,7 +158,7 @@ function bindParentMessageEvents() {
 }
 
 async function handleDeviceChanged() {
-  const idx = getDeviceList().selectedIndex;
+  const idx = selectedDeviceIndex;
   const item = idx >= 0 ? deviceItems[idx] : null;
   if (!item) {
     renderQuoteRows([]);
@@ -182,8 +175,13 @@ async function handleDeviceChanged() {
     warehouseRows = result.rows;
     warehouseMetaBySheet = result.metaBySheet;
     renderWarehouseList(result.rows);
-    if (result.rows.length > 0) getWarehouseList().selectedIndex = 0;
-    renderDbDetailForSelected();
+    const keys = getWarehouseKeys();
+    if (keys.length > 0) {
+      selectWarehouseKey(keys[0]);
+    } else {
+      selectedWarehouseKey = "";
+      renderDbDetailForSelected();
+    }
     if (result.rows.length === 0) setStatus("仓库中未找到匹配数据。");
   } catch (error: any) {
     renderWarehouseList([]);
@@ -196,31 +194,45 @@ async function handleDeviceChanged() {
 function renderDeviceList(items: DeviceItem[]) {
   const list = getDeviceList();
   list.innerHTML = "";
-  items.forEach((item) => {
-    const option = document.createElement("option");
-    option.textContent = item.deviceName;
-    option.value = item.id;
-    list.appendChild(option);
+  if (!items.length) {
+    list.innerHTML = `<div class="listbox-placeholder">暂无设备</div>`;
+    return;
+  }
+  items.forEach((item, idx) => {
+    const div = document.createElement("div");
+    div.className = "listbox-item";
+    div.textContent = item.deviceName;
+    div.dataset.id = item.id;
+    div.onclick = () => selectDeviceByIndex(idx);
+    list.appendChild(div);
   });
+  refreshDeviceSelectionUI();
 }
 
 function renderWarehouseList(rows: Array<Record<string, unknown>>) {
   const list = getWarehouseList();
   list.innerHTML = "";
-  const keys = Array.from(
+  const sheetNames = Array.from(
     new Set(
       rows
-        .map((row) => buildWarehouseGroupKey(row))
+        .map((row) => pickText(row, ["sheet_name"]))
         .map((x) => x.trim())
         .filter(Boolean)
     )
   );
-  keys.forEach((key) => {
-    const option = document.createElement("option");
-    option.textContent = key;
-    option.value = key;
-    list.appendChild(option);
+  if (!sheetNames.length) {
+    list.innerHTML = `<div class="listbox-placeholder">暂无历史相关产品</div>`;
+    return;
+  }
+  sheetNames.forEach((sheetName) => {
+    const div = document.createElement("div");
+    div.className = "listbox-item";
+    div.dataset.key = sheetName;
+    div.textContent = buildWarehouseGroupLabel(sheetName);
+    div.onclick = () => selectWarehouseKey(sheetName);
+    list.appendChild(div);
   });
+  refreshWarehouseSelectionUI();
 }
 
 function renderQuoteRows(rows: DeviceRow[]) {
@@ -278,8 +290,7 @@ function applyTableColumnWidths(tableId: string, widths: number[]) {
 }
 
 function renderDbDetailForSelected() {
-  const list = getWarehouseList();
-  const selectedKey = String(list.value || "").trim();
+  const selectedKey = String(selectedWarehouseKey || "").trim();
   if (!warehouseRows.length) {
     renderDbDetail([]);
     renderDbMeta(null);
@@ -456,11 +467,21 @@ function buildWarehouseDisplayName(row: Record<string, unknown>, idx: number) {
 }
 
 function buildWarehouseGroupKey(row: Record<string, unknown>) {
+  const projectCode = pickText(row, ["project_code"]);
+  if (projectCode) return projectCode;
   const sheetName = pickText(row, ["sheet_name"]);
   if (sheetName) return sheetName;
   const keyParam = pickText(row, ["key_param"]);
   if (keyParam) return keyParam;
   return buildWarehouseDisplayName(row, 0);
+}
+
+function buildWarehouseGroupLabel(sheetName: string) {
+  const normalizedSheetName = String(sheetName || "").trim();
+  if (!normalizedSheetName) return "";
+  const meta = warehouseMetaBySheet[normalizedSheetName];
+  const projectCode = String(meta?.project_code || "").trim();
+  return projectCode || normalizedSheetName;
 }
 
 function prepareHistoryRows(rows: WarehouseStatRow[]) {
@@ -573,11 +594,57 @@ function renderDbMeta(meta: MetaInfoRow | null) {
 }
 
 function getDeviceList() {
-  return document.getElementById("deviceList") as HTMLSelectElement;
+  return document.getElementById("deviceList") as HTMLDivElement;
 }
 
 function getWarehouseList() {
-  return document.getElementById("warehouseList") as HTMLSelectElement;
+  return document.getElementById("warehouseList") as HTMLDivElement;
+}
+
+function getWarehouseKeys() {
+  return Array.from(
+    new Set(
+      warehouseRows
+        .map((row) => pickText(row, ["sheet_name"]))
+        .map((x) => x.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function selectDeviceByIndex(index: number) {
+  selectedDeviceIndex = index >= 0 && index < deviceItems.length ? index : -1;
+  refreshDeviceSelectionUI();
+  void handleDeviceChanged();
+}
+
+function selectWarehouseKey(key: string) {
+  selectedWarehouseKey = String(key || "").trim();
+  refreshWarehouseSelectionUI();
+  renderDbDetailForSelected();
+}
+
+function refreshDeviceSelectionUI() {
+  const list = getDeviceList();
+  Array.from(list.querySelectorAll(".listbox-item")).forEach((node, idx) => {
+    const isSelected = idx === selectedDeviceIndex;
+    node.classList.toggle("selected", isSelected);
+    if (isSelected) {
+      (node as HTMLDivElement).scrollIntoView({ block: "nearest" });
+    }
+  });
+}
+
+function refreshWarehouseSelectionUI() {
+  const list = getWarehouseList();
+  Array.from(list.querySelectorAll(".listbox-item")).forEach((node) => {
+    const key = String((node as HTMLDivElement).dataset.key || "").trim();
+    const isSelected = key === selectedWarehouseKey;
+    node.classList.toggle("selected", isSelected);
+    if (isSelected) {
+      (node as HTMLDivElement).scrollIntoView({ block: "nearest" });
+    }
+  });
 }
 
 function setStatus(message: string, isError = false) {
