@@ -11,70 +11,7 @@
 </head>
 
 <body>
-  <div class="shell">
-    <main class="main">
-      <section class="canvas-panel">
-        <div id="canvas" class="canvas">
-          <div id="selectionBox" class="selection-box"></div>
-          <div id="scene" class="scene">
-            <svg id="edgeLayer" class="edge-layer"></svg>
-            <div id="nodeLayer" class="node-layer"></div>
-            <svg id="strokeLayer" class="stroke-layer"></svg>
-          </div>
-        </div>
-      </section>
-
-      <aside class="side-panel">
-        <h2>模块属性</h2>
-        <label>名称<input id="fieldLabel" type="text" readonly /></label>
-        <label>系统
-          <select id="fieldSystem" disabled></select>
-        </label>
-        <label>规格描述<input id="fieldDesc" type="text" readonly /></label>
-        <label>型号<input id="fieldType" type="text" readonly /></label>
-        <label>材质<input id="fieldMaterial" type="text" readonly /></label>
-        <label>品牌<input id="fieldBrand" type="text" readonly /></label>
-        <label>单位<input id="fieldUnit" type="text" readonly /></label>
-        <label>数量<input id="fieldQty" type="number" min="1" step="1" readonly /></label>
-        <label>单价<input id="fieldPrice" type="number" min="0" step="1" readonly /></label>
-        <hr />
-        <p id="statusText" class="status"></p>
-      </aside>
-    </main>
-
-    <section class="bottom-dock">
-      <section id="templateDrawer" class="template-drawer" aria-label="模板库">
-        <div class="drawer-head">
-          <h3 class="drawer-title">模板库</h3>
-          <span class="drawer-meta">拖拽图片到画布可快速创建设备模块</span>
-        </div>
-        <div id="templateList" class="template-list"></div>
-      </section>
-
-      <section id="toolsDrawer" class="tools-drawer" aria-label="工具">
-        <div class="drawer-head">
-          <h3 class="drawer-title">工具</h3>
-          <span class="drawer-meta">连线和手绘操作</span>
-        </div>
-        <div class="tools-panel">
-          <button id="penConnectBtn" class="btn">节点连线笔：关</button>
-          <button id="drawStrokeBtn" class="btn">自由画线：关</button>
-          <button id="undoStrokeBtn" class="btn">撤销一笔</button>
-        </div>
-      </section>
-
-      <footer class="toolbar toolbar-bottom">
-        <button id="loadTemplateLibraryBtn" class="btn">模板库</button>
-        <button id="toolsBtn" class="btn">工具</button>
-        <button id="deleteSelectedBtn" class="btn">删除选中</button>
-        <button id="clearAllBtn" class="btn danger">清空</button>
-        <button id="saveBtn" class="btn">保存</button>
-      </footer>
-    </section>
-  </div>
-  <div id="canvasContextMenu" class="canvas-context-menu" aria-hidden="true">
-    <button id="contextDeleteBtn" class="context-menu-item" type="button">删除选中</button>
-  </div>
+  <div id="root"></div>
 </body>
 
 </html>

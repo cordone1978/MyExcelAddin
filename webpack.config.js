@@ -47,7 +47,7 @@ module.exports = async (env, options) => {
       devmodify: ["./src/dialog/devmodify.ts", "./src/dialog/devmodify.html"],
       craftmodify: ["./src/dialog/craftmodify.ts", "./src/dialog/craftmodify.html"],
       queryprice: ["./src/dialog/queryprice.ts", "./src/dialog/queryprice.html"],
-      graphEditor: ["./src/graph-editor/graphEditor.ts", "./src/graph-editor/graphEditor.html"],
+      graphEditor: ["./src/graph-editor/graphEditor.tsx", "./src/graph-editor/graphEditor.html"],
       infoReference: ["./src/info-reference/infoReference.ts", "./src/info-reference/infoReference.html"],
       quoteSummaryPreview: ["./src/quote-preview/quoteSummaryPreview.ts", "./src/quote-preview/quoteSummaryPreview.html"],
       commands: "./src/commands/commands.ts",
@@ -57,12 +57,12 @@ module.exports = async (env, options) => {
       clean: true,
     },
     resolve: {
-      extensions: [".ts", ".html", ".js"],
+      extensions: [".tsx", ".ts", ".html", ".js"],
     },
     module: {
       rules: [
         {
-          test: /\.ts$/,
+          test: /\.tsx?$/,
           exclude: /node_modules/,
           use: {
             loader: "babel-loader"
@@ -134,6 +134,10 @@ module.exports = async (env, options) => {
           {
             from: "assets/*",
             to: "assets/[name][ext][query]",
+          },
+          {
+            from: "assets/equipment",
+            to: "assets/equipment",
           },
           {
             from: "src/dialog/dialog.css",
