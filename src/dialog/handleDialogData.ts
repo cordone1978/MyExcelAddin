@@ -1,5 +1,7 @@
 ﻿/* global fetch, Excel */
 import { insertComponentsToConfigSheet } from "../buildsheet/insertRows";
+import { resolveTemplateFromProductName, resolveTemplateThumbnail } from "../graph-editor/productLibraryLookup";
+import { upsertGraphProductLibraryEntry } from "../graph-editor/workbookStore";
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
 import { FLOW_MESSAGES } from "../shared/businessTextConstants";
 
@@ -24,6 +26,7 @@ export async function handleDialogData(data: any) {
   const categoryForInsert = data.category;
 
   await insertComponentsToConfigSheet(categoryForInsert, data.project, allComponents, systemName);
+  await saveGraphLibraryMapping(data.projectId, data.project);
 }
 
 async function fetchProjectConfig(projectId: number, materialPreset?: string): Promise<any[]> {
@@ -114,4 +117,24 @@ function filterAnnotationComponents(configData: any[], selectedAnnotations: any[
 
   components.sort((a: any, b: any) => (a.component_sn || 0) - (b.component_sn || 0));
   return components;
+}
+
+async function saveGraphLibraryMapping(projectId: number, deviceName: string) {
+  const normalizedDeviceName = String(deviceName || "").trim();
+  if (!projectId || !normalizedDeviceName) return;
+
+  const template = resolveTemplateFromProductName(normalizedDeviceName);
+  if (!template) return;
+
+  const thumbnailUrl = resolveTemplateThumbnail(template);
+  if (!thumbnailUrl) return;
+
+  await upsertGraphProductLibraryEntry({
+    deviceName: normalizedDeviceName,
+    templateId: template.templateId,
+    thumbnailUrl,
+    productId: Number(projectId),
+    productName: normalizedDeviceName,
+    updatedAt: new Date().toISOString(),
+  });
 }

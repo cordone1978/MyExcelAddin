@@ -44,17 +44,31 @@ module.exports = async (env, options) => {
       polyfill: ["core-js/stable", "regenerator-runtime/runtime"],
       taskpane: ["./src/taskpane/taskpane.ts", "./src/taskpane/taskpane.html"],
       dialog: ["./src/dialog/dialog.ts", "./src/dialog/dialog.html"],
-      devmodify: ["./src/dialog/devmodify.ts", "./src/dialog/devmodify.html"],
+      devmodify: ["./src/dialog/devmodify.tsx", "./src/dialog/devmodify.html"],
       craftmodify: ["./src/dialog/craftmodify.ts", "./src/dialog/craftmodify.html"],
-      queryprice: ["./src/dialog/queryprice.ts", "./src/dialog/queryprice.html"],
+      queryprice: ["./src/dialog/queryprice.tsx", "./src/dialog/queryprice.html"],
       graphEditor: ["./src/graph-editor/graphEditor.tsx", "./src/graph-editor/graphEditor.html"],
-      infoReference: ["./src/info-reference/infoReference.ts", "./src/info-reference/infoReference.html"],
+      infoReference: ["./src/info-reference/infoReference.tsx", "./src/info-reference/infoReference.html"],
       quoteSummaryPreview: ["./src/quote-preview/quoteSummaryPreview.ts", "./src/quote-preview/quoteSummaryPreview.html"],
       commands: "./src/commands/commands.ts",
     },
     output: {
       filename: "[name].js",  // 确保输出文件名格式正确
+      chunkFilename: "[name].js",
       clean: true,
+    },
+    optimization: {
+      splitChunks: {
+        chunks: "all",
+        cacheGroups: {
+          graphicsVendor: {
+            test: /[\\/]node_modules[\\/](react-konva|konva|react|react-dom|react-reconciler|scheduler|its-fine)[\\/]/,
+            name: "graphics-vendor",
+            chunks: "all",
+            priority: 20,
+          },
+        },
+      },
     },
     resolve: {
       extensions: [".tsx", ".ts", ".html", ".js"],
@@ -91,37 +105,37 @@ module.exports = async (env, options) => {
       new HtmlWebpackPlugin({
         filename: "dialog.html",
         template: "./src/dialog/dialog.html",
-        chunks: ["dialog"],
+        chunks: ["polyfill", "dialog"],
       }),
       new HtmlWebpackPlugin({
         filename: "devmodify.html",
         template: "./src/dialog/devmodify.html",
-        chunks: ["devmodify"],
+        chunks: ["polyfill", "devmodify"],
       }),
       new HtmlWebpackPlugin({
         filename: "craftmodify.html",
         template: "./src/dialog/craftmodify.html",
-        chunks: ["craftmodify"],
+        chunks: ["polyfill", "craftmodify"],
       }),
       new HtmlWebpackPlugin({
         filename: "queryprice.html",
         template: "./src/dialog/queryprice.html",
-        chunks: ["queryprice"],
+        chunks: ["polyfill", "queryprice"],
       }),
       new HtmlWebpackPlugin({
         filename: "graphEditor.html",
         template: "./src/graph-editor/graphEditor.html",
-        chunks: ["graphEditor"],
+        chunks: ["polyfill", "graphEditor"],
       }),
       new HtmlWebpackPlugin({
         filename: "infoReference.html",
         template: "./src/info-reference/infoReference.html",
-        chunks: ["infoReference"],
+        chunks: ["polyfill", "infoReference"],
       }),
       new HtmlWebpackPlugin({
         filename: "quoteSummaryPreview.html",
         template: "./src/quote-preview/quoteSummaryPreview.html",
-        chunks: ["quoteSummaryPreview"],
+        chunks: ["polyfill", "quoteSummaryPreview"],
       }),
       new HtmlWebpackPlugin({
         filename: "commands.html",

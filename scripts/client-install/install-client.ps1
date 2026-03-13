@@ -189,8 +189,8 @@ if (-not $rootCert) {
   exit 1
 }
 
-$manifestPath = Join-Path $scriptDir 'manifest.xml'
-if (-not (Test-Path $manifestPath)) {
+$fallbackManifestPath = Join-Path $scriptDir 'manifest.xml'
+if (-not (Test-Path $fallbackManifestPath)) {
   Write-WarnMsg 'manifest.xml not found in package folder (shared folder mode can still work).'
 }
 
@@ -382,10 +382,10 @@ try {
     }
     $shareOk = $true
     Write-Ok "Share reachable: $SharePath"
-    if (Test-Path (Join-Path $SharePath 'manifest.xml')) {
-      Write-Ok 'manifest.xml found in shared folder'
+    if (Test-Path (Join-Path $SharePath 'quotation-manifest.xml')) {
+      Write-Ok 'quotation-manifest.xml found in shared folder'
     } else {
-      Write-WarnMsg 'manifest.xml not found in shared folder'
+      Write-WarnMsg 'quotation-manifest.xml not found in shared folder'
     }
   } else {
     Write-WarnMsg 'Share path not reachable right now (credentials may be required).'

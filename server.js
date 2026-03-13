@@ -1,10 +1,10 @@
 ﻿const fs = require('fs');
 const https = require('https');
+const crypto = require('crypto');
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const path = require('path');
-const crypto = require('crypto');
 const {
   SERVER_CONFIG,
   DATABASE_CONFIG,
@@ -50,6 +50,14 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0
 });
+
+function buildEquipmentImageUrl(componentPic) {
+  const raw = String(componentPic || "").trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const normalized = raw.replace(/^\/+/, "");
+  return `/${normalized}`;
+}
 
 // Export active DB config for external modules
 module.exports.DATABASE_CONFIG = DATABASE_CONFIG;
@@ -191,23 +199,6 @@ async function clearUserSessions(userId) {
     `UPDATE auth_sessions SET revoked_at = IFNULL(revoked_at, NOW()) WHERE user_id = ? AND revoked_at IS NULL`,
     [Number(userId || 0)]
   );
-}
-
-function sanitizeFileToken(value) {
-  return String(value || "")
-    .trim()
-    .replace(/[^\w\-.]+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 80);
-}
-
-function inferExtFromUrl(urlOrPath) {
-  const ext = path.extname(String(urlOrPath || "")).toLowerCase();
-  if (ext === ".jpg" || ext === ".jpeg" || ext === ".png" || ext === ".webp") {
-    return ext === ".jpeg" ? ".jpg" : ext;
-  }
-  return ".png";
 }
 
 const ASSEMBLY_GROUP_SQL = `
@@ -360,18 +351,16 @@ app.get(API_ROUTES.details, async (req, res) => {
         component_name as name,
         component_pic,
         component_sn,
-        CAST(is_active AS SIGNED) as is_required,
-        CASE 
-          WHEN component_pic IS NOT NULL AND component_pic != '' 
-          THEN CONCAT('${URLS.imageBase}', component_pic, '.png')
-          ELSE NULL
-        END as image_url
+        CAST(is_active AS SIGNED) as is_required
       FROM ht_sales_product_default_config
       WHERE ${scope.whereSql}
         AND CAST(is_Assembly AS SIGNED) = 0
         AND whatkind NOT IN (?, ?)
       ORDER BY component_sn
     `, [...scope.params, DOMAIN_TERMS.craftingKind, DOMAIN_TERMS.standardPartKind]);
+    (rows || []).forEach((row) => {
+      row.image_url = buildEquipmentImageUrl(row.component_pic);
+    });
     
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -399,17 +388,15 @@ app.get(API_ROUTES.annotations, async (req, res) => {
         pic_level as position_x,
         NULL as position_y,
         CAST(is_Assembly AS SIGNED) as is_Assembly,
-        ${ASSEMBLY_GROUP_SQL} as assembly_group,
-        CASE 
-          WHEN component_pic IS NOT NULL AND component_pic != '' 
-          THEN CONCAT('${URLS.imageBase}', component_pic, '.png')
-          ELSE NULL
-        END as image_url
+        ${ASSEMBLY_GROUP_SQL} as assembly_group
       FROM ht_sales_product_default_config
       WHERE ${scope.whereSql}
         AND CAST(is_Assembly AS SIGNED) >= 1
       ORDER BY component_sn
     `, scope.params);
+    (rows || []).forEach((row) => {
+      row.image_url = buildEquipmentImageUrl(row.component_pic);
+    });
     
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -453,6 +440,9 @@ app.get(API_ROUTES.config, async (req, res) => {
       WHERE ${scope.whereSql}
       ORDER BY component_sn
     `, scope.params);
+    (rows || []).forEach((row) => {
+      row.image_url = buildEquipmentImageUrl(row.component_pic);
+    });
     
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -1024,73 +1014,6 @@ app.post(API_ROUTES.exportQuotePdf, async (req, res) => {
   }
 });
 
-// 11. Generate temporary graph template image into clean directory
-app.post(API_ROUTES.graphTemplateImage, async (req, res) => {
-  try {
-    const productModel = String(req.body?.productModel || "").trim() || "template";
-    const sourceImageUrl = String(req.body?.sourceImageUrl || "").trim();
-
-    if (!sourceImageUrl) {
-      res.status(400).json({ success: false, error: "缺少 sourceImageUrl" });
-      return;
-    }
-
-    const tempDir = path.join(__dirname, "public", "graph-temp");
-    fs.mkdirSync(tempDir, { recursive: true });
-
-    const ext = inferExtFromUrl(sourceImageUrl);
-    const stamp = Date.now();
-    const rand = crypto.randomBytes(4).toString("hex");
-    const fileBase = `${sanitizeFileToken(productModel) || "template"}_${stamp}_${rand}`;
-    const fileName = `${fileBase}${ext}`;
-    const destPath = path.join(tempDir, fileName);
-
-    let wrote = false;
-
-    try {
-      const parsed = new URL(sourceImageUrl, URLS.serverOrigin);
-      const publicPrefix = "/public/";
-      if (parsed.pathname.startsWith(publicPrefix)) {
-        const relative = decodeURIComponent(parsed.pathname.slice(publicPrefix.length));
-        const localSrc = path.join(__dirname, "public", relative);
-        if (fs.existsSync(localSrc)) {
-          fs.copyFileSync(localSrc, destPath);
-          wrote = true;
-        }
-      }
-    } catch {
-      // ignore parse failure and fallback to fetch
-    }
-
-    if (!wrote) {
-      const response = await fetch(sourceImageUrl);
-      if (!response.ok) {
-        res.status(502).json({ success: false, error: `下载图片失败: ${response.status}` });
-        return;
-      }
-      const arrayBuffer = await response.arrayBuffer();
-      fs.writeFileSync(destPath, Buffer.from(arrayBuffer));
-      wrote = true;
-    }
-
-    if (!wrote) {
-      res.status(500).json({ success: false, error: "生成临时图片失败" });
-      return;
-    }
-
-    const publicUrl = `${URLS.serverOrigin}/public/graph-temp/${encodeURIComponent(fileName)}`;
-    res.json({
-      success: true,
-      data: {
-        imageUrl: publicUrl,
-        fileName,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message || "生成临时图片失败" });
-  }
-});
-
 // Static file serving (must be after API routes)
 app.use('/public', express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'dist')));
@@ -1143,7 +1066,7 @@ ensureAuthSessionsTable()
       console.log(`   ${SERVER_LOGS.startupApiConfig}: ${URLS.serverOrigin}/api/config/:projectId`);
       console.log(`   ${SERVER_LOGS.startupApiWarehouseCleanSearch}: ${URLS.serverOrigin}/api/warehouse-clean-search?keyword=xxx`);
       console.log(`   ${SERVER_LOGS.startupApiSystemMapping}: ${URLS.serverOrigin}/api/system-mapping/:productModel`);
-      console.log(`   ${SERVER_LOGS.startupApiImages}: ${URLS.serverOrigin}/public/images/`);
+      console.log(`   ${SERVER_LOGS.startupApiImages}: ${URLS.serverOrigin}/assets/equipment/`);
       console.log(`   ${SERVER_LOGS.startupApiStatic}: ${URLS.serverOrigin}/`);
       console.log(SERVER_LOGS.startupDivider);
       console.log(`${SERVER_LOGS.startupExample}: ${URLS.serverOrigin}/api/system-mapping/demo`);

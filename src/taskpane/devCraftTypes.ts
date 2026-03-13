@@ -16,6 +16,7 @@ export type ComponentRecord = JsonMap & {
   component_pic?: string;
   whatkind?: string;
   component_unitprice?: number | string;
+  component_sn?: number | string;
 };
 
 export type MaterialOptionRecord = JsonMap & {

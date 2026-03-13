@@ -1,3 +1,5 @@
+import React from "react";
+import { createRoot, Root } from "react-dom/client";
 import { createQuotationSheet } from "../buildsheet";
 import { handleDialogData } from "../dialog/handleDialogData";
 import { API_PATHS, APP_URLS, DIALOG_PATHS, DIALOG_SIZES, UI_DEFAULTS } from "../shared/appConstants";
@@ -6,7 +8,15 @@ import { openQueryPriceDialogController } from "./querypriceController";
 import { BUILDSHEET_TEXT, FLOW_MESSAGES } from "../shared/businessTextConstants";
 import { TASKPANE_HTML_TEXT, TASKPANE_LOG_TEXT } from "../shared/dialogHtmlTextConstants";
 import { SHEET_NAMES } from "../shared/sheetNames";
-import { saveGraphToWorkbook, WorkbookGraphPayload } from "../graph-editor/workbookStore";
+import {
+  GraphProductLibraryEntry,
+  loadGraphFromWorkbook,
+  loadGraphProductLibraryEntries,
+  loadQuoteConfigProductsFromWorkbook,
+  saveGraphToWorkbook,
+  WorkbookGraphPayload,
+} from "../graph-editor/workbookStore";
+import { TaskpaneApp, TaskpaneViewState } from "./taskpaneApp";
 
 /* global console, document, Excel, Office */
 
@@ -15,6 +25,9 @@ let authToken = "";
 let currentUser: { username: string; fullName: string } | null = null;
 let isResetPasswordMode = false;
 let isAccountDockExpanded = false;
+let taskpaneRoot: Root | null = null;
+let generateTemplateConfirmResolver: ((value: boolean) => void) | null = null;
+let operationErrorResolver: (() => void) | null = null;
 const QUOTE_PREVIEW_STORAGE_KEY = "quotation_addin_quote_preview_payload";
 const CHINESE_ORDINAL_REGEX = /^[一二三四五六七八九十百零]+$/;
 const GRAPH_STORE_DEV_SHEET = "_graph_store_dev";
@@ -29,6 +42,118 @@ const GRAPH_EDITOR_SAVE_RESULT_MSG = "graph_editor_save_result";
 const INFO_REF_REQUEST_DEVICES_MSG = "info_reference_request_devices";
 const INFO_REF_DEVICES_MSG = "info_reference_devices";
 const INFO_REF_ERROR_MSG = "info_reference_error";
+
+const taskpaneViewState: TaskpaneViewState = {
+  isExcelReady: false,
+  itemSubject: "",
+  currentUser: null,
+  isResetPasswordMode: false,
+  isAccountDockExpanded: false,
+  isGenerateTemplateDrawerOpen: false,
+  authFeedback: "",
+  authFeedbackKind: "",
+  actionFeedback: "",
+  actionFeedbackKind: "",
+  inputValues: {
+    usernameInput: "",
+    passwordInput: "",
+    newPasswordInput: "",
+  },
+  inputDisabled: {
+    usernameInput: false,
+    passwordInput: false,
+    newPasswordInput: false,
+  },
+  buttonDisabled: {
+    loginBtn: false,
+    confirmResetPasswordBtn: false,
+  },
+  texts: {
+    loginBtn: TASKPANE_HTML_TEXT.loginBtn,
+    addDeviceBtn: TASKPANE_HTML_TEXT.addDeviceBtn,
+    resetPasswordBtn: TASKPANE_HTML_TEXT.resetPasswordBtn,
+    cancelResetPasswordBtn: TASKPANE_HTML_TEXT.cancelResetPasswordBtn,
+    confirmResetPasswordBtn: TASKPANE_HTML_TEXT.confirmResetPasswordBtn,
+    modifyDeviceBtn: TASKPANE_HTML_TEXT.modifyDeviceBtn,
+    generateSheetBtn: TASKPANE_HTML_TEXT.generateSheetBtn,
+    generateSimpleQuoteBtn: "初步报价",
+    generateDetailQuoteBtn: "明细报价",
+    generateQuoteBtn: TASKPANE_HTML_TEXT.generateQuoteBtn,
+    queryPriceBtn: TASKPANE_HTML_TEXT.queryPriceBtn,
+    graphEditorBtn: TASKPANE_HTML_TEXT.graphEditorBtn,
+    infoReferenceBtn: TASKPANE_HTML_TEXT.infoReferenceBtn,
+    loginStatusLabel: "未登录",
+    userInfoLabel: "",
+    accountDockLabel: "",
+    logoutDockBtn: "退出",
+  },
+  generateTemplateConfirmOpen: false,
+  operationErrorOpen: false,
+  operationErrorMessage: "",
+};
+
+function renderTaskpane() {
+  if (!taskpaneRoot) return;
+  taskpaneViewState.currentUser = currentUser;
+  taskpaneViewState.isResetPasswordMode = isResetPasswordMode;
+  taskpaneViewState.isAccountDockExpanded = isAccountDockExpanded;
+  taskpaneRoot.render(
+    React.createElement(TaskpaneApp, {
+      state: taskpaneViewState,
+      handlers: {
+        onUsernameChange: (value: string) => {
+          taskpaneViewState.inputValues.usernameInput = value;
+          renderTaskpane();
+        },
+        onPasswordChange: (value: string) => {
+          taskpaneViewState.inputValues.passwordInput = value;
+          renderTaskpane();
+        },
+        onNewPasswordChange: (value: string) => {
+          taskpaneViewState.inputValues.newPasswordInput = value;
+          renderTaskpane();
+        },
+        onLoginClick: () => void handleLoginClick(),
+        onResetPasswordClick: () => void handleResetPasswordClick(),
+        onCancelResetPasswordClick: handleCancelResetPasswordClick,
+        onConfirmResetPasswordClick: () => void handleConfirmResetPasswordClick(),
+        onAddDeviceClick: () => void runGuarded(() => withLoginGuard(() => openDialog())),
+        onModifyDeviceClick: () =>
+          void runGuardedWithModal(async () => {
+            ensureLoggedInOrThrow();
+            await devCraftController.openDevModifyDialog();
+          }),
+        onGenerateSheetClick: () => void runGuarded(() => withLoginGuard(() => handleGenerateSheetClick())),
+        onQueryPriceClick: () => void runGuarded(() => withLoginGuard(() => openQueryPriceDialog())),
+        onGraphEditorClick: () => void runGuarded(() => withLoginGuard(() => openGraphEditorDialog())),
+        onInfoReferenceClick: () => void runGuarded(() => withLoginGuard(() => openInfoReferenceDialog())),
+        onGenerateQuoteClick: () => void runGuarded(() => withLoginGuard(() => handleGenerateQuoteClick())),
+        onGenerateSimpleQuoteClick: () => void runGuarded(() => withLoginGuard(() => handleGenerateSimpleTemplateClick())),
+        onGenerateDetailQuoteClick: () => void runGuarded(() => withLoginGuard(() => handleGenerateDetailTemplateClick())),
+        onAccountDockToggle: handleAccountDockToggle,
+        onConfirmGenerateTemplateOk: () => resolveGenerateTemplateConfirm(true),
+        onConfirmGenerateTemplateCancel: () => resolveGenerateTemplateConfirm(false),
+        onOperationErrorOk: resolveOperationErrorModal,
+      },
+    })
+  );
+}
+
+function resolveGenerateTemplateConfirm(value: boolean) {
+  taskpaneViewState.generateTemplateConfirmOpen = false;
+  const resolver = generateTemplateConfirmResolver;
+  generateTemplateConfirmResolver = null;
+  renderTaskpane();
+  resolver?.(value);
+}
+
+function resolveOperationErrorModal() {
+  taskpaneViewState.operationErrorOpen = false;
+  const resolver = operationErrorResolver;
+  operationErrorResolver = null;
+  renderTaskpane();
+  resolver?.();
+}
 
 type InfoRefDeviceRow = {
   cToP: string[];
@@ -46,45 +171,26 @@ type InfoRefPayload = {
   columnWidths: number[];
 };
 
-Office.onReady((info) => {
-  if (info.host === Office.HostType.Excel) {
-    applyStaticText();
-    document.getElementById("sideload-msg").style.display = "none";
-    document.getElementById("app-body").style.display = "flex";
+type GraphEditorDialogPayload = {
+  cache: any | null;
+  graph: WorkbookGraphPayload | null;
+  quoteProductNames: string[];
+  libraryEntries: GraphProductLibraryEntry[];
+};
 
-    (window as any).openDialog = openDialog;
-    (window as any).openDevModifyDialog = devCraftController.openDevModifyDialog;
-    (window as any).openCraftModifyDialog = devCraftController.openCraftModifyDialog;
-    (window as any).openQueryPriceDialog = openQueryPriceDialog;
-    (window as any).createQuotationSheet = createQuotationSheet;
-    (window as any).handleLoginClick = handleLoginClick;
-    (window as any).handleResetPasswordClick = handleResetPasswordClick;
-    (window as any).handleCancelResetPasswordClick = handleCancelResetPasswordClick;
-    (window as any).handleConfirmResetPasswordClick = handleConfirmResetPasswordClick;
-    (window as any).handleAddDeviceClick = () => runGuarded(() => withLoginGuard(() => openDialog()));
-    (window as any).handleModifyDeviceClick = () =>
-      runGuardedWithModal(async () => {
-        ensureLoggedInOrThrow();
-        await devCraftController.openDevModifyDialog();
-      });
-    (window as any).handleGenerateSheetClick = () => runGuarded(() => withLoginGuard(() => handleGenerateSheetClick()));
-    (window as any).handleGenerateSimpleTemplateClick = () =>
-      runGuarded(() => withLoginGuard(() => handleGenerateSimpleTemplateClick()));
-    (window as any).handleGenerateDetailTemplateClick = () =>
-      runGuarded(() => withLoginGuard(() => handleGenerateDetailTemplateClick()));
-    (window as any).handleGenerateQuoteClick = () =>
-      runGuarded(() => withLoginGuard(() => handleGenerateQuoteClick()));
-    (window as any).handleQueryPriceClick = () => runGuarded(() => withLoginGuard(() => openQueryPriceDialog()));
-    (window as any).handleGraphEditorClick = () => runGuarded(() => withLoginGuard(() => openGraphEditorDialog()));
-    (window as any).handleInfoReferenceClick = () =>
-      runGuarded(() => withLoginGuard(() => openInfoReferenceDialog()));
-    (window as any).handleAccountDockToggle = handleAccountDockToggle;
+Office.onReady((info) => {
+  const rootEl = document.getElementById("root");
+  if (rootEl && !taskpaneRoot) {
+    taskpaneRoot = createRoot(rootEl);
+  }
+  if (info.host === Office.HostType.Excel) {
+    taskpaneViewState.isExcelReady = true;
+    applyStaticText();
     restoreAuthState();
-    bindLoginInputEvents();
-    bindGenerateTemplateDrawerAutoClose();
     void refreshLoginStatus();
     warmUpDialogResources();
   }
+  renderTaskpane();
 });
 
 function applyStaticText() {
@@ -109,42 +215,34 @@ function applyStaticText() {
   setResetPasswordMode(false);
   setAuthFeedback("");
   setActionFeedback("");
+  renderTaskpane();
 }
 
 function setText(id: string, text: string) {
-  const el = document.getElementById(id);
-  if (el) {
-    el.textContent = text;
-  }
+  taskpaneViewState.texts[id] = text;
+  renderTaskpane();
 }
 
 function setButtonDisabled(id: string, disabled: boolean) {
-  const el = document.getElementById(id) as HTMLButtonElement | null;
-  if (el) {
-    el.disabled = disabled;
-  }
+  taskpaneViewState.buttonDisabled[id] = disabled;
+  renderTaskpane();
 }
 
 function toggleHidden(id: string, hidden: boolean) {
-  const el = document.getElementById(id);
-  if (el) {
-    el.classList.toggle("is-hidden", hidden);
-  }
+  void id;
+  void hidden;
 }
 
 function setAuthFeedback(message: string, kind: "error" | "success" | "pending" | "" = "") {
-  const el = document.getElementById("authFeedbackLabel");
-  if (el) {
-    el.textContent = message;
-    el.className = kind ? `auth-feedback ${kind}` : "auth-feedback";
-  }
+  taskpaneViewState.authFeedback = message;
+  taskpaneViewState.authFeedbackKind = kind;
+  renderTaskpane();
 }
 
 function setActionFeedback(message: string, kind: "error" | "success" | "pending" | "" = "") {
-  const el = document.getElementById("actionFeedbackLabel");
-  if (!el) return;
-  el.textContent = message;
-  el.className = kind ? `action-feedback ${kind}` : "action-feedback";
+  taskpaneViewState.actionFeedback = message;
+  taskpaneViewState.actionFeedbackKind = kind;
+  renderTaskpane();
 }
 
 function notifyVisibleError(message: string) {
@@ -178,70 +276,34 @@ function ensureLoggedInOrThrow() {
 
 function setAccountDockExpanded(expanded: boolean) {
   isAccountDockExpanded = expanded;
-  const dock = document.getElementById("accountDock");
-  dock?.classList.toggle("is-expanded", expanded);
+  taskpaneViewState.isAccountDockExpanded = expanded;
+  renderTaskpane();
 }
 
 function getTrimmedInputValue(id: string) {
-  const el = document.getElementById(id) as HTMLInputElement | null;
-  return (el?.value || "").trim();
+  return String(taskpaneViewState.inputValues[id] || "").trim();
 }
 
 function getRawInputValue(id: string) {
-  const el = document.getElementById(id) as HTMLInputElement | null;
-  return el?.value || "";
+  return String(taskpaneViewState.inputValues[id] || "");
 }
 
 function setInputValue(id: string, value: string) {
-  const el = document.getElementById(id) as HTMLInputElement | null;
-  if (el) {
-    el.value = value;
-  }
+  taskpaneViewState.inputValues[id] = value;
+  renderTaskpane();
 }
 
 function setInputDisabled(id: string, disabled: boolean) {
-  const el = document.getElementById(id) as HTMLInputElement | null;
-  if (el) {
-    el.disabled = disabled;
-  }
+  taskpaneViewState.inputDisabled[id] = disabled;
+  renderTaskpane();
 }
 
 function bindLoginInputEvents() {
-  const passwordInput = document.getElementById("passwordInput") as HTMLInputElement | null;
-  const newPasswordInput = document.getElementById("newPasswordInput") as HTMLInputElement | null;
-  const usernameInput = document.getElementById("usernameInput") as HTMLInputElement | null;
-
-  usernameInput?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      void handleLoginClick();
-    }
-  });
-  passwordInput?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      void handleLoginClick();
-    }
-  });
-  newPasswordInput?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      void handleConfirmResetPasswordClick();
-    }
-  });
+  // handled by React
 }
 
 function bindGenerateTemplateDrawerAutoClose() {
-  const actionPanel = document.getElementById("actionPanel");
-  if (!actionPanel) return;
-  actionPanel.addEventListener("click", (evt) => {
-    const target = evt.target as HTMLElement | null;
-    const btn = target?.closest("button");
-    if (!btn) return;
-    const id = String((btn as HTMLButtonElement).id || "");
-    if (!id || id === "generateQuoteBtn") return;
-    toggleGenerateTemplateDrawer(false);
-  });
+  // handled by React callbacks
 }
 
 export async function run() {
@@ -350,12 +412,9 @@ async function handleGenerateSheetClick() {
 }
 
 function toggleGenerateTemplateDrawer(forceOpen?: boolean) {
-  const drawer = document.getElementById("generateTemplateDrawer");
-  const triggerBtn = document.getElementById("generateQuoteBtn");
-  if (!drawer) return;
-  const willOpen = typeof forceOpen === "boolean" ? forceOpen : drawer.classList.contains("is-hidden");
-  drawer.classList.toggle("is-hidden", !willOpen);
-  triggerBtn?.classList.toggle("active", willOpen);
+  const willOpen = typeof forceOpen === "boolean" ? forceOpen : !taskpaneViewState.isGenerateTemplateDrawerOpen;
+  taskpaneViewState.isGenerateTemplateDrawerOpen = willOpen;
+  renderTaskpane();
 }
 
 async function handleGenerateSimpleTemplateClick() {
@@ -378,77 +437,19 @@ function clearTemplateCachesBeforeGenerate() {
 }
 
 function showGenerateTemplateConfirm(): Promise<boolean> {
-  const modal = document.getElementById("generateTemplateConfirmModal");
-  const okBtn = document.getElementById("confirmGenerateTemplateOk") as HTMLButtonElement | null;
-  const cancelBtn = document.getElementById("confirmGenerateTemplateCancel") as HTMLButtonElement | null;
-
-  if (!modal || !okBtn || !cancelBtn) {
-    return Promise.resolve(true);
-  }
-
   return new Promise((resolve) => {
-    let settled = false;
-    const cleanup = () => {
-      okBtn.removeEventListener("click", onOk);
-      cancelBtn.removeEventListener("click", onCancel);
-      modal.classList.add("is-hidden");
-      document.removeEventListener("keydown", onKeydown);
-    };
-    const settle = (value: boolean) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve(value);
-    };
-    const onOk = () => settle(true);
-    const onCancel = () => settle(false);
-    const onKeydown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        settle(false);
-      }
-    };
-
-    modal.classList.remove("is-hidden");
-    okBtn.addEventListener("click", onOk, { once: true });
-    cancelBtn.addEventListener("click", onCancel, { once: true });
-    document.addEventListener("keydown", onKeydown);
+    generateTemplateConfirmResolver = resolve;
+    taskpaneViewState.generateTemplateConfirmOpen = true;
+    renderTaskpane();
   });
 }
 
 function showOperationErrorModal(message: string): Promise<void> {
-  const modal = document.getElementById("operationErrorModal");
-  const msg = document.getElementById("operationErrorMessage");
-  const okBtn = document.getElementById("operationErrorOk") as HTMLButtonElement | null;
-  if (!modal || !okBtn || !msg) {
-    return Promise.resolve();
-  }
-
-  msg.textContent = String(message || "操作失败，请稍后重试。");
   return new Promise((resolve) => {
-    let settled = false;
-    const cleanup = () => {
-      okBtn.removeEventListener("click", onOk);
-      modal.classList.add("is-hidden");
-      document.removeEventListener("keydown", onKeydown);
-    };
-    const settle = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve();
-    };
-    const onOk = () => settle();
-    const onKeydown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" || e.key === "Enter") {
-        e.preventDefault();
-        settle();
-      }
-    };
-
-    modal.classList.remove("is-hidden");
-    okBtn.addEventListener("click", onOk, { once: true });
-    document.addEventListener("keydown", onKeydown);
+    operationErrorResolver = resolve;
+    taskpaneViewState.operationErrorMessage = String(message || "操作失败，请稍后重试。");
+    taskpaneViewState.operationErrorOpen = true;
+    renderTaskpane();
   });
 }
 
@@ -588,26 +589,48 @@ async function readInfoReferenceDevicesFromWorkbook(): Promise<InfoRefPayload> {
 async function openGraphEditorDialog() {
   const dialog = await displayDialog(DIALOG_PATHS.graphEditor, DIALOG_SIZES.graphEditor);
   dialog.addEventHandler(Office.EventType.DialogMessageReceived, (args) => {
-    try {
-      const payload = JSON.parse(String(args.message || "{}"));
-      if (payload?.type === GRAPH_EDITOR_REQUEST_MSG) {
-        const raw = localStorage.getItem(GRAPH_STORE_DEV_CACHE_KEY);
-        const cache = raw ? JSON.parse(raw) : null;
-        const message = JSON.stringify({
-          type: GRAPH_EDITOR_TEMPLATES_MSG,
-          data: cache || null,
-        });
-        // DialogApi 1.2: send data from taskpane to dialog
-        (dialog as any).messageChild(message);
-        return;
-      }
-      if (payload?.type === GRAPH_EDITOR_SAVE_REQUEST_MSG) {
-        void handleGraphEditorSaveRequest(dialog, payload);
-      }
-    } catch {
-      // ignore malformed dialog messages
-    }
+    void handleGraphEditorDialogMessage(dialog, args);
   });
+  await pushGraphEditorPayloadToDialog(dialog);
+}
+
+async function handleGraphEditorDialogMessage(dialog: Office.Dialog, args: any) {
+  try {
+    const payload = JSON.parse(String(args?.message || "{}"));
+    if (payload?.type === GRAPH_EDITOR_REQUEST_MSG) {
+      await pushGraphEditorPayloadToDialog(dialog);
+      return;
+    }
+    if (payload?.type === GRAPH_EDITOR_SAVE_REQUEST_MSG) {
+      await handleGraphEditorSaveRequest(dialog, payload);
+    }
+  } catch {
+    // ignore malformed dialog messages
+  }
+}
+
+async function buildGraphEditorDialogPayload(): Promise<GraphEditorDialogPayload> {
+  const raw = localStorage.getItem(GRAPH_STORE_DEV_CACHE_KEY);
+  const cache = raw ? JSON.parse(raw) : null;
+  const graph = await loadGraphFromWorkbook().catch(() => null);
+  const quoteProductNames = await loadQuoteConfigProductsFromWorkbook().catch(() => []);
+  const libraryEntries = await loadGraphProductLibraryEntries().catch(() => []);
+  return {
+    cache,
+    graph,
+    quoteProductNames,
+    libraryEntries,
+  };
+}
+
+async function pushGraphEditorPayloadToDialog(dialog: Office.Dialog) {
+  const payload = await buildGraphEditorDialogPayload();
+  (dialog as any).messageChild(
+    JSON.stringify({
+      type: GRAPH_EDITOR_TEMPLATES_MSG,
+      data: payload,
+    })
+  );
 }
 
 async function handleGraphEditorSaveRequest(dialog: Office.Dialog, payload: any) {

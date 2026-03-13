@@ -5,40 +5,61 @@ import { createRoot } from "react-dom/client";
 import { Circle, Group, Image as KonvaImage, Label, Layer, Line, Rect, Stage, Tag, Text } from "react-konva";
 import { getPortDisplayName, getPortUsageSummary, isConnectionAllowed } from "./connectionRules";
 import { buildDefaultScene, createProductFromTemplate, PRODUCT_LIBRARY } from "./productLibrary";
+import { QuoteLibraryResolvedItem, resolveTemplateFromProductName, resolveTemplateThumbnail } from "./productLibraryLookup";
 import { GraphScene, MaterialFlowLink, ProductComponent, ProductModel, SelectedTarget, ViewMode } from "./sceneTypes";
-import { loadGraphFromWorkbook, saveGraphToWorkbook } from "./workbookStore";
+import { GraphProductLibraryEntry, WorkbookGraphPayload } from "./workbookStore";
+import { useContainerSize, useLoadedImage } from "../shared/konvaHooks";
 
 const WORLD_W = 7200;
 const WORLD_H = 4200;
 const GRID_MAJOR = 180;
 const GRID_MINOR = 45;
+const GRAPH_EDITOR_TEMPLATES_MSG = "graph_editor_templates";
+const GRAPH_EDITOR_REQUEST_MSG = "graph_editor_request_templates";
+const GRAPH_EDITOR_SAVE_REQUEST_MSG = "graph_editor_save_request";
+const GRAPH_EDITOR_SAVE_RESULT_MSG = "graph_editor_save_result";
+
+type QuoteLibraryItem = QuoteLibraryResolvedItem & {
+  key: string;
+};
+
+type DrawerMode = "products" | "tools" | null;
+type DragLibraryPayload = {
+  source: "products" | "tools";
+  templateId: string;
+  deviceName: string;
+};
+
+type GraphEditorDialogPayload = {
+  cache: unknown | null;
+  graph: WorkbookGraphPayload | null;
+  quoteProductNames: string[];
+  libraryEntries: GraphProductLibraryEntry[];
+};
+
+let pendingDialogPayloadResolver: ((payload: GraphEditorDialogPayload) => void) | null = null;
+let pendingSaveRequestSeq = 0;
+const pendingSaveRequests = new Map<
+  string,
+  {
+    resolve: () => void;
+    reject: (error: Error) => void;
+    timer: number;
+  }
+>();
+let activeDragLibraryPayload: DragLibraryPayload | null = null;
 
 function cloneDefaultScene() {
   return buildDefaultScene();
 }
 
-function asScene(raw: Awaited<ReturnType<typeof loadGraphFromWorkbook>>): GraphScene {
+function asScene(raw: WorkbookGraphPayload | null): GraphScene {
   if (!raw?.graph?.nodes || !Array.isArray(raw.graph.nodes) || raw.graph.nodes.length === 0) return cloneDefaultScene();
   return {
     updatedAt: String(raw.updatedAt || raw.graph.updatedAt || new Date().toISOString()),
     products: raw.graph.nodes as ProductModel[],
     links: Array.isArray(raw.graph.edges) ? (raw.graph.edges as MaterialFlowLink[]) : [],
   };
-}
-
-function useContainerSize() {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = useState({ width: 1200, height: 720 });
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-    const update = () => setSize({ width: Math.max(320, element.clientWidth), height: Math.max(320, element.clientHeight) });
-    update();
-    const observer = new window.ResizeObserver(update);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  return { ref, size };
 }
 
 function useDashOffset(active: boolean) {
@@ -59,43 +80,6 @@ function useDashOffset(active: boolean) {
     return () => window.cancelAnimationFrame(raf);
   }, [active]);
   return offset;
-}
-
-function useLoadedImage(src?: string, fallbackSrc?: string) {
-  const [state, setState] = useState<{ image: HTMLImageElement | null; usedFallback: boolean }>({
-    image: null,
-    usedFallback: false,
-  });
-
-  useEffect(() => {
-    const primary = String(src || "").trim();
-    const fallback = String(fallbackSrc || "").trim();
-    if (!primary && !fallback) {
-      setState({ image: null, usedFallback: false });
-      return;
-    }
-    const img = new window.Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => setState({ image: img, usedFallback: false });
-    img.onerror = () => {
-      if (!fallback || primary === fallback) {
-        setState({ image: null, usedFallback: false });
-        return;
-      }
-      const fallbackImg = new window.Image();
-      fallbackImg.crossOrigin = "anonymous";
-      fallbackImg.onload = () => setState({ image: fallbackImg, usedFallback: true });
-      fallbackImg.onerror = () => setState({ image: null, usedFallback: false });
-      fallbackImg.src = fallback;
-    };
-    img.src = primary || fallback;
-    return () => {
-      img.onload = null;
-      img.onerror = null;
-    };
-  }, [src, fallbackSrc]);
-
-  return state;
 }
 
 function LayeredComponentImage({
@@ -240,6 +224,74 @@ function findPort(scene: GraphScene, productId: string, componentId: string, por
   return found.component.ports?.find((port) => port.id === portId) || null;
 }
 
+function normalizePortDirection(direction?: "in" | "out" | "both") {
+  return direction || "both";
+}
+
+function getPortColorPalette(direction?: "in" | "out" | "both") {
+  const normalized = normalizePortDirection(direction);
+  if (normalized === "in") {
+    return {
+      baseFill: "#4b8fe8",
+      baseStroke: "#2f6fbe",
+      haloFill: "rgba(75, 143, 232, 0.12)",
+      haloStroke: "rgba(75, 143, 232, 0.42)",
+    };
+  }
+  if (normalized === "out") {
+    return {
+      baseFill: "#f08a32",
+      baseStroke: "#c56a1f",
+      haloFill: "rgba(240, 138, 50, 0.12)",
+      haloStroke: "rgba(240, 138, 50, 0.42)",
+    };
+  }
+  return {
+    baseFill: "#7a8797",
+    baseStroke: "#607080",
+    haloFill: "rgba(122, 135, 151, 0.12)",
+    haloStroke: "rgba(96, 112, 128, 0.42)",
+  };
+}
+
+function getPortOccupiedState(
+  usage: { asSource: number; asTarget: number },
+  direction?: "in" | "out" | "both"
+) {
+  const normalized = normalizePortDirection(direction);
+  if (normalized === "in") {
+    return {
+      occupied: usage.asTarget > 0,
+      label: usage.asTarget > 0 ? " · 已接入" : "",
+    };
+  }
+  if (normalized === "out") {
+    return {
+      occupied: usage.asSource > 0,
+      label: usage.asSource > 0 ? " · 已输出" : "",
+    };
+  }
+  const occupied = usage.asSource > 0 || usage.asTarget > 0;
+  return {
+    occupied,
+    label: occupied ? " · occupied" : "",
+  };
+}
+
+function getPortOccupiedText(
+  usage: { asSource: number; asTarget: number },
+  direction?: "in" | "out" | "both"
+) {
+  const normalized = normalizePortDirection(direction);
+  if (normalized === "in") {
+    return usage.asTarget > 0 ? "已接入" : "空闲";
+  }
+  if (normalized === "out") {
+    return usage.asSource > 0 ? "已输出" : "空闲";
+  }
+  return usage.asSource > 0 || usage.asTarget > 0 ? "已占用" : "空闲";
+}
+
 function getRect(scene: GraphScene, productId: string, componentId: string) {
   const found = findComponent(scene, productId, componentId);
   if (!found) return null;
@@ -279,6 +331,12 @@ function getLinkPoints(scene: GraphScene, link: MaterialFlowLink) {
   return [x1, y1, mx, y1, mx, y2, x2, y2];
 }
 
+function isPipeLink(scene: GraphScene, link: MaterialFlowLink) {
+  const fromComponent = findComponent(scene, link.from.productId, link.from.componentId)?.component;
+  const toComponent = findComponent(scene, link.to.productId, link.to.componentId)?.component;
+  return fromComponent?.kind === "pipe" || toComponent?.kind === "pipe";
+}
+
 function getPreviewLinkPoints(
   scene: GraphScene,
   source: { productId: string; componentId: string; portId?: string },
@@ -299,6 +357,14 @@ function getConnectedLinks(scene: GraphScene, productId: string, componentId: st
     (link.from.productId === productId && link.from.componentId === componentId && link.from.portId === portId) ||
     (link.to.productId === productId && link.to.componentId === componentId && link.to.portId === portId)
   );
+}
+
+function getProductInstanceLabel(scene: GraphScene, productId: string) {
+  const product = scene.products.find((item) => item.id === productId);
+  if (!product) return productId;
+  const sameNameProducts = scene.products.filter((item) => item.name === product.name);
+  const index = sameNameProducts.findIndex((item) => item.id === productId);
+  return `${product.name} #${Math.max(index + 1, 1)}`;
 }
 
 function ComponentShape({
@@ -371,21 +437,27 @@ function ProductNode({
   product,
   selected,
   hoveredComponentId,
+  hoveredPort,
   connectSource,
   onSelect,
   onSelectPort,
   onMove,
   onHoverChange,
+  onHoverPortChange,
+  onContextMenu,
 }: {
   scene: GraphScene;
   product: ProductModel;
   selected: SelectedTarget;
   hoveredComponentId: string;
+  hoveredPort: { productId: string; componentId: string; portId: string } | null;
   connectSource: SelectedTarget;
   onSelect: (productId: string, componentId: string) => void;
   onSelectPort: (productId: string, componentId: string, portId: string) => void;
   onMove: (productId: string, x: number, y: number) => void;
   onHoverChange: (productId: string, componentId: string, hovered: boolean) => void;
+  onHoverPortChange: (port: { productId: string; componentId: string; portId: string } | null) => void;
+  onContextMenu: (evt: any, productId: string, componentId: string) => void;
 }) {
   const transform = getTransform(product.viewMode);
   const orderedComponents = useMemo(
@@ -437,7 +509,13 @@ function ProductNode({
             ) &&
             hoveredComponentId === component.id;
           return (
-            <Group key={component.id}>
+            <Group
+              key={component.id}
+              onContextMenu={(evt) => {
+                evt.evt.preventDefault();
+                onContextMenu(evt, product.id, component.id);
+              }}
+            >
               <ComponentShape
                 component={component}
                 selected={isSelected || isConnectSource}
@@ -457,23 +535,37 @@ function ProductNode({
         {orderedComponents
           .filter((component) => Array.isArray(component.ports) && component.ports.length > 0)
           .map((component) =>
-            component.ports?.map((port) => (
+            component.ports?.map((port) => {
+              const usage = getPortUsageSummary(scene, { productId: product.id, componentId: component.id, portId: port.id });
+              const palette = getPortColorPalette(port.direction);
+              const occupiedState = getPortOccupiedState(usage, port.direction);
+              const isCurrentSource =
+                connectSource?.type === "port" &&
+                connectSource.productId === product.id &&
+                connectSource.componentId === component.id &&
+                connectSource.portId === port.id;
+              const isCurrentHover =
+                hoveredPort?.productId === product.id &&
+                hoveredPort.componentId === component.id &&
+                hoveredPort.portId === port.id;
+              const isCurrentSelected =
+                selected?.type === "port" &&
+                selected.productId === product.id &&
+                selected.componentId === component.id &&
+                selected.portId === port.id;
+              const isConnectableTarget =
+                connectSource?.type === "port" &&
+                isConnectionAllowed(scene, connectSource, { productId: product.id, componentId: component.id, portId: port.id });
+              const isOccupied = occupiedState.occupied;
+              return (
               <Group key={`${component.id}_${port.id}`} x={component.x + port.x} y={component.y + port.y}>
-              {(hoveredComponentId === component.id ||
-                (selected?.type === "component" && selected.productId === product.id && selected.componentId === component.id) ||
-                (connectSource?.type === "port" && connectSource.productId === product.id && connectSource.componentId === component.id && connectSource.portId === port.id)) ? (
+              {isCurrentHover ? (
                 <>
                   <Circle radius={11} fill="rgba(96,112,128,0.12)" />
                   <Label x={10} y={-26}>
                     <Tag fill="rgba(255,255,255,0.95)" cornerRadius={8} />
                     <Text
-                      text={`${port.name}${port.direction ? ` · ${port.direction}` : ""}${(() => {
-                        const usage = getPortUsageSummary(scene, { productId: product.id, componentId: component.id, portId: port.id });
-                        if (usage.asSource > 0 || usage.asTarget > 0) {
-                          return " · occupied";
-                        }
-                        return "";
-                      })()}`}
+                      text={`${port.name}${port.direction ? ` · ${port.direction}` : ""}${occupiedState.label}`}
                       padding={6}
                       fontSize={11}
                       fill="#334155"
@@ -481,93 +573,330 @@ function ProductNode({
                   </Label>
                 </>
               ) : null}
-              {connectSource?.type === "port" && isConnectionAllowed(scene, connectSource, { productId: product.id, componentId: component.id, portId: port.id }) ? (
+              {isConnectableTarget ? (
                 <Circle
-                  radius={hoveredComponentId === component.id ? 13.5 : 10}
-                  fill={hoveredComponentId === component.id ? "rgba(87, 182, 112, 0.18)" : "rgba(87, 182, 112, 0.10)"}
-                  stroke={hoveredComponentId === component.id ? "#57b670" : "rgba(87, 182, 112, 0.55)"}
-                  strokeWidth={hoveredComponentId === component.id ? 2 : 1.5}
-                  dash={hoveredComponentId === component.id ? undefined : [4, 4]}
+                  radius={hoveredComponentId === component.id ? 17 : 14}
+                  fill={hoveredComponentId === component.id ? "rgba(87, 182, 112, 0.22)" : "rgba(87, 182, 112, 0.12)"}
+                  stroke={hoveredComponentId === component.id ? "#57b670" : "rgba(87, 182, 112, 0.72)"}
+                  strokeWidth={hoveredComponentId === component.id ? 2.5 : 2}
+                  dash={hoveredComponentId === component.id ? undefined : [5, 4]}
                 />
               ) : null}
               <Circle
-                radius={hoveredComponentId === component.id ? 5.5 : 4}
+                radius={8.5}
+                fill={isConnectableTarget ? "rgba(255,255,255,0.98)" : palette.haloFill}
+                stroke={isConnectableTarget ? "#57b670" : palette.haloStroke}
+                strokeWidth={1}
+              />
+              <Circle
+                radius={16}
+                fill="rgba(255,255,255,0.001)"
+                onMouseEnter={() => {
+                  console.log("[graphEditor] hovered port", {
+                    productId: product.id,
+                    productName: product.name,
+                    componentId: component.id,
+                    componentName: component.name,
+                    portId: port.id,
+                    portName: port.name,
+                    direction: port.direction || "both",
+                    usage,
+                  });
+                  onHoverPortChange({ productId: product.id, componentId: component.id, portId: port.id });
+                }}
+                onMouseLeave={() => {
+                  onHoverPortChange((hoveredPort &&
+                    hoveredPort.productId === product.id &&
+                    hoveredPort.componentId === component.id &&
+                    hoveredPort.portId === port.id)
+                      ? null
+                      : hoveredPort);
+                }}
+                onClick={() => onSelectPort(product.id, component.id, port.id)}
+                onTap={() => onSelectPort(product.id, component.id, port.id)}
+              />
+              <Circle
+                radius={hoveredComponentId === component.id ? 7 : 5.5}
                 fill={
-                  connectSource?.type === "port" && connectSource.productId === product.id && connectSource.componentId === component.id && connectSource.portId === port.id
+                  isCurrentSource
                     ? "#c54a39"
-                    : (() => {
-                        const usage = getPortUsageSummary(scene, { productId: product.id, componentId: component.id, portId: port.id });
-                        if (usage.asSource > 0 || usage.asTarget > 0) {
-                          return "#f59e0b";
-                        }
-                        return hoveredComponentId === component.id && isConnectionAllowed(scene, connectSource, { productId: product.id, componentId: component.id, portId: port.id })
-                          ? "#57b670"
-                          : "#ffffff";
-                      })()
+                    : isOccupied
+                      ? "#f59e0b"
+                      : isConnectableTarget
+                        ? "#57b670"
+                        : palette.baseFill
                 }
                 stroke={
-                  (() => {
-                    const usage = getPortUsageSummary(scene, { productId: product.id, componentId: component.id, portId: port.id });
-                    if (usage.asSource > 0 || usage.asTarget > 0) {
-                      return "#d97706";
-                    }
-                    if (hoveredComponentId === component.id && isConnectionAllowed(scene, connectSource, { productId: product.id, componentId: component.id, portId: port.id })) {
-                      return "#57b670";
-                    }
-                    return hoveredComponentId === component.id ? "#8a9cb2" : "#607080";
-                  })()
+                  isOccupied
+                    ? "#d97706"
+                    : isConnectableTarget
+                      ? "#57b670"
+                      : hoveredComponentId === component.id
+                        ? palette.baseStroke
+                        : palette.baseStroke
                 }
-                strokeWidth={1.5}
+                strokeWidth={2}
                 onClick={() => onSelectPort(product.id, component.id, port.id)}
                 onTap={() => onSelectPort(product.id, component.id, port.id)}
               />
               </Group>
-            ))
+            )})
           )}
       </Group>
     </Group>
   );
 }
 
-function FlowLink({ scene, link, selected, onSelect }: { scene: GraphScene; link: MaterialFlowLink; selected: boolean; onSelect: () => void }) {
+function FlowLink({
+  scene,
+  link,
+  selected,
+  onSelect,
+  onContextMenu,
+}: {
+  scene: GraphScene;
+  link: MaterialFlowLink;
+  selected: boolean;
+  onSelect: () => void;
+  onContextMenu: (evt: any) => void;
+}) {
   const dashOffset = useDashOffset(link.flow === "flowing");
   const points = useMemo(() => getLinkPoints(scene, link), [scene, link]);
+  const pipeLink = useMemo(() => isPipeLink(scene, link), [scene, link]);
   if (points.length === 0) return null;
   return (
-    <Group onClick={onSelect} onTap={onSelect}>
-      <Line points={points} stroke="rgba(56,65,81,0.18)" strokeWidth={10} lineCap="round" lineJoin="round" />
-      <Line points={points} stroke={selected ? "#c54a39" : "#596476"} strokeWidth={4} lineCap="round" lineJoin="round" />
-      {link.flow === "flowing" ? (
-        <Line points={points} stroke="#79c26e" strokeWidth={2} dash={[12, 10]} dashOffset={dashOffset} lineCap="round" lineJoin="round" />
-      ) : null}
+    <Group
+      onClick={onSelect}
+      onTap={onSelect}
+      onContextMenu={(evt) => {
+        evt.evt.preventDefault();
+        onContextMenu(evt);
+      }}
+    >
+      {pipeLink ? (
+        <>
+          <Line
+            points={points}
+            stroke={selected ? "rgba(197,69,52,0.30)" : "rgba(83, 97, 116, 0.22)"}
+            strokeWidth={30}
+            lineCap="round"
+            lineJoin="round"
+          />
+          <Line
+            points={points}
+            stroke={selected ? "#c54a39" : "#aeb9c7"}
+            strokeWidth={24}
+            lineCap="round"
+            lineJoin="round"
+          />
+          <Line
+            points={points}
+            stroke="rgba(255,255,255,0.42)"
+            strokeWidth={6}
+            lineCap="round"
+            lineJoin="round"
+          />
+          {link.flow === "flowing" ? (
+            <Line
+              points={points}
+              stroke="rgba(121,194,110,0.55)"
+              strokeWidth={3}
+              dash={[14, 12]}
+              dashOffset={dashOffset}
+              lineCap="round"
+              lineJoin="round"
+            />
+          ) : null}
+        </>
+      ) : (
+        <>
+          <Line
+            points={points}
+            stroke="rgba(56,65,81,0.18)"
+            strokeWidth={10}
+            lineCap="round"
+            lineJoin="round"
+          />
+          <Line
+            points={points}
+            stroke={selected ? "#c54a39" : "#596476"}
+            strokeWidth={4}
+            lineCap="round"
+            lineJoin="round"
+          />
+          {link.flow === "flowing" ? (
+            <Line
+              points={points}
+              stroke="#79c26e"
+              strokeWidth={2}
+              dash={[12, 10]}
+              dashOffset={dashOffset}
+              lineCap="round"
+              lineJoin="round"
+            />
+          ) : null}
+        </>
+      )}
     </Group>
   );
 }
 
 function PreviewLink({
   points,
+  pipeStyle = false,
 }: {
   points: number[];
+  pipeStyle?: boolean;
 }) {
   if (points.length === 0) return null;
   return (
     <Group listening={false}>
-      <Line points={points} stroke="rgba(94, 115, 140, 0.18)" strokeWidth={10} lineCap="round" lineJoin="round" />
-      <Line points={points} stroke="#6f849f" strokeWidth={3} dash={[10, 8]} lineCap="round" lineJoin="round" />
-      <Circle x={points[points.length - 2]} y={points[points.length - 1]} radius={4.5} fill="#6f849f" />
+      {pipeStyle ? (
+        <>
+          <Line points={points} stroke="rgba(83, 97, 116, 0.18)" strokeWidth={28} lineCap="round" lineJoin="round" />
+          <Line points={points} stroke="#aeb9c7" strokeWidth={22} lineCap="round" lineJoin="round" />
+          <Line points={points} stroke="rgba(255,255,255,0.34)" strokeWidth={5} lineCap="round" lineJoin="round" />
+        </>
+      ) : (
+        <>
+          <Line points={points} stroke="rgba(94, 115, 140, 0.18)" strokeWidth={10} lineCap="round" lineJoin="round" />
+          <Line points={points} stroke="#6f849f" strokeWidth={3} dash={[10, 8]} lineCap="round" lineJoin="round" />
+        </>
+      )}
     </Group>
   );
+}
+
+function registerParentMessageHandler() {
+  try {
+    Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: any) => {
+      try {
+        const payload = JSON.parse(String(arg?.message || "{}"));
+        if (payload?.type === GRAPH_EDITOR_TEMPLATES_MSG) {
+          const data = (payload?.data || {}) as GraphEditorDialogPayload;
+          pendingDialogPayloadResolver?.(data);
+          pendingDialogPayloadResolver = null;
+          return;
+        }
+        if (payload?.type === GRAPH_EDITOR_SAVE_RESULT_MSG) {
+          const requestId = String(payload?.requestId || "").trim();
+          if (!requestId) return;
+          const pending = pendingSaveRequests.get(requestId);
+          if (!pending) return;
+          window.clearTimeout(pending.timer);
+          pendingSaveRequests.delete(requestId);
+          if (payload?.ok) {
+            pending.resolve();
+          } else {
+            pending.reject(new Error(String(payload?.message || "父窗口保存失败")));
+          }
+        }
+      } catch {
+        // ignore malformed parent messages
+      }
+    });
+  } catch {
+    // ignore handler registration failures
+  }
+}
+
+function requestDialogPayload(): Promise<GraphEditorDialogPayload> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      if (pendingDialogPayloadResolver === resolveWrapped) {
+        pendingDialogPayloadResolver = null;
+      }
+      reject(new Error("父窗口未返回工作簿数据"));
+    }, 6000);
+    const resolveWrapped = (payload: GraphEditorDialogPayload) => {
+      window.clearTimeout(timer);
+      resolve(payload);
+    };
+    pendingDialogPayloadResolver = resolveWrapped;
+    try {
+      Office.context.ui.messageParent(JSON.stringify({ type: GRAPH_EDITOR_REQUEST_MSG }));
+    } catch (error) {
+      pendingDialogPayloadResolver = null;
+      window.clearTimeout(timer);
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
+}
+
+function requestParentSave(payload: WorkbookGraphPayload): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const requestId = `save_${Date.now()}_${++pendingSaveRequestSeq}`;
+    const timer = window.setTimeout(() => {
+      pendingSaveRequests.delete(requestId);
+      reject(new Error("父窗口保存超时"));
+    }, 8000);
+    pendingSaveRequests.set(requestId, { resolve, reject, timer });
+    try {
+      Office.context.ui.messageParent(
+        JSON.stringify({
+          type: GRAPH_EDITOR_SAVE_REQUEST_MSG,
+          requestId,
+          payload,
+        })
+      );
+    } catch (error) {
+      window.clearTimeout(timer);
+      pendingSaveRequests.delete(requestId);
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
+}
+
+function buildQuoteLibraryItems(productNames: string[], mappingRows: GraphProductLibraryEntry[]): QuoteLibraryItem[] {
+  const productNameList = (productNames || []).map((item) => String(item || "").trim()).filter(Boolean);
+  const mappingByName = new Map(
+    mappingRows.map((item) => [String(item.deviceName || "").trim(), item] as const).filter(([key]) => key)
+  );
+
+  console.log("[graphEditor] 报价配置表设备名称列表:", productNameList);
+  console.log("[graphEditor] 隐藏表产品映射列表:", mappingRows);
+
+  const items = productNameList
+    .map((deviceName, index) => {
+      const mapped = mappingByName.get(deviceName);
+      if (mapped) {
+        return {
+          key: `${mapped.templateId}:${deviceName}:${index}`,
+          deviceName,
+          templateId: mapped.templateId,
+          thumbnailUrl: mapped.thumbnailUrl,
+        } satisfies QuoteLibraryItem;
+      }
+      const template = resolveTemplateFromProductName(deviceName);
+      if (!template) return null;
+      return {
+        key: `${template.templateId}:${deviceName}:${index}`,
+        deviceName,
+        templateId: template.templateId,
+        thumbnailUrl: resolveTemplateThumbnail(template),
+      } satisfies QuoteLibraryItem;
+    })
+    .filter((item): item is QuoteLibraryItem => !!item);
+
+  console.log("[graphEditor] 产品库抽屉最终列表:", items);
+
+  return items;
 }
 
 function App() {
   const { ref, size } = useContainerSize();
   const [scene, setScene] = useState<GraphScene>(cloneDefaultScene);
   const [selected, setSelected] = useState<SelectedTarget>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [status, setStatus] = useState("正在初始化图形编辑器...");
   const [ready, setReady] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("bird");
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(PRODUCT_LIBRARY[0]?.templateId || "");
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>(null);
+  const [quoteLibraryItems, setQuoteLibraryItems] = useState<QuoteLibraryItem[]>([]);
+  const [isRefreshingQuoteLibrary, setIsRefreshingQuoteLibrary] = useState(false);
+  const [connectMode, setConnectMode] = useState(false);
   const [connectSource, setConnectSource] = useState<SelectedTarget>(null);
+  const [hoveredPort, setHoveredPort] = useState<{ productId: string; componentId: string; portId: string } | null>(null);
   const [hoveredComponent, setHoveredComponent] = useState<{ productId: string; componentId: string } | null>(null);
   const [pointerWorld, setPointerWorld] = useState<{ x: number; y: number } | null>(null);
   const [viewport, setViewport] = useState({ scale: 0.42, x: 80, y: 70 });
@@ -578,26 +907,33 @@ function App() {
 
   useEffect(() => {
     let disposed = false;
-    Office.onReady(async () => {
-      try {
-        const stored = await loadGraphFromWorkbook();
-        if (disposed) return;
-        setScene(asScene(stored));
-        setStatus(stored ? "已从工作簿恢复场景。" : "已加载默认工业场景。");
-      } catch (error) {
-        if (disposed) return;
-        setStatus(`读取工作簿失败，已加载默认场景：${String((error as Error)?.message || "未知错误")}`);
-      } finally {
-        if (!disposed) setReady(true);
+      Office.onReady(async () => {
+        registerParentMessageHandler();
+        try {
+          const payload = await requestDialogPayload();
+          if (disposed) return;
+          const restoredScene = asScene(payload.graph);
+          setScene(restoredScene);
+          setQuoteLibraryItems(buildQuoteLibraryItems(payload.quoteProductNames, payload.libraryEntries || []));
+          setStatus(
+            payload.graph
+              ? `已从工作簿恢复场景。设备数=${restoredScene.products.length}，组件数=${restoredScene.products.reduce((sum, product) => sum + (product.components?.length || 0), 0)}`
+              : "当前工作簿暂无画布数据。"
+          );
+        } catch (error) {
+          if (disposed) return;
+          setStatus(`读取工作簿失败：${String((error as Error)?.message || "未知错误")}`);
+        } finally {
+          if (!disposed) setReady(true);
       }
     });
-    return () => {
-      disposed = true;
-    };
-  }, []);
+      return () => {
+        disposed = true;
+      };
+    }, []);
 
-  useEffect(() => {
-    setScene((current) => ({
+    useEffect(() => {
+      setScene((current) => ({
       ...current,
       updatedAt: new Date().toISOString(),
       products: current.products.map((product) => ({ ...product, viewMode })),
@@ -628,6 +964,19 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const closeMenu = () => setContextMenu(null);
+    const closeLibrary = () => setDrawerMode(null);
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("click", closeLibrary);
+    window.addEventListener("blur", closeMenu);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("click", closeLibrary);
+      window.removeEventListener("blur", closeMenu);
+    };
+  }, []);
+
+  useEffect(() => {
     const finishBlankPan = () => {
       blankPanStart.current = null;
       setBlankPanning(false);
@@ -648,7 +997,7 @@ function App() {
     }
     const timer = window.setTimeout(async () => {
       try {
-        await saveGraphToWorkbook({
+        await requestParentSave({
           schemaVersion: "2.0",
           updatedAt: scene.updatedAt,
           graph: { nodes: scene.products, edges: scene.links, updatedAt: scene.updatedAt },
@@ -680,6 +1029,8 @@ function App() {
       toLabel: getPortDisplayName(scene, selectedLink.to),
       fromComponent: findComponent(scene, selectedLink.from.productId, selectedLink.from.componentId),
       toComponent: findComponent(scene, selectedLink.to.productId, selectedLink.to.componentId),
+      fromProductLabel: getProductInstanceLabel(scene, selectedLink.from.productId),
+      toProductLabel: getProductInstanceLabel(scene, selectedLink.to.productId),
     };
   }, [scene, selectedLink]);
 
@@ -736,8 +1087,31 @@ function App() {
     return [];
   }, [scene, connectSource, hoveredComponent, pointerWorld]);
 
+  const previewLinkPipeStyle = useMemo(() => {
+    if (!connectSource || connectSource.type !== "port") return false;
+    const sourceComponent = findComponent(scene, connectSource.productId, connectSource.componentId)?.component;
+    if (sourceComponent?.kind === "pipe") return true;
+    if (!hoveredComponent) return false;
+    const component = findComponent(scene, hoveredComponent.productId, hoveredComponent.componentId)?.component;
+    return component?.kind === "pipe";
+  }, [scene, connectSource, hoveredComponent]);
+
   const updateScene = (next: (current: GraphScene) => GraphScene) =>
     setScene((current) => ({ ...next(current), updatedAt: new Date().toISOString() }));
+
+  const refreshQuoteLibrary = async () => {
+    setIsRefreshingQuoteLibrary(true);
+    try {
+      const payload = await requestDialogPayload();
+      const items = buildQuoteLibraryItems(payload.quoteProductNames, payload.libraryEntries || []);
+      setQuoteLibraryItems(items);
+    } catch (error) {
+      setQuoteLibraryItems([]);
+      setStatus(`读取产品库失败：${String((error as Error)?.message || "未知错误")}`);
+    } finally {
+      setIsRefreshingQuoteLibrary(false);
+    }
+  };
 
   const onSelectComponent = (productId: string, componentId: string) => {
     setSelected({ type: "component", productId, componentId });
@@ -745,6 +1119,16 @@ function App() {
 
   const onSelectPort = (productId: string, componentId: string, portId: string) => {
     const targetPort: SelectedTarget = { type: "port", productId, componentId, portId };
+    if (!connectMode) {
+      setSelected(targetPort);
+      return;
+    }
+    if (!connectSource || connectSource.type !== "port") {
+      setConnectSource(targetPort);
+      setSelected(targetPort);
+      setStatus("已选择源端口，请继续点击目标端口。");
+      return;
+    }
     if (connectSource?.type === "port" && isConnectionAllowed(scene, connectSource, { productId, componentId, portId })) {
       updateScene((current) => ({
         ...current,
@@ -759,16 +1143,29 @@ function App() {
           },
         ],
       }));
+      setConnectMode(false);
       setConnectSource(null);
       setPointerWorld(null);
       setSelected(targetPort);
-      setStatus("已建立端口连接，并启用物流流动动画。");
+      setStatus("已建立端口连接。");
       return;
     }
+    if (
+      connectSource?.type === "port" &&
+      connectSource.productId === productId &&
+      connectSource.componentId === componentId &&
+      connectSource.portId === portId
+    ) {
+      setStatus("请点击另一个目标端口。");
+      setSelected(targetPort);
+      return;
+    }
+    setStatus("当前两个端口不允许建立连接。");
     setSelected(targetPort);
   };
 
   const onDeleteSelected = () => {
+    setContextMenu(null);
     if (!selected) {
       setStatus("请先选中一个设备、端口或连接线。");
       return;
@@ -794,9 +1191,21 @@ function App() {
       setStatus("已删除选中的设备实例。");
     }
     setSelected(null);
+    setConnectMode(false);
     setConnectSource(null);
+    setHoveredPort(null);
     setPointerWorld(null);
     setHoveredComponent(null);
+  };
+
+  const openDeleteMenu = (evt: any, target: SelectedTarget) => {
+    evt.evt.preventDefault();
+    evt.cancelBubble = true;
+    setSelected(target);
+    setContextMenu({
+      x: evt.evt.clientX,
+      y: evt.evt.clientY,
+    });
   };
 
   const onToggleFlow = () => {
@@ -811,31 +1220,71 @@ function App() {
   };
 
   const onBeginConnect = () => {
-    if (!selected || selected.type !== "port") {
-      setStatus("先选中一个端口，再点击“建立连接”。");
+    if (connectMode) {
+      setConnectMode(false);
+      setConnectSource(null);
+      setPointerWorld(null);
+      setStatus("已取消连接模式。");
       return;
     }
-    setConnectSource(selected);
-    setStatus("已进入连接模式，请点击目标端口。");
+    setConnectMode(true);
+    setConnectSource(null);
+    setPointerWorld(null);
+    setStatus("已进入连接模式，请先点击源端口。");
   };
 
-  const onAddProduct = () => {
-    const template =
-      PRODUCT_LIBRARY.find((item) => item.templateId === selectedTemplateId) ||
-      PRODUCT_LIBRARY[0];
+  const onAddProduct = (item: QuoteLibraryItem) => {
+    const template = PRODUCT_LIBRARY.find((templateItem) => templateItem.templateId === item.templateId) || PRODUCT_LIBRARY[0];
+    if (!template) return;
     const nextIndex = scene.products.length + 1;
     const placement = {
       x: 260 + ((nextIndex - 1) % 3) * 280,
       y: 280 + Math.floor((nextIndex - 1) / 3) * 220,
     };
     const product = createProductFromTemplate(template.templateId, placement, nextIndex);
+    product.name = item.deviceName;
     updateScene((current) => ({
       ...current,
       products: [...current.products, product],
     }));
     setSelected(null);
-    setStatus(`已新增产品实例：${template.name}`);
+    setDrawerMode(null);
+    setStatus(`已新增产品实例：${item.deviceName}`);
   };
+
+  const toolLibraryItems = useMemo<QuoteLibraryItem[]>(
+    () =>
+      PRODUCT_LIBRARY.filter((template) => template.templateId !== "template_silo").map((template) => ({
+        key: `tool:${template.templateId}`,
+        deviceName: template.name,
+        templateId: template.templateId,
+        thumbnailUrl: resolveTemplateThumbnail(template),
+      })),
+    []
+  );
+
+  const availableQuoteLibraryItems = useMemo(() => {
+    const placedCounts = new Map<string, number>();
+    scene.products.forEach((product) => {
+      const countKey = `${String(product.templateId || "").trim()}::${String(product.name || "").trim()}`;
+      placedCounts.set(countKey, (placedCounts.get(countKey) || 0) + 1);
+    });
+
+    return quoteLibraryItems.filter((item) => {
+      const countKey = `${item.templateId}::${item.deviceName}`;
+      const placed = placedCounts.get(countKey) || 0;
+      if (placed <= 0) {
+        return true;
+      }
+      placedCounts.set(countKey, placed - 1);
+      return false;
+    });
+  }, [quoteLibraryItems, scene.products]);
+
+  const currentDrawerItems = drawerMode === "tools" ? toolLibraryItems : availableQuoteLibraryItems;
+  const currentDrawerTitle = drawerMode === "tools" ? "工具" : "产品库";
+  const currentDrawerMeta =
+    drawerMode === "tools" ? "点击或拖拽缩略图可向画布添加辅助器材" : "点击或拖拽缩略图可向画布添加当前报价配置表产品";
 
   const handleHoverChange = (productId: string, componentId: string, hovered: boolean) => {
     if (hovered) {
@@ -855,12 +1304,6 @@ function App() {
           <header className="graph-canvas-header">
             <div>
               <h1>工业场景编辑器</h1>
-              <p>React + react-konva 底座。当前支持组件热点、连接动画、俯视/鸟瞰切换。</p>
-              <p>
-                当前新增模板：
-                {PRODUCT_LIBRARY.find((item) => item.templateId === selectedTemplateId)?.name || "未选择模板"}
-              </p>
-              <p>左键拖动设备可移动设备；左键拖动空白区域可平移画布；按住空格也可辅助平移。</p>
             </div>
             <div className="view-switches">
               {(["front", "top", "bird"] as ViewMode[]).map((mode) => (
@@ -870,7 +1313,51 @@ function App() {
               ))}
             </div>
           </header>
-          <div ref={ref} className={`graph-stage-shell${spacePressed || blankPanning ? " pan-ready" : ""}${blankPanning ? " panning" : ""}`}>
+          <div
+            ref={ref}
+            className={`graph-stage-shell${spacePressed || blankPanning ? " pan-ready" : ""}${blankPanning ? " panning" : ""}`}
+            onDragOver={(evt) => {
+              evt.preventDefault();
+              evt.dataTransfer.dropEffect = "copy";
+            }}
+            onDrop={(evt) => {
+              evt.preventDefault();
+              const raw =
+                evt.dataTransfer.getData("application/quotation-graph-item") ||
+                evt.dataTransfer.getData("text/plain") ||
+                "";
+              let payload = activeDragLibraryPayload;
+              try {
+                if (raw) {
+                  payload = JSON.parse(raw) as DragLibraryPayload;
+                }
+              } catch {
+                payload = activeDragLibraryPayload;
+              }
+              activeDragLibraryPayload = null;
+              if (!payload?.templateId) return;
+              const template = PRODUCT_LIBRARY.find((templateItem) => templateItem.templateId === payload.templateId);
+              if (!template) return;
+              const rect = ref.current?.getBoundingClientRect();
+              if (!rect) return;
+              const worldX = (evt.clientX - rect.left - viewport.x) / viewport.scale;
+              const worldY = (evt.clientY - rect.top - viewport.y) / viewport.scale;
+              const nextIndex = scene.products.length + 1;
+              const product = createProductFromTemplate(
+                template.templateId,
+                { x: worldX - 120, y: worldY - 80 },
+                nextIndex
+              );
+              product.name = payload.deviceName || template.name;
+              updateScene((current) => ({
+                ...current,
+                products: [...current.products, product],
+              }));
+              setSelected(null);
+              setDrawerMode(null);
+              setStatus(`已拖入产品实例：${product.name}`);
+            }}
+          >
             <Stage
               width={size.width}
               height={size.height}
@@ -887,6 +1374,10 @@ function App() {
                 evt.evt.preventDefault();
                 const next = viewport.scale + (evt.evt.deltaY > 0 ? -0.05 : 0.05);
                 setViewport((current) => ({ ...current, scale: Math.max(0.18, Math.min(1.8, Number(next.toFixed(2)))) }));
+              }}
+              onContextMenu={(evt) => {
+                evt.evt.preventDefault();
+                setContextMenu(null);
               }}
               onMouseMove={(evt) => {
                 const stage = evt.target.getStage();
@@ -959,9 +1450,16 @@ function App() {
               </Layer>
               <Layer>
                 {scene.links.map((link) => (
-                  <FlowLink key={link.id} scene={scene} link={link} selected={selected?.type === "link" && selected.linkId === link.id} onSelect={() => setSelected({ type: "link", linkId: link.id })} />
+                  <FlowLink
+                    key={link.id}
+                    scene={scene}
+                    link={link}
+                    selected={selected?.type === "link" && selected.linkId === link.id}
+                    onSelect={() => setSelected({ type: "link", linkId: link.id })}
+                    onContextMenu={(evt) => openDeleteMenu(evt, { type: "link", linkId: link.id })}
+                  />
                 ))}
-                <PreviewLink points={previewLinkPoints} />
+                <PreviewLink points={previewLinkPoints} pipeStyle={previewLinkPipeStyle} />
               </Layer>
               <Layer>
                 {scene.products.map((product) => (
@@ -971,6 +1469,7 @@ function App() {
                     product={product}
                     selected={selected}
                     hoveredComponentId={hoveredComponent?.productId === product.id ? hoveredComponent.componentId : ""}
+                    hoveredPort={hoveredPort}
                     connectSource={connectSource}
                     onSelect={onSelectComponent}
                     onSelectPort={onSelectPort}
@@ -981,6 +1480,8 @@ function App() {
                       }))
                     }
                     onHoverChange={handleHoverChange}
+                    onHoverPortChange={setHoveredPort}
+                    onContextMenu={(evt, productId, componentId) => openDeleteMenu(evt, { type: "component", productId, componentId })}
                   />
                 ))}
               </Layer>
@@ -992,64 +1493,72 @@ function App() {
           <section className="inspector-card">
             <h2>属性面板</h2>
             {selected?.type === "port" && selectedPort ? (
-              <>
-                <div className="inspector-title">{selectedPort.port.name}</div>
-                <div className="inspector-subtitle">
-                  {selectedPort.product.name} / {selectedPort.component.name}
-                </div>
-                <dl className="inspector-grid">
-                  <dt>方向</dt>
-                  <dd>{selectedPort.port.direction || "both"}</dd>
-                  <dt>组件</dt>
-                  <dd>{selectedPort.component.name}</dd>
-                  <dt>作为起点</dt>
-                  <dd>{selectedPort.usage.asSource}</dd>
-                  <dt>作为终点</dt>
-                  <dd>{selectedPort.usage.asTarget}</dd>
-                  <dt>占用状态</dt>
-                  <dd>{selectedPort.usage.asSource > 0 || selectedPort.usage.asTarget > 0 ? "已占用" : "空闲"}</dd>
-                </dl>
-                <p className="inspector-note">
-                  已连接：
-                  {selectedPort.links.length > 0
-                    ? selectedPort.links
-                        .map((link) => {
-                          const isSource =
-                            link.from.productId === selectedPort.product.id &&
-                            link.from.componentId === selectedPort.component.id &&
-                            link.from.portId === selectedPort.port.id;
-                          const endpoint = isSource ? link.to : link.from;
-                          return getPortDisplayName(scene, endpoint);
-                        })
-                        .join("；")
-                    : "无"}
-                </p>
+                <>
+                 <div className="inspector-title">{selectedPort.port.name}</div>
+                 <div className="inspector-subtitle">
+                   {getProductInstanceLabel(scene, selectedPort.product.id)} / {selectedPort.component.name}
+                 </div>
+                  <dl className="inspector-grid">
+                    <dt>端口ID</dt>
+                    <dd>{selectedPort.port.id}</dd>
+                    <dt>方向</dt>
+                    <dd>{selectedPort.port.direction || "both"}</dd>
+                    <dt>组件</dt>
+                    <dd>{selectedPort.component.name}</dd>
+                    <dt>作为起点</dt>
+                    <dd>{selectedPort.usage.asSource}</dd>
+                    <dt>作为终点</dt>
+                    <dd>{selectedPort.usage.asTarget}</dd>
+                    <dt>占用状态</dt>
+                    <dd>{getPortOccupiedText(selectedPort.usage, selectedPort.port.direction)}</dd>
+                  </dl>
+                  <p className="inspector-note">
+                    已连接：
+                    {selectedPort.links.length > 0
+                      ? selectedPort.links
+                          .map((link) => {
+                            const isSource =
+                              link.from.productId === selectedPort.product.id &&
+                              link.from.componentId === selectedPort.component.id &&
+                              link.from.portId === selectedPort.port.id;
+                            const endpoint = isSource ? link.to : link.from;
+                            return `${getProductInstanceLabel(scene, endpoint.productId)} / ${getPortDisplayName(scene, endpoint)}`;
+                          })
+                          .join("；")
+                      : "无"}
+                  </p>
               </>
             ) : selectedComponent ? (
-              <>
-                <div className="inspector-title">{selectedComponent.component.name}</div>
-                <div className="inspector-subtitle">{selectedComponent.product.name}</div>
-                <dl className="inspector-grid">
-                  {Object.entries(selectedComponent.component.parameters).map(([key, value]) => (
-                    <React.Fragment key={key}>
-                      <dt>{key}</dt>
-                      <dd>{value}</dd>
+                <>
+                 <div className="inspector-title">{selectedComponent.component.name}</div>
+                 <div className="inspector-subtitle">{getProductInstanceLabel(scene, selectedComponent.product.id)}</div>
+                  <dl className="inspector-grid">
+                    {Object.entries(selectedComponent.component.parameters).map(([key, value]) => (
+                      <React.Fragment key={key}>
+                        <dt>{key}</dt>
+                        <dd>{value}</dd>
                     </React.Fragment>
                   ))}
                 </dl>
                 <p className="inspector-note">热点数：{selectedComponent.component.hotspots.length}</p>
               </>
             ) : selectedLinkInfo ? (
-              <>
-                <div className="inspector-title">物流连接</div>
-                <div className="inspector-subtitle">{selectedLinkInfo.link.materialName}</div>
-                <dl className="inspector-grid">
-                  <dt>状态</dt>
-                  <dd>{selectedLinkInfo.link.flow === "flowing" ? "流动中" : "静止"}</dd>
-                  <dt>起点</dt>
-                  <dd>{selectedLinkInfo.fromLabel}</dd>
-                  <dt>终点</dt>
-                  <dd>{selectedLinkInfo.toLabel}</dd>
+                <>
+                 <div className="inspector-title">物流连接</div>
+                 <div className="inspector-subtitle">{selectedLinkInfo.link.materialName}</div>
+                  <dl className="inspector-grid">
+                    <dt>连接ID</dt>
+                    <dd>{selectedLinkInfo.link.id}</dd>
+                    <dt>状态</dt>
+                   <dd>{selectedLinkInfo.link.flow === "flowing" ? "流动中" : "静止"}</dd>
+                    <dt>起点设备</dt>
+                   <dd>{selectedLinkInfo.fromProductLabel}</dd>
+                    <dt>起点</dt>
+                   <dd>{selectedLinkInfo.fromLabel}</dd>
+                    <dt>终点设备</dt>
+                   <dd>{selectedLinkInfo.toProductLabel}</dd>
+                    <dt>终点</dt>
+                   <dd>{selectedLinkInfo.toLabel}</dd>
                   <dt>起点组件</dt>
                   <dd>{selectedLinkInfo.fromComponent?.component.name || selectedLinkInfo.link.from.componentId}</dd>
                   <dt>终点组件</dt>
@@ -1064,42 +1573,128 @@ function App() {
           <section className="inspector-card">
             <h3>当前状态</h3>
             <p className="status-text">{status}</p>
-            {connectSource?.type === "component" ? <p className="status-pill">连接模式：已选择源组件</p> : null}
+            {connectMode ? (
+              <p className="status-pill">
+                {connectSource?.type === "port" ? "连接模式：已选择源端口" : "连接模式：等待选择源端口"}
+              </p>
+            ) : null}
           </section>
         </aside>
       </main>
 
-      <footer className="graph-toolbar">
-        <label className="template-picker">
-          <span>新增模板</span>
-          <select
-            value={selectedTemplateId}
-            onChange={(evt) => setSelectedTemplateId(evt.target.value)}
-          >
-            {PRODUCT_LIBRARY.map((template) => (
-              <option key={template.templateId} value={template.templateId}>
-                {template.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="button" className="toolbar-btn" onClick={onAddProduct}>新增产品</button>
-        <button type="button" className="toolbar-btn" onClick={onBeginConnect}>建立连接</button>
-        <button type="button" className="toolbar-btn" onClick={onToggleFlow}>切换流动</button>
-        <button type="button" className="toolbar-btn" onClick={() => setViewport((current) => ({ ...current, scale: Math.min(1.8, Number((current.scale + 0.1).toFixed(2))) }))}>放大</button>
-        <button type="button" className="toolbar-btn" onClick={() => setViewport((current) => ({ ...current, scale: Math.max(0.18, Number((current.scale - 0.1).toFixed(2))) }))}>缩小</button>
-        <button type="button" className="toolbar-btn danger" onClick={onDeleteSelected}>删除选中</button>
-        <button
-          type="button"
-          className="toolbar-btn primary"
-          onClick={async () => {
-            await saveGraphToWorkbook({ schemaVersion: "2.0", updatedAt: scene.updatedAt, graph: { nodes: scene.products, edges: scene.links, updatedAt: scene.updatedAt }, images: {} });
-            setStatus("手动保存成功。");
-          }}
+      <section className="graph-bottom-dock">
+        <section className={`graph-template-drawer${drawerMode ? " open" : ""}`} onClick={(evt) => evt.stopPropagation()}>
+          <div className="graph-drawer-head">
+            <h3 className="graph-drawer-title">{currentDrawerTitle}</h3>
+            <span className="graph-drawer-meta">
+              {drawerMode === "products" && isRefreshingQuoteLibrary ? "正在刷新产品库..." : currentDrawerMeta}
+            </span>
+          </div>
+          <div className="graph-template-list">
+            {currentDrawerItems.length > 0 ? (
+              currentDrawerItems.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className="template-item"
+                  onClick={() => onAddProduct(item)}
+                  title={item.deviceName}
+                  draggable
+                  onDragStart={(evt) => {
+                    const payload: DragLibraryPayload = {
+                      source: drawerMode === "tools" ? "tools" : "products",
+                      templateId: item.templateId,
+                      deviceName: item.deviceName,
+                    };
+                    activeDragLibraryPayload = payload;
+                    const serialized = JSON.stringify(payload);
+                    evt.dataTransfer.setData("application/quotation-graph-item", serialized);
+                    evt.dataTransfer.setData("text/plain", serialized);
+                    evt.dataTransfer.effectAllowed = "copy";
+                  }}
+                  onDragEnd={() => {
+                    activeDragLibraryPayload = null;
+                  }}
+                >
+                  <div className="template-thumb">
+                    {item.thumbnailUrl ? <img src={item.thumbnailUrl} alt={item.deviceName} /> : null}
+                  </div>
+                  <div className="template-name">{item.deviceName}</div>
+                </button>
+              ))
+            ) : (
+              <div className="template-meta">
+                {drawerMode === "tools" ? "暂无可用工具模板。" : "暂无产品。请先在报价配置表录入产品后再打开产品库。"}
+              </div>
+            )}
+          </div>
+        </section>
+        <footer className="graph-toolbar">
+          <div className="graph-toolbar-row">
+            <button
+              type="button"
+              className={`toolbar-btn${drawerMode === "products" ? " active" : ""}`}
+              onClick={(evt) => {
+                evt.stopPropagation();
+                const nextOpen = drawerMode !== "products";
+                if (nextOpen) {
+                  setDrawerMode("products");
+                  void refreshQuoteLibrary();
+                  return;
+                }
+                setDrawerMode(null);
+              }}
+            >
+              产品库
+            </button>
+            <button
+              type="button"
+              className={`toolbar-btn${drawerMode === "tools" ? " active" : ""}`}
+              onClick={(evt) => {
+                evt.stopPropagation();
+                setDrawerMode((current) => (current === "tools" ? null : "tools"));
+              }}
+            >
+              工具
+            </button>
+            <button
+              type="button"
+              className={`toolbar-btn${connectMode ? " primary active" : ""}`}
+              onClick={onBeginConnect}
+            >
+              {connectMode ? "取消" : "建立连接"}
+            </button>
+            <button type="button" className="toolbar-btn" onClick={onToggleFlow}>切换流动</button>
+            <button type="button" className="toolbar-btn danger" onClick={onDeleteSelected}>删除选中</button>
+            <button
+              type="button"
+              className="toolbar-btn primary"
+              onClick={async () => {
+                await requestParentSave({
+                  schemaVersion: "2.0",
+                  updatedAt: scene.updatedAt,
+                  graph: { nodes: scene.products, edges: scene.links, updatedAt: scene.updatedAt },
+                  images: {},
+                });
+                setStatus("手动保存成功。");
+              }}
+            >
+              保存
+            </button>
+          </div>
+        </footer>
+      </section>
+      {contextMenu ? (
+        <div
+          className="graph-context-menu"
+          style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }}
+          onClick={(evt) => evt.stopPropagation()}
         >
-          保存
-        </button>
-      </footer>
+          <button type="button" className="graph-context-menu__item danger" onClick={onDeleteSelected}>
+            删除
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

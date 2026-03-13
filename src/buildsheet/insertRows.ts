@@ -15,6 +15,10 @@ type DeviceMergeGroup = {
   label: string;
 };
 
+function buildNumberFormatMatrix(rowCount: number, columnCount: number, format: string) {
+  return Array.from({ length: Math.max(0, rowCount) }, () => Array.from({ length: Math.max(0, columnCount) }, () => format));
+}
+
 function getAssemblyGroupValue(component: any): number {
   const explicitGroup = Number(component?.assembly_group || component?.assemblyGroup || 0);
   if (explicitGroup > 0) return explicitGroup;
@@ -159,11 +163,13 @@ export async function insertComponentsToConfigSheet(
           console.warn("group formula write failed:", error);
         }
       });
-      sheet.getRange(`L${dataStartRow}:L${dataEndRow}`).format.numberFormat = "#,##0";
-      sheet.getRange(`M${dataStartRow}:M${dataEndRow}`).format.numberFormat = "#,##0";
-      sheet.getRange(`N${dataStartRow}:N${dataEndRow}`).format.numberFormat = "#,##0";
-      sheet.getRange(`O${dataStartRow}:O${dataEndRow}`).format.numberFormat = "#,##0";
-      sheet.getRange(`P${dataStartRow}:P${dataEndRow}`).format.numberFormat = "#,##0";
+      const priceFormatMatrix = buildNumberFormatMatrix(dataRowCount, 5, BUILDSHEET_STYLE.numberFormat);
+      sheet.getRange(`L${dataStartRow}:P${dataEndRow}`).numberFormat = priceFormatMatrix;
+      sheet.getRange(`L:L`).format.numberFormat = BUILDSHEET_STYLE.numberFormat;
+      sheet.getRange(`M:M`).format.numberFormat = BUILDSHEET_STYLE.numberFormat;
+      sheet.getRange(`N:N`).format.numberFormat = BUILDSHEET_STYLE.numberFormat;
+      sheet.getRange(`O:O`).format.numberFormat = BUILDSHEET_STYLE.numberFormat;
+      sheet.getRange(`P:P`).format.numberFormat = BUILDSHEET_STYLE.numberFormat;
 
       await renumberSectionSerialsByLayout(context, sheet, sectionInfo.sectionRow);
       ensureSectionBoundaryRowsBoldBorders(sheet, sectionInfo.sectionRow);

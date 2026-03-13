@@ -1,6 +1,7 @@
 ﻿import { API_PATHS, APP_URLS, CRAFTING_CONSTANTS } from "../shared/appConstants";
 import { ComponentRecord, JsonMap } from "./devCraftTypes";
 import { FLOW_MESSAGES } from "../shared/businessTextConstants";
+import { buildEquipmentImageUrl } from "../shared/equipmentImagePath";
 
 const API_BASE = APP_URLS.apiBase;
 
@@ -74,10 +75,7 @@ export function buildCraftItems(config: JsonMap | null, prefix: "Inner" | "Outte
 }
 
 export function buildImageUrl(pic: unknown): string | null {
-  if (!pic) return null;
-  const file = String(pic).trim();
-  if (!file) return null;
-  return `${APP_URLS.serverOrigin}/public/images/${file}.png`;
+  return buildEquipmentImageUrl(pic);
 }
 
 export function parseNumber(value: unknown): number | null {

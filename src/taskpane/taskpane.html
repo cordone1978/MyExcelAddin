@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 
 <head>
@@ -6,92 +6,12 @@
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>报价系统</title>
-
-    <!-- Office JavaScript API -->
     <script defer type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-
-    <!-- Template styles -->
     <link href="taskpane.css" rel="stylesheet" type="text/css" />
 </head>
 
-<body class="app-shell">
-    <header class="ms-welcome__header app-header">
-        <img src="../../assets/logo-large.png" alt="报价系统" title="报价系统" />
-        <h1 class="app-title">报价系统</h1>
-    </header>
-    <section id="sideload-msg" class="ms-welcome__main">
-        <h2 class="app-subtitle">请先<a target="_blank" href="https://learn.microsoft.com/office/dev/add-ins/testing/test-debug-office-add-ins#sideload-an-office-add-in-for-testing">旁加载</a>加载项后查看功能界面。</h2>
-    </section>
-    <main id="app-body" class="ms-welcome__main app-main" style="display: none;">
-        <p class="app-meta"><label id="item-subject"></label></p>
-
-        <section class="panel panel-auth" id="authPanel" aria-labelledby="authPanelTitle">
-            <div class="auth-hero">
-                <h2 class="panel-title auth-title" id="authPanelTitle">账号登录</h2>
-                <p class="auth-subtitle">登录后可继续设备配置、报价生成和信息参考。</p>
-            </div>
-            <div class="field-list">
-                <input class="login-input" id="usernameInput" type="text" placeholder="用户名" autocomplete="username" />
-                <input class="login-input" id="passwordInput" type="password" placeholder="密码" autocomplete="current-password" />
-                <input class="login-input is-hidden" id="newPasswordInput" type="password" placeholder="新密码（重置用）" autocomplete="new-password" />
-            </div>
-            <div class="reset-password-tip is-hidden" id="resetPasswordTip" role="note">
-                重置密码需要填写“用户名 + 当前密码 + 新密码”，提交后请使用新密码重新登录。
-            </div>
-            <div class="btn-grid two-cols">
-                <button class="dialog-btn btn-primary" id="loginBtn" onclick="handleLoginClick()"></button>
-                <button class="dialog-btn btn-secondary" id="resetPasswordBtn" onclick="handleResetPasswordClick()"></button>
-                <button class="dialog-btn btn-secondary is-hidden" id="cancelResetPasswordBtn" onclick="handleCancelResetPasswordClick()"></button>
-                <button class="dialog-btn btn-primary is-hidden" id="confirmResetPasswordBtn" onclick="handleConfirmResetPasswordClick()"></button>
-            </div>
-            <p class="auth-feedback" id="authFeedbackLabel"></p>
-        </section>
-
-        <section class="panel panel-actions is-hidden" id="actionPanel" aria-label="功能区">
-            <div class="btn-grid">
-                <button class="dialog-btn btn-secondary" id="addDeviceBtn" onclick="handleAddDeviceClick()"></button>
-                <button class="dialog-btn btn-secondary" id="modifyDeviceBtn" onclick="handleModifyDeviceClick()"></button>
-                <button class="dialog-btn btn-secondary" id="generateSheetBtn" onclick="handleGenerateSheetClick()"></button>
-                <button class="dialog-btn btn-secondary" id="queryPriceBtn" onclick="handleQueryPriceClick()"></button>
-                <button class="dialog-btn btn-secondary" id="graphEditorBtn" onclick="handleGraphEditorClick()"></button>
-                <button class="dialog-btn btn-secondary" id="infoReferenceBtn" onclick="handleInfoReferenceClick()"></button>
-                <button class="dialog-btn btn-secondary" id="generateQuoteBtn" onclick="handleGenerateQuoteClick()"></button>
-                <div id="generateTemplateDrawer" class="template-action-drawer is-hidden">
-                    <button class="dialog-btn btn-secondary" id="generateSimpleQuoteBtn" onclick="handleGenerateSimpleTemplateClick()"></button>
-                    <button class="dialog-btn btn-secondary" id="generateDetailQuoteBtn" onclick="handleGenerateDetailTemplateClick()"></button>
-                </div>
-            </div>
-        </section>
-
-        <div class="account-dock is-hidden" id="accountDock">
-            <button class="account-dock-toggle" id="accountDockToggle" onclick="handleAccountDockToggle()">
-                <span class="account-dock-label" id="accountDockLabel"></span>
-            </button>
-            <button class="account-dock-btn" id="logoutDockBtn" onclick="handleLoginClick()">退出</button>
-        </div>
-
-        <div class="confirm-modal is-hidden" id="generateTemplateConfirmModal" role="dialog" aria-modal="true" aria-labelledby="generateTemplateConfirmTitle">
-            <div class="confirm-modal-card">
-                <h3 class="confirm-modal-title" id="generateTemplateConfirmTitle">确认生成模板</h3>
-                <p class="confirm-modal-message">生成新模板会清除掉原有模板及所有数据，是否确定继续。</p>
-                <div class="confirm-modal-actions">
-                    <button class="dialog-btn btn-secondary" id="confirmGenerateTemplateCancel" type="button">取消</button>
-                    <button class="dialog-btn btn-primary" id="confirmGenerateTemplateOk" type="button">确定</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="confirm-modal is-hidden" id="operationErrorModal" role="dialog" aria-modal="true" aria-labelledby="operationErrorTitle">
-            <div class="confirm-modal-card">
-                <h3 class="confirm-modal-title" id="operationErrorTitle">操作失败</h3>
-                <p class="confirm-modal-message" id="operationErrorMessage">请稍后重试。</p>
-                <div class="confirm-modal-actions single">
-                    <button class="dialog-btn btn-primary" id="operationErrorOk" type="button">确定</button>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    </body>
+<body>
+    <div id="root"></div>
+</body>
 
 </html>

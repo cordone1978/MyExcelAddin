@@ -1,0 +1,243 @@
+import React from "react";
+
+type MaterialPreset = "calcium" | "lfp" | "lfp_raw";
+
+export type DialogCategoryItem = {
+  id: string | number;
+  name: string;
+};
+
+export type DialogProjectItem = {
+  id: string | number;
+  name: string;
+  imageUrl?: string;
+  baseDescription?: string;
+};
+
+export type DialogDetailItem = {
+  id: string | number;
+  name: string;
+  checked: boolean;
+  required: boolean;
+  previewId: string;
+};
+
+export type DialogAnnotationItem = {
+  key: string;
+  name: string;
+  checked: boolean;
+  previewId: string;
+};
+
+export type DialogViewState = {
+  currentMaterialPreset: MaterialPreset;
+  categoryTitle: string;
+  projectTitle: string;
+  detailTitle: string;
+  annotationTitle: string;
+  previewTitle: string;
+  clearAllText: string;
+  confirmSubmitText: string;
+  categories: DialogCategoryItem[];
+  categoriesLoading: boolean;
+  categoryError: string;
+  projects: DialogProjectItem[];
+  projectsLoading: boolean;
+  projectError: string;
+  details: DialogDetailItem[];
+  detailsLoading: boolean;
+  detailError: string;
+  annotations: DialogAnnotationItem[];
+  annotationsLoading: boolean;
+  annotationError: string;
+  detailBaseDescription: string;
+  hoveredPreviewId: string | null;
+  selectedCategoryId: string | number | null;
+  selectedProjectId: string | number | null;
+};
+
+export type DialogViewHandlers = {
+  onMaterialPresetChange: (value: MaterialPreset) => void;
+  onCategoryClick: (id: string | number, name: string) => void;
+  onProjectClick: (id: string | number, name: string) => void;
+  onDetailToggle: (id: string | number, checked: boolean) => void;
+  onAnnotationToggle: (key: string, checked: boolean) => void;
+  onPreviewHoverChange: (previewId: string | null) => void;
+  onClearAll: () => void;
+  onConfirmSubmit: () => void;
+};
+
+function renderListContent(
+  loading: boolean,
+  error: string,
+  items: React.ReactNode[],
+  emptyText: string
+) {
+  if (loading) return <div className="loading">加载中...</div>;
+  if (error) return <div className="error">{error}</div>;
+  if (!items.length) return <div className="placeholder">{emptyText}</div>;
+  return items;
+}
+
+export function DialogApp({
+  state,
+  handlers,
+}: {
+  state: DialogViewState;
+  handlers: DialogViewHandlers;
+}) {
+  const materialOptions: Array<{ value: MaterialPreset; label: string }> = [
+    { value: "calcium", label: "碳酸钙" },
+    { value: "lfp", label: "铁锂" },
+    { value: "lfp_raw", label: "磷酸铁" },
+  ];
+  const activeIndex = materialOptions.findIndex((item) => item.value === state.currentMaterialPreset);
+
+  return (
+    <div className="container">
+      <div className="material-selector-panel" id="materialSelectorPanel">
+        <div className="material-selector-track" id="materialSelectorTrack">
+          <div
+            className="material-selector-thumb"
+            id="materialSelectorThumb"
+            style={{ transform: `translateX(${Math.max(0, activeIndex) * 100}%)` }}
+          />
+          {materialOptions.map((option) => (
+            <button
+              key={option.value}
+              className={`material-selector-option ${state.currentMaterialPreset === option.value ? "active" : ""}`}
+              type="button"
+              onClick={() => handlers.onMaterialPresetChange(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="left-panel">
+        <h3 className="panel-title">{state.categoryTitle}</h3>
+        <div className="listbox" id="categoryList">
+          {renderListContent(
+            state.categoriesLoading,
+            state.categoryError,
+            state.categories.map((category) => (
+              <div
+                key={String(category.id)}
+                className={`listbox-item ${state.selectedCategoryId == category.id ? "selected" : ""}`}
+                onClick={() => handlers.onCategoryClick(category.id, category.name)}
+              >
+                {category.name}
+              </div>
+            )),
+            "暂无产品类型"
+          )}
+        </div>
+      </div>
+
+      <div className="middle-panel">
+        <div className="middle-left">
+          <h3 className="panel-title">{state.projectTitle}</h3>
+          <div className="listbox" id="projectList">
+            {renderListContent(
+              state.projectsLoading,
+              state.projectError,
+              state.projects.map((project) => (
+                <div
+                  key={String(project.id)}
+                  className={`listbox-item ${state.selectedProjectId == project.id ? "selected" : ""}`}
+                  onClick={() => handlers.onProjectClick(project.id, project.name)}
+                >
+                  {project.name}
+                </div>
+              )),
+              "该类型下暂无产品"
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="middle-right">
+        <div className="detail-panel">
+          <h3 className="panel-title">{state.detailTitle}</h3>
+          <div className="listbox" id="detailList">
+            {renderListContent(
+              state.detailsLoading,
+              state.detailError,
+              state.details.map((detail, index) => (
+                <div
+                  key={String(detail.id)}
+                  className={`listbox-item multi-select ${state.hoveredPreviewId === detail.previewId ? "preview-hovered" : ""}`}
+                  onMouseEnter={() => handlers.onPreviewHoverChange(detail.previewId)}
+                  onMouseLeave={() => handlers.onPreviewHoverChange(null)}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).tagName.toLowerCase() === "input" || detail.required) return;
+                    handlers.onDetailToggle(detail.id, !detail.checked);
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={detail.checked}
+                    disabled={detail.required}
+                    onChange={(e) => handlers.onDetailToggle(detail.id, e.target.checked)}
+                  />
+                  <label style={{ cursor: detail.required ? "default" : "pointer", flex: 1, fontWeight: detail.required ? "bold" : undefined, color: detail.required ? "#0078d4" : undefined }}>
+                    {detail.name}{detail.required ? " [必选]" : ""}
+                  </label>
+                </div>
+              )),
+              "暂无组件信息"
+            )}
+          </div>
+          <div className="detail-base-description-box" id="detailBaseDescriptionBox">
+            <div className="detail-base-description-title">基础信息</div>
+            <div className="detail-base-description-value" id="detailBaseDescriptionValue">{state.detailBaseDescription || "-"}</div>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="panel-title">{state.annotationTitle}</h3>
+          <div className="listbox" id="annotationList">
+            {renderListContent(
+              state.annotationsLoading,
+              state.annotationError,
+              state.annotations.map((annotation) => (
+                <div
+                  key={annotation.key}
+                  className={`listbox-item multi-select ${state.hoveredPreviewId === annotation.previewId ? "preview-hovered" : ""}`}
+                  title={`组件信息：${annotation.name || ""}`}
+                  onMouseEnter={() => handlers.onPreviewHoverChange(annotation.previewId)}
+                  onMouseLeave={() => handlers.onPreviewHoverChange(null)}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).tagName.toLowerCase() === "input") return;
+                    handlers.onAnnotationToggle(annotation.key, !annotation.checked);
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={annotation.checked}
+                    onChange={(e) => handlers.onAnnotationToggle(annotation.key, e.target.checked)}
+                  />
+                  <label style={{ cursor: "pointer", flex: 1 }}>{annotation.name}</label>
+                </div>
+              )),
+              "暂无可选配件"
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="right-panel">
+        <h3 className="panel-title">{state.previewTitle}</h3>
+        <div className="image-container" id="imageContainer">
+          <div className="image-stage-plane" aria-hidden="true"></div>
+          <div id="previewStageMount"></div>
+        </div>
+        <div className="action-buttons">
+          <button className="btn btn-secondary" onClick={handlers.onClearAll}>{state.clearAllText}</button>
+          <button className="btn btn-primary" onClick={handlers.onConfirmSubmit}>{state.confirmSubmitText}</button>
+        </div>
+      </div>
+    </div>
+  );
+}

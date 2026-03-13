@@ -13,7 +13,8 @@ DB_PROFILE="${DB_PROFILE:-company}"
 CERT_BASE_DIR="${CERT_BASE_DIR:-}"
 WORKDIR="${WORKDIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DEPLOY_SCRIPT="${WORKDIR}/scripts/deploy-linux.sh"
-SHARE_MANIFEST_PATH="${SHARE_MANIFEST_PATH:-/srv/office-addins/manifest.xml}"
+SHARE_MANIFEST_PATH="${SHARE_MANIFEST_PATH:-/srv/office-addins/quotation-manifest.xml}"
+LEGACY_SHARE_MANIFEST_PATH="${LEGACY_SHARE_MANIFEST_PATH:-/srv/office-addins/manifest.xml}"
 SKIP_PUPPETEER_DOWNLOAD="${SKIP_PUPPETEER_DOWNLOAD:-1}"
 BACKUP_ROOT="${WORKDIR}/.release-backups"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
@@ -39,6 +40,7 @@ Environment variables:
   CERT_BASE_DIR           Default: ${CERT_BASE_DIR:-<unset>} (external SSL cert directory; optional)
   WORKDIR                 Default: repo root inferred from script location
   SHARE_MANIFEST_PATH     Default: ${SHARE_MANIFEST_PATH}
+  LEGACY_SHARE_MANIFEST_PATH Default: ${LEGACY_SHARE_MANIFEST_PATH}
   SKIP_PUPPETEER_DOWNLOAD Default: ${SKIP_PUPPETEER_DOWNLOAD} (1=export PUPPETEER_SKIP_DOWNLOAD=1)
 EOF
 }
@@ -170,6 +172,13 @@ run_update_steps() {
     if [[ -f "${WORKDIR}/manifest.xml" ]]; then
       if cp -f "${WORKDIR}/manifest.xml" "${SHARE_MANIFEST_PATH}" 2>/dev/null; then
         log "manifest synced -> ${SHARE_MANIFEST_PATH}"
+        if [[ "${SHARE_MANIFEST_PATH}" != "${LEGACY_SHARE_MANIFEST_PATH}" ]] && [[ -f "${LEGACY_SHARE_MANIFEST_PATH}" ]]; then
+          if rm -f "${LEGACY_SHARE_MANIFEST_PATH}" 2>/dev/null; then
+            log "legacy manifest removed -> ${LEGACY_SHARE_MANIFEST_PATH}"
+          else
+            warn "legacy manifest remove skipped/failed path=${LEGACY_SHARE_MANIFEST_PATH}"
+          fi
+        fi
       else
         warn "manifest sync skipped/failed (permission?) path=${SHARE_MANIFEST_PATH}"
       fi

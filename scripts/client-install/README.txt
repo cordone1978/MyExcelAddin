@@ -26,4 +26,5 @@ Usage
 Notes
 - If server IP changes, update config.json and rerun installer
 - To change host/port/share path defaults, edit config.json (do not edit script)
+- Shared folder mode expects quotation-manifest.xml in \\quotation.company\office-addins
 - If shared catalog is not visible in Excel, use manifest.xml as fallback sideload

@@ -213,6 +213,21 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
       });
     }
 
+    const previewLayers = (configData || [])
+      .filter((item) => String(item.component_pic || "").trim())
+      .map((item, index) => {
+        const componentName = String(item.component_name || "").trim();
+        return {
+          id: String(item.config_id || item.component_id || componentName || index),
+          name: componentName,
+          imageUrl: buildImageUrl(item.component_pic),
+          order: Number(item.component_sn || index || 0),
+          highlighted: componentName === selection.componentName,
+        };
+      })
+      .filter((item) => String(item.imageUrl || "").trim())
+      .sort((a, b) => a.order - b.order);
+
     const data: Record<string, unknown> = {
       deviceName: selection.componentName,
       currentPrice: currentPrice,
@@ -228,6 +243,7 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
       isPriceChanged: false,
       priceKeyword: selection.componentName,
       imageUrl: buildImageUrl(component.component_pic),
+      previewLayers,
       craftUnitOptions: (craftPrices || []).map((item) => ({
         label: item.label,
         price: Number(item.price || 0),

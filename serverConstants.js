@@ -20,7 +20,7 @@ const DEFAULT_SERVER_CONFIG = {
   host: "localhost",
   port: 3001,
   apiPrefix: "/api",
-  publicImagesPath: "/public/images/",
+  publicImagesPath: "/assets/equipment/",
   certKeyFile: "localhost+2-key.pem",
   certPemFile: "localhost+2.pem",
 };
@@ -70,7 +70,6 @@ const API_ROUTES = {
   authMe: "/api/auth/me",
   authResetPassword: "/api/auth/reset-password",
   exportQuotePdf: "/api/export-quote-pdf",
-  graphTemplateImage: "/api/graph-template-image",
   warehouseCleanSearch: "/api/warehouse-clean-search",
 };
 

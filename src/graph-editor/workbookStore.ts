@@ -1,4 +1,6 @@
 /* global Excel */
+import { BUILDSHEET_TEXT } from "../shared/businessTextConstants";
+import { SHEET_NAMES } from "../shared/sheetNames";
 
 export type WorkbookGraphPayload = {
   schemaVersion: string;
@@ -11,6 +13,15 @@ export type WorkbookGraphPayload = {
   images: Record<string, string>;
 };
 
+export type GraphProductLibraryEntry = {
+  deviceName: string;
+  templateId: string;
+  thumbnailUrl: string;
+  productId?: number | null;
+  productName?: string | null;
+  updatedAt: string;
+};
+
 const SHEET_NAME = "_graph_store";
 const SCHEMA_MARK = "GRAPH_SCHEMA_V1";
 const CELL_SCHEMA = "A1";
@@ -18,6 +29,10 @@ const CELL_GRAPH = "A2";
 const CELL_IMAGE_INDEX = "A3";
 const IMAGE_DATA_START_ROW = 10;
 const MAX_CELL_CHARS = 30000;
+const PRODUCT_LIBRARY_SHEET = "_graph_product_library";
+const PRODUCT_LIBRARY_MARK = "GRAPH_PRODUCT_LIBRARY_V1";
+const PRODUCT_LIBRARY_HEADER_ROW = 2;
+const PRODUCT_LIBRARY_DATA_START_ROW = 3;
 
 type ImageIndexItem = {
   key: string;
@@ -131,5 +146,149 @@ export async function loadGraphFromWorkbook(): Promise<WorkbookGraphPayload | nu
       graph: graph || { nodes: [], edges: [], updatedAt: "" },
       images,
     };
+  });
+}
+
+export async function loadQuoteConfigProductsFromWorkbook(): Promise<string[]> {
+  return Excel.run(async (context) => {
+    const workbookSheets = context.workbook.worksheets;
+    workbookSheets.load("items/name");
+    await context.sync();
+
+    const quoteSheetName = workbookSheets.items
+      .map((item) => String(item.name || "").trim())
+      .find((name) => name === SHEET_NAMES.quoteConfig || name === "配置报价表" || name.includes("报价配置"));
+
+    if (!quoteSheetName) {
+      return [];
+    }
+
+    const sheet = context.workbook.worksheets.getItem(quoteSheetName);
+    const usedRange = sheet.getRange("A:C").getUsedRangeOrNullObject(false);
+    usedRange.load(["values", "isNullObject"]);
+    await context.sync();
+    if (usedRange.isNullObject) {
+      return [];
+    }
+
+    const values = usedRange.values || [];
+    const headerSerial = String(BUILDSHEET_TEXT.configHeaders[0] || "").trim();
+    const seen = new Set<string>();
+    const result: string[] = [];
+    let currentDevice = "";
+
+    values.forEach((row) => {
+      const colA = String(row?.[0] || "").trim();
+      const colB = String(row?.[1] || "").trim();
+      const colC = String(row?.[2] || "").trim();
+      if (/^[一二三四五六七八九十百零]+$/.test(colA)) return;
+      if (colA === headerSerial) return;
+      if (colB) {
+        currentDevice = colB;
+      }
+      if (!colC || !currentDevice) return;
+      if (seen.has(currentDevice)) return;
+      seen.add(currentDevice);
+      result.push(currentDevice);
+    });
+    return result;
+  });
+}
+
+export async function upsertGraphProductLibraryEntry(entry: GraphProductLibraryEntry): Promise<void> {
+  const deviceName = String(entry.deviceName || "").trim();
+  const templateId = String(entry.templateId || "").trim();
+  const thumbnailUrl = String(entry.thumbnailUrl || "").trim();
+  if (!deviceName || !templateId || !thumbnailUrl) {
+    return;
+  }
+
+  await Excel.run(async (context) => {
+    let sheet = context.workbook.worksheets.getItemOrNullObject(PRODUCT_LIBRARY_SHEET);
+    sheet.load("name,isNullObject");
+    await context.sync();
+
+    if (sheet.isNullObject) {
+      sheet = context.workbook.worksheets.add(PRODUCT_LIBRARY_SHEET);
+    }
+
+    sheet.visibility = Excel.SheetVisibility.hidden;
+    sheet.getRange("A1:F1").values = [[PRODUCT_LIBRARY_MARK, "", "", "", "", ""]];
+    sheet.getRange(`A${PRODUCT_LIBRARY_HEADER_ROW}:F${PRODUCT_LIBRARY_HEADER_ROW}`).values = [[
+      "device_name",
+      "template_id",
+      "thumbnail_url",
+      "product_id",
+      "product_name",
+      "updated_at",
+    ]];
+
+    const used = sheet.getUsedRangeOrNullObject(true);
+    used.load(["isNullObject", "rowCount"]);
+    await context.sync();
+
+    let targetRow = PRODUCT_LIBRARY_DATA_START_ROW;
+    if (!used.isNullObject && (used.rowCount || 0) >= PRODUCT_LIBRARY_DATA_START_ROW) {
+      const dataEndRow = Math.max(PRODUCT_LIBRARY_DATA_START_ROW, used.rowCount);
+      const dataRange = sheet.getRange(`A${PRODUCT_LIBRARY_DATA_START_ROW}:F${dataEndRow}`);
+      dataRange.load("values");
+      await context.sync();
+      const rows = dataRange.values || [];
+      const foundIndex = rows.findIndex((row) => String(row?.[0] || "").trim() === deviceName);
+      if (foundIndex >= 0) {
+        targetRow = PRODUCT_LIBRARY_DATA_START_ROW + foundIndex;
+      } else {
+        targetRow = PRODUCT_LIBRARY_DATA_START_ROW + rows.filter((row) => String(row?.[0] || "").trim()).length;
+      }
+    }
+
+    sheet.getRange(`A${targetRow}:F${targetRow}`).values = [[
+      deviceName,
+      templateId,
+      thumbnailUrl,
+      entry.productId == null ? "" : Number(entry.productId),
+      String(entry.productName || "").trim(),
+      String(entry.updatedAt || new Date().toISOString()),
+    ]];
+
+    await context.sync();
+  });
+}
+
+export async function loadGraphProductLibraryEntries(): Promise<GraphProductLibraryEntry[]> {
+  return Excel.run(async (context) => {
+    const sheet = context.workbook.worksheets.getItemOrNullObject(PRODUCT_LIBRARY_SHEET);
+    sheet.load("name,isNullObject");
+    await context.sync();
+    if (sheet.isNullObject) {
+      return [];
+    }
+
+    const metaRange = sheet.getRange("A1:A2");
+    metaRange.load("values");
+    const used = sheet.getUsedRangeOrNullObject(true);
+    used.load(["isNullObject", "rowCount"]);
+    await context.sync();
+
+    const mark = String(metaRange.values?.[0]?.[0] || "").trim();
+    if (mark !== PRODUCT_LIBRARY_MARK || used.isNullObject || (used.rowCount || 0) < PRODUCT_LIBRARY_DATA_START_ROW) {
+      return [];
+    }
+
+    const dataEndRow = Math.max(PRODUCT_LIBRARY_DATA_START_ROW, used.rowCount);
+    const dataRange = sheet.getRange(`A${PRODUCT_LIBRARY_DATA_START_ROW}:F${dataEndRow}`);
+    dataRange.load("values");
+    await context.sync();
+
+    return (dataRange.values || [])
+      .map((row) => ({
+        deviceName: String(row?.[0] || "").trim(),
+        templateId: String(row?.[1] || "").trim(),
+        thumbnailUrl: String(row?.[2] || "").trim(),
+        productId: row?.[3] === "" ? null : Number(row?.[3] || 0),
+        productName: String(row?.[4] || "").trim(),
+        updatedAt: String(row?.[5] || "").trim(),
+      }))
+      .filter((item) => item.deviceName && item.templateId && item.thumbnailUrl);
   });
 }

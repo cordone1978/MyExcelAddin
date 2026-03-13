@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
   <head>
     <meta charset="UTF-8" />
@@ -9,44 +9,6 @@
     <link rel="stylesheet" href="queryprice.css" />
   </head>
   <body>
-    <div class="dialog-shell">
-      <div class="result-panel">
-        <div class="result-table">
-          <div class="result-row header">
-            <div class="result-cell name" id="colName"></div>
-            <div class="result-cell desc" id="colDesc"></div>
-            <div class="result-cell type" id="colType"></div>
-            <div class="result-cell price" id="colPrice"></div>
-          </div>
-          <div id="resultList" class="result-list"></div>
-        </div>
-      </div>
-
-      <div class="search-panel">
-        <div class="input-group">
-          <label for="mainKeyword" id="labelMainKeyword"></label>
-          <input id="mainKeyword" class="input" type="text" />
-        </div>
-        <div class="input-group">
-          <label for="secondKeyword" id="labelSecondKeyword"></label>
-          <input id="secondKeyword" class="input" type="text" />
-        </div>
-        <div class="actions">
-          <button class="btn btn-secondary" id="cancelBtn"></button>
-          <button class="btn btn-primary" id="searchBtn"></button>
-          <button class="btn btn-primary" id="replaceBtn" disabled></button>
-        </div>
-      </div>
-    </div>
-
-    <div id="warningModal" class="warning-mask hidden" role="dialog" aria-modal="true">
-      <div class="warning-card">
-        <div class="warning-title" id="warningTitle"></div>
-        <div id="warningText" class="warning-text"></div>
-        <div class="warning-actions">
-          <button class="btn btn-primary" id="warningOkBtn"></button>
-        </div>
-      </div>
-    </div>
+    <div id="root"></div>
   </body>
 </html>

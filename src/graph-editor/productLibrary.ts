@@ -194,7 +194,10 @@ export const PRODUCT_LIBRARY: ProductTemplate[] = [
             role: "highlight",
           },
         ],
-        ports: [{ id: "out_port", name: "出料端口", x: 144, y: 446, direction: "out" }],
+        ports: [
+          { id: "in_port", name: "进料端口", x: 232, y: 96, direction: "in" },
+          { id: "out_port", name: "出料端口", x: 144, y: 446, direction: "out" },
+        ],
         parameters: { 材质: "SUS304", 容积: "2000L", 型号: "SILO-2000L" },
         hotspots: [
           { id: "hs1", label: "仓顶检修口", x: 172, y: 148 },
@@ -259,10 +262,10 @@ export const PRODUCT_LIBRARY: ProductTemplate[] = [
           { id: "hs4", label: "末端法兰", x: 220, y: 14 },
         ],
       },
-      {
-        id: "pipe_port",
-        name: "进料口",
-        kind: "port",
+        {
+          id: "pipe_port",
+          name: "入口法兰",
+          kind: "support",
         x: -16,
         y: 48,
         width: 30,
@@ -295,10 +298,9 @@ export const PRODUCT_LIBRARY: ProductTemplate[] = [
             role: "highlight",
           },
         ],
-        ports: [{ id: "pipe_in", name: "入口法兰", x: 0, y: 19, direction: "in" }],
-        parameters: { 材质: "304 不锈钢", 口径: "DN150", 连接方式: "快装" },
-        hotspots: [{ id: "hs5", label: "进料法兰", x: 8, y: 18 }],
-      },
+          parameters: { 材质: "304 不锈钢", 口径: "DN150", 连接方式: "快装" },
+          hotspots: [{ id: "hs5", label: "进料法兰", x: 8, y: 18 }],
+        },
     ],
   },
   {
@@ -361,19 +363,8 @@ export const PRODUCT_LIBRARY: ProductTemplate[] = [
 export function buildDefaultScene(): GraphScene {
   return {
     updatedAt: new Date().toISOString(),
-    products: [
-      createProductFromTemplate("template_silo", { x: 420, y: 360 }),
-      createProductFromTemplate("template_pipe", { x: 980, y: 510 }),
-    ],
-    links: [
-      {
-        id: "link_seed",
-        from: { productId: "product_1", componentId: "silo_assembly", portId: "out_port" },
-        to: { productId: "product_2", componentId: "pipe_port" },
-        flow: "flowing",
-        materialName: "PVC 粉料",
-      },
-    ],
+    products: [],
+    links: [],
   };
 }
 

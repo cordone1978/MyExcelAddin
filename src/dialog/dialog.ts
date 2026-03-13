@@ -1,15 +1,104 @@
 ﻿/* global Office */
+import React from "react";
+import { createRoot, Root } from "react-dom/client";
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
 import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
+import { buildEquipmentImageUrl } from "../shared/equipmentImagePath";
+import type { DialogPreviewController, PreviewItem } from "../dialog-preview/types";
+import { DialogApp, DialogAnnotationItem, DialogCategoryItem, DialogDetailItem, DialogProjectItem, DialogViewState } from "./dialogApp";
 
-// API 配置
+    let dialogRoot: Root | null = null;
+    const dialogViewState: DialogViewState = {
+        currentMaterialPreset: "lfp",
+        categoryTitle: "",
+        projectTitle: "",
+        detailTitle: "",
+        annotationTitle: "",
+        previewTitle: "",
+        clearAllText: "",
+        confirmSubmitText: "",
+        categories: [],
+        categoriesLoading: true,
+        categoryError: "",
+        projects: [],
+        projectsLoading: false,
+        projectError: "",
+        details: [],
+        detailsLoading: false,
+        detailError: "",
+        annotations: [],
+        annotationsLoading: false,
+        annotationError: "",
+        detailBaseDescription: "-",
+        hoveredPreviewId: null,
+        selectedCategoryId: null,
+        selectedProjectId: null,
+    };
+
+    function renderDialogApp() {
+        if (!dialogRoot) return;
+        dialogViewState.currentMaterialPreset = currentMaterialPreset as any;
+        dialogViewState.selectedCategoryId = currentCategoryId;
+        dialogViewState.selectedProjectId = currentProjectId;
+        dialogRoot.render(
+            React.createElement(DialogApp, {
+                state: dialogViewState,
+                handlers: {
+                    onMaterialPresetChange: (value: any) => {
+                        if (value === currentMaterialPreset) return;
+                        currentMaterialPreset = value;
+                        resetSelectionState({ preserveCategory: true });
+                        clearRightPanels();
+                        if (currentCategoryId && currentCategoryName) {
+                            void selectCategory(currentCategoryId, currentCategoryName);
+                        }
+                    },
+                    onCategoryClick: (id: any, name: string) => {
+                        void selectCategory(id, name);
+                    },
+                    onProjectClick: (id: any, name: string) => {
+                        const project = dialogViewState.projects.find((item) => String(item.id) === String(id));
+                        void selectProject(id, name, project?.imageUrl || "", project?.baseDescription || "");
+                    },
+                    onDetailToggle: (id: any, checked: boolean) => {
+                        const item = dialogViewState.details.find((x) => String(x.id) === String(id));
+                        if (!item) return;
+                        toggleDetail(id, item.name, resolveDetailPreviewImageUrl(id), resolveDetailLayer(id), checked);
+                    },
+                    onAnnotationToggle: (key: string, checked: boolean) => {
+                        const item = dialogViewState.annotations.find((x) => x.key === key);
+                        if (!item) return;
+                        const normalized = currentNormalizedAnnotations.find((x) => x.key === key);
+                        if (!normalized) return;
+                        toggleAnnotation(
+                            key,
+                            normalized.name,
+                            normalized.position_x,
+                            normalized.position_y,
+                            resolvePreviewItemImageUrl(normalized),
+                            normalized.assembly_group,
+                            checked
+                        );
+                    },
+                    onPreviewHoverChange: (previewId: string | null) => {
+                        currentHighlightedComponentId = previewId;
+                        updateListHoverState(previewId);
+                        syncPreviewScene();
+                    },
+                    onClearAll: clearAll,
+                    onConfirmSubmit: () => void confirmData(),
+                }
+            })
+        );
+        window.requestAnimationFrame(() => {
+            resizeImageArea();
+            void ensurePreviewController();
+        });
+    }
+
+    // API 配置
     const API_BASE = APP_URLS.apiBase;
-    // 新增：图片基础路径
-    const IMAGE_BASE = APP_URLS.imageBase;
     const IMAGE_CACHE_BUSTER = Date.now().toString(36);
-    const DEV_GRAPH_SHEET_NAME = "_graph_store_dev";
-    const MAX_CELL_CHARS = 30000;
-
     // 简单缓存
     const cache = {
         categories: {},
@@ -28,31 +117,101 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
     let currentMaterialPreset = "lfp";
     let selectedDetails = new Map(); // 改用 Map，key=id, value={name, imageUrl, layer}
     let selectedAnnotations = new Map(); // key=id, value={name, posX, posY, imageUrl, assemblyGroup}
+    let currentDetailRecords: any[] = [];
+    let currentNormalizedAnnotations: any[] = [];
 
-    // Canvas 相关变量
-    let canvas = null;
-    let ctx = null;
-    let bufferCanvas = null;
-    let bufferCtx = null;
-    let components = {}; // 存储所有组件数据 {id: {name, img, visible, layer, imageUrl}}
-    let analysisCanvases = {};
-    let analysisCtxs = {};
+    // 预览相关变量
+    let previewController: DialogPreviewController | null = null;
+    let previewModuleLoading: Promise<void> | null = null;
+    let components = {}; // 存储所有组件数据 {id: {name, visible, layer, imageUrl, group}}
     let currentHighlightedComponentId = null;
-    let outlineCache = {};
-    let outlineEnabled = true;
-    let outlineMode = 'hover';
     let currentBaseImageUrl = '';
-    let mouseEventsBound = false;
     const MAX_COMPOSITE_DATAURL_CHARS = 1200000; // 约 0.9MB 原始字节，避免 Excel 写入过大触发内部错误
 
-    // 防抖：减少频繁的 renderCanvas 调用
-    let renderTimer = null;
+    function buildPreviewItems(): PreviewItem[] {
+        return Object.values(components)
+            .filter((comp: any) => comp && comp.visible)
+            .sort((a: any, b: any) => Number(a.layer || 0) - Number(b.layer || 0))
+            .map((comp: any) => ({
+                id: String(comp.id),
+                name: String(comp.name || comp.id || ""),
+                group: comp.group === "annotation" ? "annotation" : "detail",
+                imageUrl: comp.imageUrl || null,
+                order: Number(comp.layer || 0),
+                visible: true,
+                assemblyGroup: comp.assemblyGroup ?? null,
+            }));
+    }
+
+    function syncPreviewScene(placeholderMessage?: string) {
+        if (!previewController) return;
+        previewController.setScene({
+            baseImageUrl: currentBaseImageUrl || null,
+            items: buildPreviewItems(),
+            placeholder: placeholderMessage || null,
+            highlightedItemId: currentHighlightedComponentId || null,
+        });
+    }
+
+    function updateListHoverState(hoveredId?: string | null) {
+        dialogViewState.hoveredPreviewId = hoveredId ? String(hoveredId) : null;
+        renderDialogApp();
+    }
+
+    function togglePreviewItemById(itemId: string) {
+        const detailItem = dialogViewState.details.find((item) => String(item.id) === String(itemId));
+        if (detailItem) {
+            if (!detailItem.required) {
+                toggleDetail(detailItem.id, detailItem.name, resolveDetailPreviewImageUrl(detailItem.id), resolveDetailLayer(detailItem.id), !detailItem.checked);
+            }
+            return;
+        }
+        const annotationItem = dialogViewState.annotations.find((item) => String(item.key) === String(itemId));
+        if (annotationItem) {
+            const normalized = currentNormalizedAnnotations.find((item) => String(item.key) === String(itemId));
+            if (!normalized) return;
+            toggleAnnotation(
+                annotationItem.key,
+                normalized.name,
+                normalized.position_x,
+                normalized.position_y,
+                resolvePreviewItemImageUrl(normalized),
+                normalized.assembly_group,
+                !annotationItem.checked
+            );
+        }
+    }
+
     function scheduleRender(highlightId) {
-        if (renderTimer) clearTimeout(renderTimer);
-        renderTimer = setTimeout(() => {
-            renderCanvas(highlightId);
-            renderTimer = null;
-        }, 16); // 约60fps
+        currentHighlightedComponentId = highlightId ? String(highlightId) : null;
+        syncPreviewScene();
+    }
+
+    async function ensurePreviewController() {
+        if (previewController) return;
+        if (previewModuleLoading) {
+            await previewModuleLoading;
+            return;
+        }
+        previewModuleLoading = (async () => {
+            const previewMount = document.getElementById('previewStageMount');
+            if (!previewMount) return;
+            const module = await import(
+                /* webpackChunkName: "dialog-preview" */
+                "../dialog-preview/dialogPreviewController"
+            );
+            previewController = module.mountDialogPreview(previewMount, {
+                onHoverItemId: (itemId) => updateListHoverState(itemId),
+                onClickItemId: (itemId) => togglePreviewItemById(itemId),
+            });
+            resizeImageArea();
+            syncPreviewScene(DIALOG_TEXT.selectProjectPlaceholder);
+        })();
+        try {
+            await previewModuleLoading;
+        } finally {
+            previewModuleLoading = null;
+        }
     }
 
     function resizeImageArea() {
@@ -72,68 +231,22 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
         imageContainer.style.width = `${size}px`;
         imageContainer.style.height = `${size}px`;
 
-        if (canvas && bufferCanvas) {
-            canvas.width = size;
-            canvas.height = size;
-            bufferCanvas.width = size;
-            bufferCanvas.height = size;
-        }
-        if (Object.keys(components).length > 0) {
-            renderCanvas(currentHighlightedComponentId);
-        }
+        previewController?.resize({ width: size, height: size });
+        syncPreviewScene();
     }
 
     // 初始化
     Office.onReady(() => {
+        const rootEl = document.getElementById("root");
+        if (rootEl && !dialogRoot) {
+            dialogRoot = createRoot(rootEl);
+        }
         applyStaticText();
-        console.log(DIALOG_TEXT.ready);
-        bindMaterialSelector();
-
-        // 初始化 Canvas
-        canvas = document.getElementById('mainCanvas');
-        ctx = canvas.getContext('2d');
-        bufferCanvas = document.createElement('canvas');
-        bufferCtx = bufferCanvas.getContext('2d');
-
-        // 设置初始 Canvas 尺寸
-        resizeImageArea();
         window.addEventListener('resize', resizeImageArea);
-
-        // 显示占位符
         showCanvasPlaceholder(DIALOG_TEXT.selectProjectPlaceholder);
-
+        renderDialogApp();
         loadCategories();
     });
-
-    function bindMaterialSelector() {
-        const track = document.getElementById("materialSelectorTrack");
-        const thumb = document.getElementById("materialSelectorThumb");
-        if (!track || !thumb) return;
-        const options = Array.from(track.querySelectorAll(".material-selector-option")) as HTMLButtonElement[];
-        const moveThumbTo = (idx: number) => {
-            (thumb as HTMLElement).style.transform = `translateX(${idx * 100}%)`;
-            options.forEach((btn, i) => btn.classList.toggle("active", i === idx));
-        };
-        options.forEach((btn, idx) => {
-            btn.addEventListener("click", () => {
-                const nextMaterialPreset = String(btn.dataset.value || "lfp");
-                if (nextMaterialPreset === currentMaterialPreset) {
-                    moveThumbTo(idx);
-                    return;
-                }
-                currentMaterialPreset = nextMaterialPreset;
-                moveThumbTo(idx);
-                resetSelectionState({ preserveCategory: true });
-                clearRightPanels();
-                if (currentCategoryId && currentCategoryName) {
-                    void selectCategory(currentCategoryId, currentCategoryName);
-                } else {
-                    document.getElementById('projectList').innerHTML = `<div class="placeholder">${DIALOG_TEXT.noProjectData}</div>`;
-                }
-            });
-        });
-        moveThumbTo(1);
-    }
 
     function buildApiUrl(path: string) {
         const url = new URL(`${API_BASE}${path}`, window.location.origin);
@@ -147,15 +260,16 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
         if (!options?.preserveCategory) {
             currentCategoryId = null;
             currentCategoryName = null;
+            dialogViewState.selectedCategoryId = null;
         }
         currentProjectId = null;
         currentProjectName = null;
         currentProjectBaseDescription = "";
         selectedDetails.clear();
         selectedAnnotations.clear();
-        document.querySelectorAll('#categoryList .listbox-item, #projectList .listbox-item').forEach(item => {
-            item.classList.remove('selected');
-        });
+        dialogViewState.selectedProjectId = null;
+        updateListHoverState(null);
+        renderDialogApp();
     }
 
     function applyStaticText() {
@@ -171,12 +285,21 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
     }
 
     function setText(id: string, text: string) {
-        const el = document.getElementById(id);
-        if (el) el.textContent = text;
+        if (id === "categoryTitle") dialogViewState.categoryTitle = text;
+        if (id === "projectTitle") dialogViewState.projectTitle = text;
+        if (id === "detailTitle") dialogViewState.detailTitle = text;
+        if (id === "annotationTitle") dialogViewState.annotationTitle = text;
+        if (id === "previewTitle") dialogViewState.previewTitle = text;
+        if (id === "clearAllBtn") dialogViewState.clearAllText = text;
+        if (id === "confirmSubmitBtn") dialogViewState.confirmSubmitText = text;
+        renderDialogApp();
     }
 
     // 1. 加载产品类型（带缓存）
     async function loadCategories(options?: { preserveCategoryId?: number | null; preserveCategoryName?: string | null }) {
+        dialogViewState.categoriesLoading = true;
+        dialogViewState.categoryError = "";
+        renderDialogApp();
         if (cache.categories.default) {
             displayCategories(cache.categories.default, options);
             return;
@@ -201,25 +324,17 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
 
     // 2. 显示产品类型列表
     function displayCategories(categories, options?: { preserveCategoryId?: number | null; preserveCategoryName?: string | null }) {
-        const categoryList = document.getElementById('categoryList');
-        categoryList.innerHTML = '';
+        dialogViewState.categoriesLoading = false;
+        dialogViewState.categoryError = "";
+        dialogViewState.categories = (categories || []).map((category: any) => ({ id: category.id, name: category.name })) as DialogCategoryItem[];
 
         if (categories.length === 0) {
             resetSelectionState();
-            document.getElementById('projectList').innerHTML = `<div class="placeholder">${DIALOG_TEXT.noProjectData}</div>`;
+            dialogViewState.projects = [];
             clearRightPanels();
-            categoryList.innerHTML = `<div class="placeholder">${DIALOG_TEXT.noCategoryData}</div>`;
+            renderDialogApp();
             return;
         }
-
-        categories.forEach(category => {
-            const item = document.createElement('div');
-            item.className = 'listbox-item';
-            item.textContent = category.name;
-            item.dataset.id = category.id;
-            item.onclick = () => selectCategory(category.id, category.name);
-            categoryList.appendChild(item);
-        });
 
         const preservedCategory = (categories || []).find(category =>
             (options?.preserveCategoryId && Number(category.id) === Number(options.preserveCategoryId)) ||
@@ -231,8 +346,9 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
             return;
         }
 
-        document.getElementById('projectList').innerHTML = `<div class="placeholder">${DIALOG_TEXT.noProjectData}</div>`;
+        dialogViewState.projects = [];
         clearRightPanels();
+        renderDialogApp();
     }
 
     // 3. 选择产品类型 → 加载产品型号
@@ -244,15 +360,14 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
         currentProjectBaseDescription = "";
         selectedDetails.clear();
         selectedAnnotations.clear();
-
-        // 更新选中状态
-        document.querySelectorAll('#categoryList .listbox-item').forEach(item => {
-            item.classList.toggle('selected', item.dataset.id == categoryId);
-        });
+        dialogViewState.selectedCategoryId = categoryId;
+        dialogViewState.selectedProjectId = null;
 
         // 加载产品型号列表（带缓存）
-        const projectList = document.getElementById('projectList');
-        projectList.innerHTML = `<div class="loading">${DIALOG_TEXT.loading}</div>`;
+        dialogViewState.projectsLoading = true;
+        dialogViewState.projectError = "";
+        dialogViewState.projects = [];
+        renderDialogApp();
 
         try {
             // 检查缓存
@@ -271,11 +386,15 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
                 displayProjects(result.data);
             } else {
                 console.error(`${DIALOG_TEXT.loadProjectFailed}:`, result?.error || result?.message);
-                projectList.innerHTML = `<div class="error">${DIALOG_TEXT.loadProjectFailed}: ${result?.error || result?.message || DIALOG_TEXT.unknownError}</div>`;
+                dialogViewState.projectsLoading = false;
+                dialogViewState.projectError = `${DIALOG_TEXT.loadProjectFailed}: ${result?.error || result?.message || DIALOG_TEXT.unknownError}`;
+                renderDialogApp();
             }
         } catch (error) {
             console.error(`${DIALOG_TEXT.loadProjectFailed}:`, error);
-            projectList.innerHTML = `<div class="error">${DIALOG_TEXT.loadFailed}: ${error.message}</div>`;
+            dialogViewState.projectsLoading = false;
+            dialogViewState.projectError = `${DIALOG_TEXT.loadFailed}: ${error.message}`;
+            renderDialogApp();
         }
 
         clearRightPanels();
@@ -283,22 +402,16 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
 
     // 4. 显示产品型号列表
     function displayProjects(projects) {
-        const projectList = document.getElementById('projectList');
-        projectList.innerHTML = '';
+        dialogViewState.projectsLoading = false;
+        dialogViewState.projectError = "";
+        dialogViewState.projects = (projects || []).map((project: any) => ({
+            id: project.id,
+            name: project.name,
+            imageUrl: project.image_url,
+            baseDescription: project.base_description,
+        })) as DialogProjectItem[];
         
-        if (projects.length === 0) {
-            projectList.innerHTML = `<div class="placeholder">${DIALOG_TEXT.noProjectData}</div>`;
-            return;
-        }
-        
-        projects.forEach(project => {
-            const item = document.createElement('div');
-            item.className = 'listbox-item';
-            item.textContent = project.name;
-            item.dataset.id = project.id;
-            item.onclick = () => selectProject(project.id, project.name, project.image_url, project.base_description);
-            projectList.appendChild(item);
-        });
+        renderDialogApp();
     }
 
     // 5. 选择产品型号 → 加载组件详情
@@ -311,20 +424,21 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
         selectedDetails.clear();
         selectedAnnotations.clear();
         setDetailBaseDescription(currentProjectBaseDescription);
-
-        // 更新选中状态
-        document.querySelectorAll('#projectList .listbox-item').forEach(item => {
-            item.classList.toggle('selected', item.dataset.id == projectId);
-        });
+        dialogViewState.selectedProjectId = projectId;
+        dialogViewState.detailsLoading = true;
+        dialogViewState.annotationsLoading = true;
+        dialogViewState.detailError = "";
+        dialogViewState.annotationError = "";
+        dialogViewState.details = [];
+        dialogViewState.annotations = [];
+        renderDialogApp();
 
         // 显示加载状态
-        document.getElementById('detailList').innerHTML = `<div class="loading">${DIALOG_TEXT.loading}</div>`;
-        document.getElementById('annotationList').innerHTML = `<div class="loading">${DIALOG_TEXT.loading}</div>`;
         showCanvasPlaceholder(DIALOG_TEXT.selectProductPlaceholder);
         Object.keys(components).forEach(id => removeComponentFromCanvas(id));
         selectedDetails.clear();
         selectedAnnotations.clear();
-        renderCanvas(currentHighlightedComponentId);
+        scheduleRender(currentHighlightedComponentId);
 
         try {
             // 并行加载详细信息和标注
@@ -342,14 +456,16 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
                 displayDetails(detailsResult.data);
             } else {
                 console.error(`${DIALOG_TEXT.loadDetailsFailed}:`, detailsResult);
-                document.getElementById('detailList').innerHTML = `<div class="error">${DIALOG_TEXT.loadComponentFailed}</div>`;
+                dialogViewState.detailsLoading = false;
+                dialogViewState.detailError = DIALOG_TEXT.loadComponentFailed;
             }
 
             if (annotationsResult.success) {
                 displayAnnotations(annotationsResult.data);
             } else {
                 console.error(`${DIALOG_TEXT.loadAnnotationsFailed}:`, annotationsResult);
-                document.getElementById('annotationList').innerHTML = `<div class="error">${DIALOG_TEXT.loadAccessoryFailed}</div>`;
+                dialogViewState.annotationsLoading = false;
+                dialogViewState.annotationError = DIALOG_TEXT.loadAccessoryFailed;
             }
 
             // 尝试从配置中获取图片
@@ -360,7 +476,7 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
                 if (componentsWithPic.length > 0) {
                     // 优先使用component_sn=1的组件图片
                     const mainComponent = componentsWithPic.find(comp => comp.component_sn === 1) || componentsWithPic[0];
-                    const realImageUrl = getImageUrl(mainComponent.component_pic);
+                    const realImageUrl = normalizeImageUrl(mainComponent.image_url) || getImageUrl(mainComponent.component_pic);
                     if (realImageUrl) {
                         displayImage(realImageUrl);
                     } else {
@@ -375,30 +491,22 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
 
         } catch (error) {
             console.error(`${DIALOG_TEXT.loadProjectDetailFailed}:`, error);
-            document.getElementById('detailList').innerHTML = `<div class="error">${DIALOG_TEXT.loadFailed}</div>`;
-            document.getElementById('annotationList').innerHTML = `<div class="error">${DIALOG_TEXT.loadFailed}</div>`;
+            dialogViewState.detailsLoading = false;
+            dialogViewState.annotationsLoading = false;
+            dialogViewState.detailError = DIALOG_TEXT.loadFailed;
+            dialogViewState.annotationError = DIALOG_TEXT.loadFailed;
+            renderDialogApp();
             displayPlaceholderImage(projectName);
         }
     }
 
     // 新增：图片路径处理函数
     function getImageUrl(componentPic) {
-        if (!componentPic || componentPic.trim() === '') {
-            return null;
-        }
-        
-        let fileName = componentPic.trim();
-        
-        // 如果没有扩展名，添加.png
-        if (!fileName.includes('.')) {
-            fileName = fileName + '.png';
-        }
-        
-        // 编码中文文件名
-        const encodedFileName = encodeURIComponent(fileName);
-        const url = new URL(IMAGE_BASE + encodedFileName, window.location.origin);
-        url.searchParams.set('v', IMAGE_CACHE_BUSTER);
-        return url.toString();
+        const url = buildEquipmentImageUrl(componentPic);
+        if (!url) return null;
+        const normalized = new URL(url, window.location.origin);
+        normalized.searchParams.set('v', IMAGE_CACHE_BUSTER);
+        return normalized.toString();
     }
 
     // 统一处理后端返回的 image_url（协议、中文编码）
@@ -425,143 +533,98 @@ import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
         }
     }
 
-// 6. 显示组件详情（多选，必选项自动选中）
-function displayDetails(details) {
-    const detailList = document.getElementById('detailList');
-    detailList.innerHTML = '';
-
-    if (details.length === 0) {
-        detailList.innerHTML = `<div class="placeholder">${DIALOG_TEXT.noDetailData}</div>`;
-        return;
+    function resolvePreviewItemImageUrl(item) {
+        if (item?.image_url) {
+            return normalizeImageUrl(item.image_url);
+        }
+        if (item?.component_pic) {
+            return getImageUrl(item.component_pic);
+        }
+        return null;
     }
 
-    details.forEach((detail, index) => {
-        const item = document.createElement('div');
-        item.className = 'listbox-item multi-select';
+    function resolveDetailRecord(detailId) {
+        return (currentDetailRecords || []).find((item) => String(item.id) === String(detailId)) || null;
+    }
 
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `detail-${index}`;
-        checkbox.dataset.id = detail.id;
+    function resolveDetailPreviewImageUrl(detailId) {
+        const record = resolveDetailRecord(detailId);
+        return record ? resolvePreviewItemImageUrl(record) : null;
+    }
 
-        // 获取图片URL
-        let imageUrl = null;
-        if (detail.image_url) {
-            imageUrl = normalizeImageUrl(detail.image_url);
-        } else if (detail.component_pic) {
-            imageUrl = getImageUrl(detail.component_pic);
-        }
+    function resolveDetailLayer(detailId) {
+        const record = resolveDetailRecord(detailId);
+        return record ? Number(record.component_sn || 0) : 0;
+    }
 
-        // 必选项自动选中并禁用
+    function addPreviewSelection(targetMap, itemId, previewData, layerOrder, group = "detail") {
+        targetMap.set(itemId, previewData);
+        addComponentToCanvas(itemId, previewData.name, previewData.imageUrl, layerOrder, group, previewData.assemblyGroup);
+    }
+
+    function removePreviewSelection(targetMap, itemId) {
+        targetMap.delete(itemId);
+        removeComponentFromCanvas(itemId);
+    }
+
+// 6. 显示组件信息（多选，必选项自动选中）
+function displayDetails(details) {
+    currentDetailRecords = details || [];
+    dialogViewState.detailsLoading = false;
+    dialogViewState.detailError = "";
+
+    if (details.length === 0) {
+        dialogViewState.details = [];
+        renderDialogApp();
+        return;
+    }
+    dialogViewState.details = details.map((detail, index) => {
+        const imageUrl = resolvePreviewItemImageUrl(detail);
         if (detail.is_required === 1) {
-            checkbox.checked = true;
-            checkbox.disabled = true;
-            selectedDetails.set(detail.id, {
+            addPreviewSelection(selectedDetails, detail.id, {
                 name: detail.name,
                 imageUrl: imageUrl,
                 layer: detail.component_sn || index
-            });
-            // 添加到 Canvas
-            addComponentToCanvas(detail.id, detail.name, imageUrl, detail.component_sn || index);
+            }, detail.component_sn || index, "detail");
         }
-
-        checkbox.onchange = () => toggleDetail(detail.id, detail.name, imageUrl, detail.component_sn || index, checkbox.checked);
-
-        const label = document.createElement('label');
-        label.htmlFor = `detail-${index}`;
-        label.textContent = detail.name + (detail.is_required === 1 ? DIALOG_TEXT.requiredSuffix : '');
-        label.style.cursor = detail.is_required === 1 ? 'default' : 'pointer';
-        label.style.flex = '1';
-
-        if (detail.is_required === 1) {
-            label.style.fontWeight = 'bold';
-            label.style.color = '#0078d4';
-        }
-
-        // 单击列表项：仅切换勾选，保持叠加显示
-        item.onclick = (e) => {
-            if (checkbox.disabled) return;
-            if (e.target && e.target.type === 'checkbox') return;
-            checkbox.checked = !checkbox.checked;
-            checkbox.dispatchEvent(new Event('change'));
-        };
-
-        item.appendChild(checkbox);
-        item.appendChild(label);
-        detailList.appendChild(item);
+        return {
+            id: detail.id,
+            name: detail.name,
+            checked: detail.is_required === 1 || selectedDetails.has(detail.id),
+            required: detail.is_required === 1,
+            previewId: String(detail.id),
+        } as DialogDetailItem;
     });
+    renderDialogApp();
 }
 
-// 7. 显示标注选项（多选）
+// 7. 显示配件信息（多选）
 function displayAnnotations(annotations) {
-    const annotationList = document.getElementById('annotationList');
-    annotationList.innerHTML = '';
+    dialogViewState.annotationsLoading = false;
+    dialogViewState.annotationError = "";
 
     if (annotations.length === 0) {
-        annotationList.innerHTML = `<div class="placeholder">${DIALOG_TEXT.noAnnotationData}</div>`;
+        dialogViewState.annotations = [];
+        currentNormalizedAnnotations = [];
+        renderDialogApp();
         return;
     }
 
     const normalized = normalizeAnnotations(annotations);
+    currentNormalizedAnnotations = normalized;
 
     if (normalized.length === 0) {
-        annotationList.innerHTML = `<div class="placeholder">${DIALOG_TEXT.noAnnotationData}</div>`;
+        dialogViewState.annotations = [];
+        renderDialogApp();
         return;
     }
-
-    normalized.forEach((annotation, index) => {
-        const item = document.createElement('div');
-        item.className = 'listbox-item multi-select';
-
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `anno-${index}`;
-        checkbox.dataset.key = annotation.key;
-
-        // 获取图片URL
-        let imageUrl = null;
-        if (annotation.image_url) {
-            imageUrl = normalizeImageUrl(annotation.image_url);
-        } else if (annotation.component_pic) {
-            imageUrl = getImageUrl(annotation.component_pic);
-        }
-
-        checkbox.onchange = () => toggleAnnotation(
-            annotation.key,
-            annotation.name,
-            annotation.position_x,
-            annotation.position_y,
-            imageUrl,
-            annotation.assembly_group,
-            checkbox.checked
-        );
-
-        const label = document.createElement('label');
-        label.htmlFor = `anno-${index}`;
-        label.textContent = annotation.name;
-        label.style.cursor = 'pointer';
-        label.style.flex = '1';
-        item.title = `${DIALOG_TEXT.tooltipPrefix}${annotation.name || ''}`;
-
-        // 单击空白处切换勾选，保持叠加显示
-        item.onclick = (e) => {
-            if (e.target && e.target.type === 'checkbox') return;
-            checkbox.checked = !checkbox.checked;
-            toggleAnnotation(
-                annotation.key,
-                annotation.name,
-                annotation.position_x,
-                annotation.position_y,
-                imageUrl,
-                annotation.assembly_group,
-                checkbox.checked
-            );
-        };
-
-        item.appendChild(checkbox);
-        item.appendChild(label);
-        annotationList.appendChild(item);
-    });
+    dialogViewState.annotations = normalized.map((annotation) => ({
+        key: annotation.key,
+        name: annotation.name,
+        checked: selectedAnnotations.has(annotation.key),
+        previewId: String(annotation.key),
+    })) as DialogAnnotationItem[];
+    renderDialogApp();
 }
 
 // 合并重复的标注项（按名称），优先保留有图片/坐标的记录
@@ -615,366 +678,102 @@ function normalizeAnnotations(annotations) {
     // 8. 切换组件选择
     function toggleDetail(detailId, detailName, imageUrl, layer, isChecked) {
         if (isChecked) {
-            selectedDetails.set(detailId, {
+            addPreviewSelection(selectedDetails, detailId, {
                 name: detailName,
                 imageUrl: imageUrl,
                 layer: layer
-            });
-            // 添加组件到 Canvas
-            addComponentToCanvas(detailId, detailName, imageUrl, layer);
+            }, layer, "detail");
         } else {
-            selectedDetails.delete(detailId);
-            // 从 Canvas 移除组件
-            removeComponentFromCanvas(detailId);
+            removePreviewSelection(selectedDetails, detailId);
         }
 
         // 防抖渲染
+        dialogViewState.details = dialogViewState.details.map((item) =>
+            String(item.id) === String(detailId) ? { ...item, checked: isChecked || item.required } : item
+        );
+        renderDialogApp();
         scheduleRender(currentHighlightedComponentId);
     }
 
-    // 9. Canvas 相关函数 - 添加组件到 Canvas
-    function addComponentToCanvas(componentId, componentName, imageUrl, layer) {
+    // 9. 预览相关函数
+    function addComponentToCanvas(componentId, componentName, imageUrl, layer, group = "detail", assemblyGroup = null) {
         if (!imageUrl) return;
-
+        const existing = components[componentId] || {};
         components[componentId] = {
+            ...existing,
             id: componentId,
             name: componentName,
-            imageUrl: imageUrl,
-            layer: layer,
-            loaded: false,
-            image: null,
-            visible: true
+            imageUrl,
+            layer,
+            visible: true,
+            group,
+            assemblyGroup,
         };
-
-        // 预加载图片
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = () => {
-            const component = components[componentId];
-            if (component) {
-                component.loaded = true;
-                component.image = img;
-                scheduleRender(currentHighlightedComponentId);
-            }
-        };
-        img.onerror = () => {
-            console.error(`${DIALOG_TEXT.componentImageLoadFailed}:`, imageUrl);
-        };
-        img.src = imageUrl;
+        scheduleRender(currentHighlightedComponentId);
     }
 
-    // 从 Canvas 移除组件
     function removeComponentFromCanvas(componentId) {
         delete components[componentId];
         scheduleRender(currentHighlightedComponentId);
     }
 
-    // 渲染 Canvas（叠加所有选中的组件）
-    function renderCanvas(highlightId) {
-        const container = document.getElementById('imageContainer');
-        const canvas = document.getElementById('mainCanvas');
-        const previewImage = document.getElementById('previewImage');
-        const placeholder = document.getElementById('placeholder');
-
-        if (!canvas) {
-            console.error(DIALOG_TEXT.canvasNotFound);
-            return;
-        }
-
-        const ctx = canvas.getContext('2d');
-
-        // 如果没有选中任何组件，显示占位符
-        if (Object.keys(components).length === 0) {
-            canvas.style.display = 'none';
-            if (previewImage && previewImage.src) {
-                previewImage.style.display = 'block';
-                if (placeholder) placeholder.style.display = 'none';
-            } else if (placeholder) {
-                placeholder.style.display = 'flex';
-            }
-            return;
-        }
-
-        // 显示 Canvas，隐藏其他
-        canvas.style.display = 'block';
-        if (placeholder) placeholder.style.display = 'none';
-
-        // 获取所有已加载的组件
-        const loadedComponents = Object.values(components)
-            .filter(comp => comp.loaded && comp.image && comp.visible)
-            .sort((a, b) => a.layer - b.layer); // 按层级排序
-
-        if (loadedComponents.length === 0) {
-            // 还没有加载完成的图片
-            return;
-        }
-
-        // 清空 Canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // 先绘制所有组件
-        loadedComponents.forEach(component => {
-            ctx.drawImage(component.image, 0, 0, canvas.width, canvas.height);
-        });
-
-        // 再单独绘制高亮组件，确保可见
-        if (outlineEnabled && outlineMode === 'hover' && highlightId) {
-            const outlined = getOutlinedImage(highlightId);
-            if (outlined) {
-                ctx.drawImage(outlined, 0, 0, canvas.width, canvas.height);
-            }
-        }
-
-        console.log(`${DIALOG_TEXT.canvasRendered}:`, loadedComponents.length);
-        initAnalysisCanvases();
-        setupMouseEvents();
-    }
-    function getOutlinedImage(componentId) {
-        if (outlineCache[componentId]) return outlineCache[componentId];
-        const comp = components[componentId];
-        if (!comp || !comp.image) return null;
-
-        const offscreen = document.createElement('canvas');
-        offscreen.width = comp.image.width;
-        offscreen.height = comp.image.height;
-        const octx = offscreen.getContext('2d');
-
-        // 简单描边：四向偏移 + 原图
-        octx.clearRect(0, 0, offscreen.width, offscreen.height);
-        octx.globalCompositeOperation = 'source-over';
-        octx.fillStyle = '#ff5000';
-        octx.drawImage(comp.image, -2, 0);
-        octx.drawImage(comp.image, 2, 0);
-        octx.drawImage(comp.image, 0, -2);
-        octx.drawImage(comp.image, 0, 2);
-        octx.globalCompositeOperation = 'source-in';
-        octx.fillStyle = '#ff5000';
-        octx.fillRect(0, 0, offscreen.width, offscreen.height);
-        octx.globalCompositeOperation = 'source-over';
-        octx.drawImage(comp.image, 0, 0);
-
-        outlineCache[componentId] = offscreen;
-        return offscreen;
-    }
-
-    function clearOutlineCache(componentId) {
-        if (outlineCache[componentId]) {
-            delete outlineCache[componentId];
-        }
-    }
-
-    function initAnalysisCanvases() {
-        const canvas = document.getElementById('mainCanvas');
-        if (!canvas) return;
-
-        Object.keys(analysisCtxs).forEach(id => {
-            delete analysisCtxs[id];
-            delete analysisCanvases[id];
-        });
-
-        Object.keys(components).forEach(id => {
-            const comp = components[id];
-            if (!comp || !comp.visible || !comp.image || !comp.loaded) return;
-            analysisCanvases[id] = document.createElement('canvas');
-            analysisCanvases[id].width = canvas.width;
-            analysisCanvases[id].height = canvas.height;
-            analysisCtxs[id] = analysisCanvases[id].getContext('2d', { willReadFrequently: true });
-            analysisCtxs[id].drawImage(comp.image, 0, 0, canvas.width, canvas.height);
-        });
-    }
-
-    function setupMouseEvents() {
-        if (mouseEventsBound) return;
-        const canvas = document.getElementById('mainCanvas');
-        const tooltip = document.getElementById('tooltip');
-        if (!canvas || !tooltip) return;
-
-        canvas.onmousemove = function (event) {
-            if (!analysisCtxs || Object.keys(analysisCtxs).length === 0) {
-                if (currentHighlightedComponentId != null) {
-                    currentHighlightedComponentId = null;
-                    renderCanvas(null);
-                }
-                tooltip.style.display = 'none';
-                return;
-            }
-
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            const x = Math.floor((event.clientX - rect.left) * scaleX);
-            const y = Math.floor((event.clientY - rect.top) * scaleY);
-
-            let hoveredId = null;
-            const ids = Object.keys(analysisCtxs).sort((a, b) => (components[b]?.layer || 0) - (components[a]?.layer || 0));
-            for (let i = 0; i < ids.length; i++) {
-                const id = ids[i];
-                try {
-                    const pixel = analysisCtxs[id].getImageData(x, y, 1, 1);
-                    if (pixel.data[3] > 0) {
-                        hoveredId = id;
-                        break;
-                    }
-                } catch (e) {
-                    // ignore read errors
-                }
-            }
-
-            if (hoveredId !== currentHighlightedComponentId) {
-                currentHighlightedComponentId = hoveredId;
-                scheduleRender(currentHighlightedComponentId);
-            }
-
-            if (hoveredId) {
-                tooltip.textContent = DIALOG_TEXT.tooltipPrefix + (components[hoveredId] ? components[hoveredId].name : hoveredId);
-                tooltip.style.display = 'block';
-                tooltip.style.left = (event.clientX + 15) + 'px';
-                tooltip.style.top = (event.clientY + 15) + 'px';
-            } else {
-                tooltip.style.display = 'none';
-            }
-        };
-
-        canvas.onmouseout = function () {
-            if (currentHighlightedComponentId != null) {
-                currentHighlightedComponentId = null;
-                scheduleRender(null);
-            }
-            tooltip.style.display = 'none';
-        };
-
-        mouseEventsBound = true;
-    }
-
-    // 显示单张图片（用于点击列表项时预览）
-    function displaySingleImage(imageUrl) {
-        const canvas = document.getElementById('mainCanvas');
-        const previewImage = document.getElementById('previewImage');
-        const placeholder = document.getElementById('placeholder');
-
-        if (canvas) canvas.style.display = 'none';
-        if (placeholder) placeholder.style.display = 'none';
-        if (!previewImage) return;
-
-        previewImage.onerror = () => {
-            console.error(`${DIALOG_TEXT.imageLoadFailed}:`, imageUrl);
-            if (placeholder) {
-                placeholder.textContent = DIALOG_TEXT.imageLoadFailed;
-                placeholder.style.display = 'flex';
-            }
-        };
-
-        previewImage.crossOrigin = "anonymous";
-        previewImage.src = imageUrl;
-        previewImage.style.display = 'block';
-    }
-
-    // 10. 显示 Canvas 占位符
     function showCanvasPlaceholder(message) {
-        const mainCanvas = document.getElementById('mainCanvas');
-        const previewImage = document.getElementById('previewImage');
-        const placeholder = document.getElementById('placeholder');
-
-        // 隐藏 Canvas
-        if (mainCanvas) {
-            mainCanvas.style.display = 'none';
-        }
-
-        if (previewImage) {
-            previewImage.src = '';
-            previewImage.style.display = 'none';
-        }
-        if (placeholder) {
-            placeholder.textContent = message;
-            placeholder.style.display = 'flex';
-        }
+        currentBaseImageUrl = '';
+        syncPreviewScene(message);
     }
 
     // 11. 显示占位图片
     function displayPlaceholderImage(projectName) {
-        const canvas = document.getElementById('mainCanvas');
-        const previewImage = document.getElementById('previewImage');
-        const placeholder = document.getElementById('placeholder');
-
-        // 隐藏 Canvas，显示容器
-        if (canvas) {
-            canvas.style.display = 'none';
-        }
-        if (previewImage) {
-            previewImage.src = '';
-            previewImage.style.display = 'none';
-        }
-        if (placeholder) {
-            placeholder.innerHTML = `
-                <div style="font-size: 24px; margin-bottom: 10px;">📦</div>
-                <div>${projectName}</div>
-                <div style="font-size: 12px; color: #999; margin-top: 5px;">${DIALOG_TEXT.noProductImage}</div>
-            `;
-            placeholder.style.display = 'flex';
-        }
+        currentBaseImageUrl = '';
+        syncPreviewScene(`${projectName} ${DIALOG_TEXT.noProductImage}`);
     }
 
     // 12. 显示图片（用于产品主图）
     function displayImage(imageUrl) {
-        const canvas = document.getElementById('mainCanvas');
-        const previewImage = document.getElementById('previewImage');
-        const placeholder = document.getElementById('placeholder');
-
-        // 隐藏 Canvas，显示容器
-        if (canvas) {
-            canvas.style.display = 'none';
-        }
-        if (placeholder) placeholder.style.display = 'none';
-        if (!previewImage) return;
-
-        previewImage.onload = () => {};
-        previewImage.onerror = () => {
-            console.error(`${DIALOG_TEXT.imageLoadFailed}:`, imageUrl);
-            if (placeholder) {
-                placeholder.textContent = DIALOG_TEXT.imageLoadFailed;
-                placeholder.style.display = 'flex';
-            }
-        };
         currentBaseImageUrl = imageUrl || '';
-        previewImage.crossOrigin = "anonymous";
-        previewImage.src = imageUrl;
-        previewImage.style.display = 'block';
+        syncPreviewScene();
     }
 
-    // 12. 切换标注选项
+    // 12. 切换配件信息
     function toggleAnnotation(annotationKey, annotationName, posX, posY, imageUrl, assemblyGroup, isChecked) {
         if (isChecked) {
-            selectedAnnotations.set(annotationKey, {
+            addPreviewSelection(selectedAnnotations, annotationKey, {
                 name: annotationName,
                 posX,
                 posY,
                 imageUrl,
                 assemblyGroup: Number(assemblyGroup || 0)
-            });
-            // 可选配件同样叠加到 Canvas
-            addComponentToCanvas(annotationKey, annotationName, imageUrl, posX || 0);
+            }, posX || 0, "annotation");
         } else {
-            selectedAnnotations.delete(annotationKey);
-            removeComponentFromCanvas(annotationKey);
+            removePreviewSelection(selectedAnnotations, annotationKey);
         }
 
-        console.log(`${DIALOG_TEXT.selectedAnnotations}:`, Array.from(selectedAnnotations.entries()).map(([id, data]) => ({id, ...data})));
+        dialogViewState.annotations = dialogViewState.annotations.map((item) =>
+            String(item.key) === String(annotationKey) ? { ...item, checked: isChecked } : item
+        );
+        renderDialogApp();
         scheduleRender(currentHighlightedComponentId);
     }
 
     function setDetailBaseDescription(text) {
-        const el = document.getElementById('detailBaseDescriptionValue');
-        if (!el) return;
         const normalized = String(text || '').trim();
-        el.textContent = normalized || '-';
+        dialogViewState.detailBaseDescription = normalized || '-';
+        renderDialogApp();
     }
 
     // 13. 清空右侧面板
     function clearRightPanels() {
-        document.getElementById('detailList').innerHTML = '';
-        document.getElementById('annotationList').innerHTML = '';
+        dialogViewState.details = [];
+        dialogViewState.annotations = [];
+        dialogViewState.detailsLoading = false;
+        dialogViewState.annotationsLoading = false;
+        dialogViewState.detailError = "";
+        dialogViewState.annotationError = "";
         setDetailBaseDescription('');
+        components = {};
+        currentHighlightedComponentId = null;
         showCanvasPlaceholder(DIALOG_TEXT.selectProductPlaceholder);
+        renderDialogApp();
     }
 
     // 17. 清除全部
@@ -987,89 +786,22 @@ function normalizeAnnotations(annotations) {
         selectedDetails.clear();
         selectedAnnotations.clear();
         
-        document.querySelectorAll('.listbox-item').forEach(item => {
-            item.classList.remove('selected');
-        });
-        
-        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-        checkboxes.forEach(cb => {
-            if (!cb.disabled) cb.checked = false;
-        });
-        
-        document.getElementById('projectList').innerHTML = '';
+        dialogViewState.selectedCategoryId = null;
+        dialogViewState.selectedProjectId = null;
+        dialogViewState.projects = [];
         clearRightPanels();
+        renderDialogApp();
     }
 
     // 18. 显示错误
     function showError(message) {
-        const categoryList = document.getElementById('categoryList');
-        categoryList.innerHTML = `<div class="error">${message}</div>`;
+        dialogViewState.categoriesLoading = false;
+        dialogViewState.categoryError = message;
+        renderDialogApp();
     }
 
-    function exportCompositeImageDataUrl(canvas, scaleHint = 2) {
-        if (!canvas) return null;
-        const loadedComponents = Object.values(components)
-            .filter((comp: any) => comp && comp.loaded && comp.image && comp.visible)
-            .sort((a: any, b: any) => (a.layer || 0) - (b.layer || 0));
-        if (loadedComponents.length === 0) {
-            return null;
-        }
-
-        const baseW = Math.max(1, Number(canvas.width || 0));
-        const baseH = Math.max(1, Number(canvas.height || 0));
-        if (!baseW || !baseH) return null;
-
-        const sourceScales = loadedComponents.map((comp: any) => {
-            const img = comp.image as HTMLImageElement;
-            const sw = Number(img?.naturalWidth || img?.width || 0);
-            const sh = Number(img?.naturalHeight || img?.height || 0);
-            if (!sw || !sh) return 1;
-            return Math.min(sw / baseW, sh / baseH);
-        });
-        const sourceScale = Math.max(1, ...sourceScales.filter((v) => Number.isFinite(v) && v > 0));
-        const adaptiveScale = Math.max(scaleHint, Math.floor(sourceScale));
-        let exportScale = Math.max(2, Math.min(4, adaptiveScale));
-        let bestDataUrl: string | null = null;
-
-        for (let attempt = 0; attempt < 6; attempt++) {
-            const exportW = Math.max(1, Math.round(baseW * exportScale));
-            const exportH = Math.max(1, Math.round(baseH * exportScale));
-            const offscreen = document.createElement('canvas');
-            offscreen.width = exportW;
-            offscreen.height = exportH;
-            const octx = offscreen.getContext('2d');
-            if (!octx) break;
-            octx.imageSmoothingEnabled = true;
-            octx.imageSmoothingQuality = 'high';
-            octx.clearRect(0, 0, exportW, exportH);
-
-            loadedComponents.forEach((comp: any) => {
-                octx.drawImage(comp.image, 0, 0, exportW, exportH);
-            });
-
-            const pngData = offscreen.toDataURL('image/png');
-            if (!bestDataUrl || pngData.length < bestDataUrl.length) {
-                bestDataUrl = pngData;
-            }
-            if (pngData.length <= MAX_COMPOSITE_DATAURL_CHARS) {
-                return pngData;
-            }
-
-            const jpgData = offscreen.toDataURL('image/jpeg', 0.92);
-            if (!bestDataUrl || jpgData.length < bestDataUrl.length) {
-                bestDataUrl = jpgData;
-            }
-            if (jpgData.length <= MAX_COMPOSITE_DATAURL_CHARS) {
-                return jpgData;
-            }
-
-            exportScale = Math.max(1, exportScale - 0.5);
-            if (exportScale <= 1.01) {
-                break;
-            }
-        }
-
-        return bestDataUrl;
+    function exportCompositeImageDataUrl() {
+        return previewController?.exportCompositeImageDataUrl(MAX_COMPOSITE_DATAURL_CHARS) || null;
     }
 
     // 19. 确认提交
@@ -1088,14 +820,13 @@ function normalizeAnnotations(annotations) {
 
         // 获取合成图片（如果有）
         let compositeImageBase64 = null;
-        const canvas = document.getElementById('mainCanvas') as HTMLCanvasElement;
-        if (canvas && canvas.style.display !== 'none') {
-            try {
-                compositeImageBase64 = exportCompositeImageDataUrl(canvas, 2) || canvas.toDataURL('image/png');
+        try {
+            compositeImageBase64 = exportCompositeImageDataUrl();
+            if (compositeImageBase64) {
                 console.log(`${DIALOG_TEXT.exportedCompositeImage}:`, compositeImageBase64.length);
-            } catch (error) {
-                console.error(`${DIALOG_TEXT.exportCompositeImageFailed}:`, error);
             }
+        } catch (error) {
+            console.error(`${DIALOG_TEXT.exportCompositeImageFailed}:`, error);
         }
 
         const result = {
@@ -1130,60 +861,3 @@ function normalizeAnnotations(annotations) {
     // 暴露函数到全局作用域，供 HTML onclick 使用
     (window as any).confirmData = confirmData;
     (window as any).clearAll = clearAll;
-
-    function chunkText(text, size) {
-        const chunks = [];
-        const source = String(text || "");
-        for (let i = 0; i < source.length; i += size) {
-            chunks.push(source.slice(i, i + size));
-        }
-        return chunks.length > 0 ? chunks : [""];
-    }
-
-    async function saveCompositeToDevSheet(result) {
-        await Excel.run(async (context) => {
-            const sheets = context.workbook.worksheets;
-            let sheet = sheets.getItemOrNullObject(DEV_GRAPH_SHEET_NAME);
-            sheet.load("name,isNullObject");
-            await context.sync();
-
-            if (sheet.isNullObject) {
-                sheet = sheets.add(DEV_GRAPH_SHEET_NAME);
-            }
-
-            sheet.visibility = Excel.SheetVisibility.hidden;
-
-            const meta = {
-                savedAt: new Date().toISOString(),
-                categoryId: result.categoryId,
-                category: result.category,
-                projectId: result.projectId,
-                project: result.project,
-                details: result.details,
-                annotations: result.annotations,
-                hasCompositeImage: !!result.compositeImage
-            };
-
-            const metaJson = JSON.stringify(meta);
-            const imageBase64 = String(result.compositeImage || "");
-            const imageChunks = chunkText(imageBase64, MAX_CELL_CHARS);
-            const chunkRows = imageChunks.map((chunk) => [chunk]);
-
-            sheet.getRange("A1").values = [["GRAPH_DIALOG_DEV_V1"]];
-            sheet.getRange("A2").values = [[metaJson]];
-            sheet.getRange("A3").values = [[String(imageChunks.length)]];
-
-            // 先清理旧图片区（避免上次更长数据残留）
-            sheet.getRange("A10:A2000").clear(Excel.ClearApplyTo.contents);
-
-            if (chunkRows.length > 0) {
-                const endRow = 10 + chunkRows.length - 1;
-                sheet.getRange(`A10:A${endRow}`).values = chunkRows;
-            }
-
-            sheet.getRange("B1").values = [["说明"]];
-            sheet.getRange("B2").values = [["A2=提交元数据(JSON)，A3=图片分块数，A10起=图片base64分块"]];
-
-            await context.sync();
-        });
-    }

@@ -15,7 +15,7 @@ export const SERVER_CONFIG = {
   host: "localhost",
   port: 3001,
   apiPrefix: "/api",
-  publicImagesPath: "/public/images/",
+  publicImagesPath: "/assets/equipment/",
 } as const;
 
 function getClientRuntimeConfig(): ClientRuntimeConfig {
@@ -84,7 +84,6 @@ export const API_PATHS = {
   authLogout: "/auth/logout",
   authMe: "/auth/me",
   authResetPassword: "/auth/reset-password",
-  graphTemplateImage: "/graph-template-image",
 } as const;
 
 export const DIALOG_PATHS = {
