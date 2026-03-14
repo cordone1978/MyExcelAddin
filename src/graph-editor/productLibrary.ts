@@ -1,5 +1,5 @@
 import { equipmentAssetPath } from "./assetPaths";
-import { GraphScene, ProductModel, ProductTemplate } from "./sceneTypes";
+import { GraphScene, PipeState, ProductModel, ProductTemplate } from "./sceneTypes";
 
 // Template authoring notes:
 // 1. Prefer real PNG files under assets/equipment/<product-dir>/...
@@ -371,7 +371,7 @@ export function buildDefaultScene(): GraphScene {
 export function createProductFromTemplate(templateId: string, placement: { x: number; y: number }, index = 0): ProductModel {
   const template = PRODUCT_LIBRARY.find((item) => item.templateId === templateId) || PRODUCT_LIBRARY[0];
   const productId = `product_${Date.now()}_${index}_${Math.random().toString(16).slice(2, 7)}`;
-  return {
+  const product: ProductModel = {
     id: productId,
     name: template.name,
     x: placement.x,
@@ -387,4 +387,25 @@ export function createProductFromTemplate(templateId: string, placement: { x: nu
       ports: component.ports?.map((port) => ({ ...port })),
     })),
   };
+  if (template.templateId === "template_pipe") {
+    const pipeMain = product.components.find((component) => component.id === "pipe_main" && component.kind === "pipe");
+    const startPort = pipeMain?.ports?.find((port) => port.id === "pipe_left");
+    const endPort = pipeMain?.ports?.find((port) => port.id === "pipe_right");
+    if (pipeMain && startPort && endPort) {
+      const pipeState: PipeState = {
+        startBinding: null,
+        endBinding: null,
+        startFreePoint: {
+          x: placement.x + pipeMain.x + startPort.x,
+          y: placement.y + pipeMain.y + startPort.y,
+        },
+        endFreePoint: {
+          x: placement.x + pipeMain.x + endPort.x,
+          y: placement.y + pipeMain.y + endPort.y,
+        },
+      };
+      product.pipeState = pipeState;
+    }
+  }
+  return product;
 }

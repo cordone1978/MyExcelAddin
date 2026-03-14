@@ -6,7 +6,7 @@ import { Circle, Group, Image as KonvaImage, Label, Layer, Line, Rect, Stage, Ta
 import { getPortDisplayName, getPortUsageSummary, isConnectionAllowed } from "./connectionRules";
 import { buildDefaultScene, createProductFromTemplate, PRODUCT_LIBRARY } from "./productLibrary";
 import { QuoteLibraryResolvedItem, resolveTemplateFromProductName, resolveTemplateThumbnail } from "./productLibraryLookup";
-import { GraphScene, MaterialFlowLink, ProductComponent, ProductModel, SelectedTarget, ViewMode } from "./sceneTypes";
+import { GraphScene, MaterialFlowLink, PipeEndpointKey, PortEndpointRef, ProductComponent, ProductModel, SelectedTarget, ViewMode } from "./sceneTypes";
 import { GraphProductLibraryEntry, WorkbookGraphPayload } from "./workbookStore";
 import { useContainerSize, useLoadedImage } from "../shared/konvaHooks";
 
@@ -37,6 +37,11 @@ type GraphEditorDialogPayload = {
   libraryEntries: GraphProductLibraryEntry[];
 };
 
+type PipeDragState = {
+  productId: string;
+  endpoint: PipeEndpointKey;
+};
+
 let pendingDialogPayloadResolver: ((payload: GraphEditorDialogPayload) => void) | null = null;
 let pendingSaveRequestSeq = 0;
 const pendingSaveRequests = new Map<
@@ -53,12 +58,51 @@ function cloneDefaultScene() {
   return buildDefaultScene();
 }
 
+function hydratePipeState(product: ProductModel) {
+  if (product.templateId !== "template_pipe") return product;
+  const pipeMain = product.components.find((component) => component.id === "pipe_main" && component.kind === "pipe");
+  const startPort = pipeMain?.ports?.find((port) => port.id === "pipe_left");
+  const endPort = pipeMain?.ports?.find((port) => port.id === "pipe_right");
+  if (!pipeMain || !startPort || !endPort) return product;
+  return {
+    ...product,
+    pipeState: {
+      startBinding: product.pipeState?.startBinding || null,
+      endBinding: product.pipeState?.endBinding || null,
+      startFreePoint: product.pipeState?.startFreePoint || {
+        x: product.x + pipeMain.x + startPort.x,
+        y: product.y + pipeMain.y + startPort.y,
+      },
+      endFreePoint: product.pipeState?.endFreePoint || {
+        x: product.x + pipeMain.x + endPort.x,
+        y: product.y + pipeMain.y + endPort.y,
+      },
+    },
+  };
+}
+
+function filterOutPipeLinks(products: ProductModel[], links: MaterialFlowLink[]) {
+  const componentKindByKey = new Map<string, string>();
+  products.forEach((product) => {
+    product.components.forEach((component) => {
+      componentKindByKey.set(`${product.id}::${component.id}`, component.kind);
+    });
+  });
+  return links.filter((link) => {
+    const fromKind = componentKindByKey.get(`${link.from.productId}::${link.from.componentId}`);
+    const toKind = componentKindByKey.get(`${link.to.productId}::${link.to.componentId}`);
+    return fromKind !== "pipe" && toKind !== "pipe";
+  });
+}
+
 function asScene(raw: WorkbookGraphPayload | null): GraphScene {
   if (!raw?.graph?.nodes || !Array.isArray(raw.graph.nodes) || raw.graph.nodes.length === 0) return cloneDefaultScene();
+  const products = (raw.graph.nodes as ProductModel[]).map(hydratePipeState);
+  const links = Array.isArray(raw.graph.edges) ? (raw.graph.edges as MaterialFlowLink[]) : [];
   return {
     updatedAt: String(raw.updatedAt || raw.graph.updatedAt || new Date().toISOString()),
-    products: raw.graph.nodes as ProductModel[],
-    links: Array.isArray(raw.graph.edges) ? (raw.graph.edges as MaterialFlowLink[]) : [],
+    products,
+    links: filterOutPipeLinks(products, links),
   };
 }
 
@@ -319,6 +363,66 @@ function getPortPoint(scene: GraphScene, productId: string, componentId: string,
   };
 }
 
+function isPipeProduct(product?: ProductModel | null) {
+  return product?.templateId === "template_pipe";
+}
+
+function getPipeMainComponent(product?: ProductModel | null) {
+  return product?.components.find((component) => component.id === "pipe_main" && component.kind === "pipe") || null;
+}
+
+function getPipeEndpointPortId(endpoint: PipeEndpointKey) {
+  return endpoint === "start" ? "pipe_left" : "pipe_right";
+}
+
+function getPipeEndpointDirection(endpoint: PipeEndpointKey) {
+  return endpoint === "start" ? "in" : "out";
+}
+
+function getPipeEndpointBinding(scene: GraphScene, product: ProductModel, endpoint: PipeEndpointKey) {
+  if (!product.pipeState) return null;
+  const binding = endpoint === "start" ? product.pipeState.startBinding : product.pipeState.endBinding;
+  if (!binding) return null;
+  const point = getPortPoint(scene, binding.productId, binding.componentId, binding.portId);
+  if (!point) return null;
+  return { binding, point };
+}
+
+function getPipeEndpointPoint(scene: GraphScene, product: ProductModel, endpoint: PipeEndpointKey) {
+  const bound = getPipeEndpointBinding(scene, product, endpoint);
+  if (bound) return bound.point;
+  if (endpoint === "start") return product.pipeState?.startFreePoint || null;
+  return product.pipeState?.endFreePoint || null;
+}
+
+function buildOrthogonalPipePoints(start: { x: number; y: number }, end: { x: number; y: number }) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  if (Math.abs(dx) < 1 || Math.abs(dy) < 1) {
+    return [start.x, start.y, end.x, end.y];
+  }
+  const horizontalFirst = Math.abs(dx) >= Math.abs(dy);
+  if (horizontalFirst) {
+    const mx = start.x + dx / 2;
+    return [start.x, start.y, mx, start.y, mx, end.y, end.x, end.y];
+  }
+  const my = start.y + dy / 2;
+  return [start.x, start.y, start.x, my, end.x, my, end.x, end.y];
+}
+
+function getPipePathPoints(scene: GraphScene, product: ProductModel) {
+  if (!product.pipeState) return [];
+  const start = getPipeEndpointPoint(scene, product, "start");
+  const end = getPipeEndpointPoint(scene, product, "end");
+  if (!start || !end) return [];
+  return buildOrthogonalPipePoints(start, end);
+}
+
+function isEndpointMatching(a: PortEndpointRef | null | undefined, b: PortEndpointRef | null | undefined) {
+  if (!a || !b) return false;
+  return a.productId === b.productId && a.componentId === b.componentId && a.portId === b.portId;
+}
+
 function getLinkPoints(scene: GraphScene, link: MaterialFlowLink) {
   const from = getPortPoint(scene, link.from.productId, link.from.componentId, link.from.portId);
   const to = getPortPoint(scene, link.to.productId, link.to.componentId, link.to.portId);
@@ -357,6 +461,90 @@ function getConnectedLinks(scene: GraphScene, productId: string, componentId: st
     (link.from.productId === productId && link.from.componentId === componentId && link.from.portId === portId) ||
     (link.to.productId === productId && link.to.componentId === componentId && link.to.portId === portId)
   );
+}
+
+function getConnectedEndpoints(scene: GraphScene, endpoint: PortEndpointRef) {
+  const linkConnections = getConnectedLinks(scene, endpoint.productId, endpoint.componentId, endpoint.portId).map((link) => {
+    const isSource =
+      link.from.productId === endpoint.productId &&
+      link.from.componentId === endpoint.componentId &&
+      link.from.portId === endpoint.portId;
+    return isSource ? link.to : link.from;
+  });
+  const pipeConnections: PortEndpointRef[] = [];
+  scene.products.forEach((product) => {
+    if (!product.pipeState) return;
+    const pipeMain = getPipeMainComponent(product);
+    if (!pipeMain) return;
+    if (isEndpointMatching(product.pipeState.startBinding, endpoint)) {
+      pipeConnections.push({ productId: product.id, componentId: pipeMain.id, portId: "pipe_left" });
+    }
+    if (isEndpointMatching(product.pipeState.endBinding, endpoint)) {
+      pipeConnections.push({ productId: product.id, componentId: pipeMain.id, portId: "pipe_right" });
+    }
+    if (
+      product.id === endpoint.productId &&
+      pipeMain.id === endpoint.componentId &&
+      endpoint.portId === "pipe_left" &&
+      product.pipeState.startBinding
+    ) {
+      pipeConnections.push(product.pipeState.startBinding);
+    }
+    if (
+      product.id === endpoint.productId &&
+      pipeMain.id === endpoint.componentId &&
+      endpoint.portId === "pipe_right" &&
+      product.pipeState.endBinding
+    ) {
+      pipeConnections.push(product.pipeState.endBinding);
+    }
+  });
+  return [...linkConnections, ...pipeConnections];
+}
+
+function findPipeBindingForDevicePort(scene: GraphScene, endpoint: PortEndpointRef) {
+  for (const product of scene.products) {
+    if (!product.pipeState) continue;
+    if (isEndpointMatching(product.pipeState.startBinding, endpoint)) {
+      return { pipeProductId: product.id, endpoint: "start" as PipeEndpointKey };
+    }
+    if (isEndpointMatching(product.pipeState.endBinding, endpoint)) {
+      return { pipeProductId: product.id, endpoint: "end" as PipeEndpointKey };
+    }
+  }
+  return null;
+}
+
+function getPipeSnappableTarget(
+  scene: GraphScene,
+  pipeProductId: string,
+  endpoint: PipeEndpointKey,
+  pointer: { x: number; y: number } | null,
+  radius = 56
+) {
+  if (!pointer) return null;
+  let best: { endpoint: PortEndpointRef; point: { x: number; y: number }; distance: number } | null = null;
+  scene.products.forEach((product) => {
+    product.components.forEach((component) => {
+      (component.ports || []).forEach((port) => {
+        if (product.id === pipeProductId && component.id === "pipe_main") return;
+        const candidate = { productId: product.id, componentId: component.id, portId: port.id };
+        const allowed =
+          endpoint === "start"
+            ? isConnectionAllowed(scene, { type: "port", ...candidate }, { productId: pipeProductId, componentId: "pipe_main", portId: "pipe_left" })
+            : isConnectionAllowed(scene, { type: "port", productId: pipeProductId, componentId: "pipe_main", portId: "pipe_right" }, candidate);
+        if (!allowed) return;
+        const point = getPortPoint(scene, candidate.productId, candidate.componentId, candidate.portId);
+        if (!point) return;
+        const distance = Math.hypot(point.x - pointer.x, point.y - pointer.y);
+        if (distance > radius) return;
+        if (!best || distance < best.distance) {
+          best = { endpoint: candidate, point, distance };
+        }
+      });
+    });
+  });
+  return best;
 }
 
 function getProductInstanceLabel(scene: GraphScene, productId: string) {
@@ -432,6 +620,190 @@ function ComponentShape({
   );
 }
 
+function PipeProductNode({
+  scene,
+  product,
+  selected,
+  hoveredPort,
+  connectSource,
+  pipeSnapTarget,
+  activePipeEndpoint,
+  shiftPressed,
+  onSelect,
+  onSelectPort,
+  onMove,
+  onHoverPortChange,
+  onContextMenu,
+  onBeginPipeEndpointDrag,
+}: {
+  scene: GraphScene;
+  product: ProductModel;
+  selected: SelectedTarget;
+  hoveredPort: { productId: string; componentId: string; portId: string } | null;
+  connectSource: SelectedTarget;
+  pipeSnapTarget: PortEndpointRef | null;
+  activePipeEndpoint: PipeEndpointKey | null;
+  shiftPressed: boolean;
+  onSelect: (productId: string, componentId: string) => void;
+  onSelectPort: (productId: string, componentId: string, portId: string) => void;
+  onMove: (productId: string, x: number, y: number) => void;
+  onHoverPortChange: (port: { productId: string; componentId: string; portId: string } | null) => void;
+  onContextMenu: (evt: any, productId: string, componentId: string) => void;
+  onBeginPipeEndpointDrag: (evt: any, productId: string, endpoint: PipeEndpointKey) => void;
+}) {
+  const pipeMain = getPipeMainComponent(product);
+  if (!pipeMain) return null;
+  const points = getPipePathPoints(scene, product);
+  const startPoint = getPipeEndpointPoint(scene, product, "start");
+  const endPoint = getPipeEndpointPoint(scene, product, "end");
+  if (points.length === 0 || !startPoint || !endPoint) return null;
+  const isBodySelected =
+    (selected?.type === "component" && selected.productId === product.id && selected.componentId === pipeMain.id) ||
+    (selected?.type === "port" && selected.productId === product.id && selected.componentId === pipeMain.id);
+  const startUsage = getPortUsageSummary(scene, { productId: product.id, componentId: pipeMain.id, portId: "pipe_left" });
+  const endUsage = getPortUsageSummary(scene, { productId: product.id, componentId: pipeMain.id, portId: "pipe_right" });
+  const startPalette = getPortColorPalette("in");
+  const endPalette = getPortColorPalette("out");
+  const renderEndpoint = (
+    endpoint: PipeEndpointKey,
+    point: { x: number; y: number },
+    usage: { asSource: number; asTarget: number },
+    palette: ReturnType<typeof getPortColorPalette>
+  ) => {
+    const portId = getPipeEndpointPortId(endpoint);
+    const direction = getPipeEndpointDirection(endpoint);
+    const isBound = endpoint === "start" ? !!product.pipeState?.startBinding : !!product.pipeState?.endBinding;
+    const isHovered =
+      hoveredPort?.productId === product.id &&
+      hoveredPort.componentId === pipeMain.id &&
+      hoveredPort.portId === portId;
+    const isSelected =
+      selected?.type === "port" &&
+      selected.productId === product.id &&
+      selected.componentId === pipeMain.id &&
+      selected.portId === portId;
+    const occupiedState = getPortOccupiedState(usage, direction);
+    const isCurrentSource =
+      connectSource?.type === "port" &&
+      connectSource.productId === product.id &&
+      connectSource.componentId === pipeMain.id &&
+      connectSource.portId === portId;
+    const snappedHere = !!pipeSnapTarget && activePipeEndpoint === endpoint;
+    return (
+      <Group
+        key={portId}
+        x={point.x}
+        y={point.y}
+        onMouseDown={(evt) => onBeginPipeEndpointDrag(evt, product.id, endpoint)}
+        onTouchStart={(evt) => onBeginPipeEndpointDrag(evt, product.id, endpoint)}
+      >
+        {isHovered && !isBound ? (
+          <>
+            <Circle radius={14} fill="rgba(96,112,128,0.12)" />
+            <Label x={10} y={-26}>
+              <Tag fill="rgba(255,255,255,0.95)" cornerRadius={8} />
+              <Text
+                text={`${endpoint === "start" ? "管道入口" : "管道出口"}${occupiedState.label}`}
+                padding={6}
+                fontSize={11}
+                fill="#334155"
+              />
+            </Label>
+          </>
+        ) : null}
+        {!isBound ? (
+          <Circle
+            radius={11}
+            fill={snappedHere ? "rgba(255,255,255,0.98)" : palette.haloFill}
+            stroke={snappedHere ? "#57b670" : palette.haloStroke}
+            strokeWidth={1.5}
+          />
+        ) : null}
+        <Circle
+          radius={24}
+          fill="rgba(255,255,255,0.001)"
+          onMouseEnter={() => onHoverPortChange({ productId: product.id, componentId: pipeMain.id, portId })}
+          onMouseLeave={() => onHoverPortChange(null)}
+          onClick={() => onSelectPort(product.id, pipeMain.id, portId)}
+          onTap={() => onSelectPort(product.id, pipeMain.id, portId)}
+        />
+        {!isBound ? (
+          <Circle
+            radius={8}
+            fill={
+              isCurrentSource
+                ? "#c54a39"
+                : occupiedState.occupied
+                  ? "#f59e0b"
+                  : snappedHere
+                    ? "#57b670"
+                    : palette.baseFill
+            }
+            stroke={occupiedState.occupied ? "#d97706" : snappedHere ? "#57b670" : palette.baseStroke}
+            strokeWidth={2.5}
+            onClick={() => onSelectPort(product.id, pipeMain.id, portId)}
+            onTap={() => onSelectPort(product.id, pipeMain.id, portId)}
+          />
+        ) : null}
+        {(isSelected || isBodySelected) && !isBound ? <Circle radius={15} stroke="rgba(181,69,52,0.22)" strokeWidth={2} /> : null}
+      </Group>
+    );
+  };
+
+  return (
+    <Group
+      x={product.x}
+      y={product.y}
+      draggable={!shiftPressed && !activePipeEndpoint && !product.pipeState?.startBinding && !product.pipeState?.endBinding}
+      onDragMove={(evt) => {
+        evt.cancelBubble = true;
+        onMove(product.id, evt.target.x(), evt.target.y());
+      }}
+      onDragEnd={(evt) => {
+        evt.cancelBubble = true;
+        onMove(product.id, evt.target.x(), evt.target.y());
+      }}
+      onContextMenu={(evt) => {
+        evt.evt.preventDefault();
+        onContextMenu(evt, product.id, pipeMain.id);
+      }}
+    >
+      <Label x={Math.min(startPoint.x, endPoint.x) - product.x + 18} y={Math.min(startPoint.y, endPoint.y) - product.y - 42}>
+        <Tag fill="rgba(255,255,255,0.96)" cornerRadius={9} pointerDirection="down" pointerWidth={10} pointerHeight={10} />
+        <Text text={product.name} padding={9} fontSize={12} fill="#1f2937" fontStyle="700" />
+      </Label>
+      <Group
+        onClick={() => onSelect(product.id, pipeMain.id)}
+        onTap={() => onSelect(product.id, pipeMain.id)}
+      >
+        <Line
+          points={points.map((value, index) => value - (index % 2 === 0 ? product.x : product.y))}
+          stroke={isBodySelected ? "rgba(197,69,52,0.30)" : "rgba(83, 97, 116, 0.22)"}
+          strokeWidth={30}
+          lineCap="round"
+          lineJoin="round"
+        />
+        <Line
+          points={points.map((value, index) => value - (index % 2 === 0 ? product.x : product.y))}
+          stroke={isBodySelected ? "#c54a39" : "#aeb9c7"}
+          strokeWidth={24}
+          lineCap="round"
+          lineJoin="round"
+        />
+        <Line
+          points={points.map((value, index) => value - (index % 2 === 0 ? product.x : product.y))}
+          stroke="rgba(255,255,255,0.42)"
+          strokeWidth={6}
+          lineCap="round"
+          lineJoin="round"
+        />
+      </Group>
+      {renderEndpoint("start", { x: startPoint.x - product.x, y: startPoint.y - product.y }, startUsage, startPalette)}
+      {renderEndpoint("end", { x: endPoint.x - product.x, y: endPoint.y - product.y }, endUsage, endPalette)}
+    </Group>
+  );
+}
+
 function ProductNode({
   scene,
   product,
@@ -439,12 +811,16 @@ function ProductNode({
   hoveredComponentId,
   hoveredPort,
   connectSource,
+  pipeSnapTarget,
+  activePipeEndpoint,
+  shiftPressed,
   onSelect,
   onSelectPort,
   onMove,
   onHoverChange,
   onHoverPortChange,
   onContextMenu,
+  onBeginPipeEndpointDrag,
 }: {
   scene: GraphScene;
   product: ProductModel;
@@ -452,13 +828,37 @@ function ProductNode({
   hoveredComponentId: string;
   hoveredPort: { productId: string; componentId: string; portId: string } | null;
   connectSource: SelectedTarget;
+  pipeSnapTarget: PortEndpointRef | null;
+  activePipeEndpoint: PipeEndpointKey | null;
+  shiftPressed: boolean;
   onSelect: (productId: string, componentId: string) => void;
   onSelectPort: (productId: string, componentId: string, portId: string) => void;
   onMove: (productId: string, x: number, y: number) => void;
   onHoverChange: (productId: string, componentId: string, hovered: boolean) => void;
   onHoverPortChange: (port: { productId: string; componentId: string; portId: string } | null) => void;
   onContextMenu: (evt: any, productId: string, componentId: string) => void;
+  onBeginPipeEndpointDrag: (evt: any, productId: string, endpoint: PipeEndpointKey) => void;
 }) {
+  if (isPipeProduct(product)) {
+    return (
+      <PipeProductNode
+        scene={scene}
+        product={product}
+        selected={selected}
+        hoveredPort={hoveredPort}
+        connectSource={connectSource}
+        pipeSnapTarget={pipeSnapTarget}
+        activePipeEndpoint={activePipeEndpoint}
+        shiftPressed={shiftPressed}
+        onSelect={onSelect}
+        onSelectPort={onSelectPort}
+        onMove={onMove}
+        onHoverPortChange={onHoverPortChange}
+        onContextMenu={onContextMenu}
+        onBeginPipeEndpointDrag={onBeginPipeEndpointDrag}
+      />
+    );
+  }
   const transform = getTransform(product.viewMode);
   const orderedComponents = useMemo(
     () => [...product.components].sort((a, b) => Number(a.zIndex || 0) - Number(b.zIndex || 0)),
@@ -480,6 +880,7 @@ function ProductNode({
       }}
       onDragMove={(evt) => {
         evt.cancelBubble = true;
+        onMove(product.id, evt.target.x(), evt.target.y());
       }}
       onDragEnd={(evt) => {
         evt.cancelBubble = true;
@@ -556,6 +957,16 @@ function ProductNode({
               const isConnectableTarget =
                 connectSource?.type === "port" &&
                 isConnectionAllowed(scene, connectSource, { productId: product.id, componentId: component.id, portId: port.id });
+              const isPipeDragTarget =
+                !!pipeSnapTarget &&
+                pipeSnapTarget.productId === product.id &&
+                pipeSnapTarget.componentId === component.id &&
+                pipeSnapTarget.portId === port.id;
+              const pipeBinding = findPipeBindingForDevicePort(scene, {
+                productId: product.id,
+                componentId: component.id,
+                portId: port.id,
+              });
               const isOccupied = occupiedState.occupied;
               return (
               <Group key={`${component.id}_${port.id}`} x={component.x + port.x} y={component.y + port.y}>
@@ -573,19 +984,19 @@ function ProductNode({
                   </Label>
                 </>
               ) : null}
-              {isConnectableTarget ? (
+              {isConnectableTarget || isPipeDragTarget ? (
                 <Circle
-                  radius={hoveredComponentId === component.id ? 17 : 14}
-                  fill={hoveredComponentId === component.id ? "rgba(87, 182, 112, 0.22)" : "rgba(87, 182, 112, 0.12)"}
-                  stroke={hoveredComponentId === component.id ? "#57b670" : "rgba(87, 182, 112, 0.72)"}
-                  strokeWidth={hoveredComponentId === component.id ? 2.5 : 2}
-                  dash={hoveredComponentId === component.id ? undefined : [5, 4]}
+                  radius={isPipeDragTarget || hoveredComponentId === component.id ? 17 : 14}
+                  fill={isPipeDragTarget || hoveredComponentId === component.id ? "rgba(87, 182, 112, 0.22)" : "rgba(87, 182, 112, 0.12)"}
+                  stroke={isPipeDragTarget || hoveredComponentId === component.id ? "#57b670" : "rgba(87, 182, 112, 0.72)"}
+                  strokeWidth={isPipeDragTarget || hoveredComponentId === component.id ? 2.5 : 2}
+                  dash={isPipeDragTarget || hoveredComponentId === component.id ? undefined : [5, 4]}
                 />
               ) : null}
               <Circle
                 radius={8.5}
-                fill={isConnectableTarget ? "rgba(255,255,255,0.98)" : palette.haloFill}
-                stroke={isConnectableTarget ? "#57b670" : palette.haloStroke}
+                fill={isConnectableTarget || isPipeDragTarget ? "rgba(255,255,255,0.98)" : palette.haloFill}
+                stroke={isConnectableTarget || isPipeDragTarget ? "#57b670" : palette.haloStroke}
                 strokeWidth={1}
               />
               <Circle
@@ -614,6 +1025,16 @@ function ProductNode({
                 }}
                 onClick={() => onSelectPort(product.id, component.id, port.id)}
                 onTap={() => onSelectPort(product.id, component.id, port.id)}
+                onMouseDown={(evt) => {
+                  if (shiftPressed && pipeBinding) {
+                    onBeginPipeEndpointDrag(evt, pipeBinding.pipeProductId, pipeBinding.endpoint);
+                  }
+                }}
+                onTouchStart={(evt) => {
+                  if (shiftPressed && pipeBinding) {
+                    onBeginPipeEndpointDrag(evt, pipeBinding.pipeProductId, pipeBinding.endpoint);
+                  }
+                }}
               />
               <Circle
                 radius={hoveredComponentId === component.id ? 7 : 5.5}
@@ -622,14 +1043,14 @@ function ProductNode({
                     ? "#c54a39"
                     : isOccupied
                       ? "#f59e0b"
-                      : isConnectableTarget
+                      : isConnectableTarget || isPipeDragTarget
                         ? "#57b670"
                         : palette.baseFill
                 }
                 stroke={
                   isOccupied
                     ? "#d97706"
-                    : isConnectableTarget
+                    : isConnectableTarget || isPipeDragTarget
                       ? "#57b670"
                       : hoveredComponentId === component.id
                         ? palette.baseStroke
@@ -899,8 +1320,11 @@ function App() {
   const [hoveredPort, setHoveredPort] = useState<{ productId: string; componentId: string; portId: string } | null>(null);
   const [hoveredComponent, setHoveredComponent] = useState<{ productId: string; componentId: string } | null>(null);
   const [pointerWorld, setPointerWorld] = useState<{ x: number; y: number } | null>(null);
+  const [pipeDragState, setPipeDragState] = useState<PipeDragState | null>(null);
+  const [pipeSnapTarget, setPipeSnapTarget] = useState<PortEndpointRef | null>(null);
   const [viewport, setViewport] = useState({ scale: 0.42, x: 80, y: 70 });
   const [spacePressed, setSpacePressed] = useState(false);
+  const [shiftPressed, setShiftPressed] = useState(false);
   const [blankPanning, setBlankPanning] = useState(false);
   const firstSaveSkipped = useRef(false);
   const blankPanStart = useRef<{ pointerX: number; pointerY: number; viewportX: number; viewportY: number } | null>(null);
@@ -942,6 +1366,9 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (evt: KeyboardEvent) => {
+      if (evt.code === "ShiftLeft" || evt.code === "ShiftRight") {
+        setShiftPressed(true);
+      }
       if (evt.code !== "Space") return;
       const target = evt.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
@@ -949,10 +1376,16 @@ function App() {
       setSpacePressed(true);
     };
     const onKeyUp = (evt: KeyboardEvent) => {
+      if (evt.code === "ShiftLeft" || evt.code === "ShiftRight") {
+        setShiftPressed(false);
+      }
       if (evt.code !== "Space") return;
       setSpacePressed(false);
     };
-    const onBlur = () => setSpacePressed(false);
+    const onBlur = () => {
+      setSpacePressed(false);
+      setShiftPressed(false);
+    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
@@ -988,6 +1421,18 @@ function App() {
       window.removeEventListener("blur", finishBlankPan);
     };
   }, []);
+
+  useEffect(() => {
+    const finishPipeDrag = () => {
+      finishPipeEndpointDrag();
+    };
+    window.addEventListener("mouseup", finishPipeDrag);
+    window.addEventListener("blur", finishPipeDrag);
+    return () => {
+      window.removeEventListener("mouseup", finishPipeDrag);
+      window.removeEventListener("blur", finishPipeDrag);
+    };
+  }, [pipeDragState, pipeSnapTarget, scene]);
 
   useEffect(() => {
     if (!ready) return;
@@ -1040,13 +1485,17 @@ function App() {
     const port = findPort(scene, selected.productId, selected.componentId, selected.portId);
     if (!componentResult || !port) return null;
     const usage = getPortUsageSummary(scene, { productId: selected.productId, componentId: selected.componentId, portId: selected.portId });
-    const links = getConnectedLinks(scene, selected.productId, selected.componentId, selected.portId);
+    const connections = getConnectedEndpoints(scene, {
+      productId: selected.productId,
+      componentId: selected.componentId,
+      portId: selected.portId,
+    });
     return {
       product: componentResult.product,
       component: componentResult.component,
       port,
       usage,
-      links,
+      connections,
     };
   }, [scene, selected]);
 
@@ -1096,6 +1545,41 @@ function App() {
     return component?.kind === "pipe";
   }, [scene, connectSource, hoveredComponent]);
 
+  useEffect(() => {
+    if (!pipeDragState || !pointerWorld) {
+      setPipeSnapTarget(null);
+      return;
+    }
+    const snap = getPipeSnappableTarget(scene, pipeDragState.productId, pipeDragState.endpoint, pointerWorld);
+    setPipeSnapTarget(snap?.endpoint || null);
+    const nextPoint = snap?.point || pointerWorld;
+    setScene((current) => {
+      let changed = false;
+      const products = current.products.map((product) => {
+        if (product.id !== pipeDragState.productId || !product.pipeState) return product;
+        const currentPoint =
+          pipeDragState.endpoint === "start" ? product.pipeState.startFreePoint : product.pipeState.endFreePoint;
+        if (currentPoint.x === nextPoint.x && currentPoint.y === nextPoint.y) return product;
+        changed = true;
+        return {
+          ...product,
+          pipeState: pipeDragState.endpoint === "start"
+            ? {
+                ...product.pipeState,
+                startBinding: null,
+                startFreePoint: nextPoint,
+              }
+            : {
+                ...product.pipeState,
+                endBinding: null,
+                endFreePoint: nextPoint,
+              },
+        };
+      });
+      return changed ? { ...current, updatedAt: new Date().toISOString(), products } : current;
+    });
+  }, [pipeDragState, pointerWorld, scene]);
+
   const updateScene = (next: (current: GraphScene) => GraphScene) =>
     setScene((current) => ({ ...next(current), updatedAt: new Date().toISOString() }));
 
@@ -1113,14 +1597,81 @@ function App() {
     }
   };
 
+  const finishPipeEndpointDrag = () => {
+    if (!pipeDragState) return;
+    const snap = pipeSnapTarget;
+    updateScene((current) => ({
+      ...current,
+      products: current.products.map((product) => {
+        if (product.id !== pipeDragState.productId || !product.pipeState) return product;
+        return {
+          ...product,
+          pipeState: pipeDragState.endpoint === "start"
+            ? {
+                ...product.pipeState,
+                startBinding: snap || null,
+                startFreePoint: snap
+                  ? getPortPoint(current, snap.productId, snap.componentId, snap.portId) || product.pipeState.startFreePoint
+                  : product.pipeState.startFreePoint,
+              }
+            : {
+                ...product.pipeState,
+                endBinding: snap || null,
+                endFreePoint: snap
+                  ? getPortPoint(current, snap.productId, snap.componentId, snap.portId) || product.pipeState.endFreePoint
+                  : product.pipeState.endFreePoint,
+              },
+        };
+      }),
+      links: current.links.filter((link) => link.from.productId !== pipeDragState.productId && link.to.productId !== pipeDragState.productId),
+    }));
+    setSelected({
+      type: "port",
+      productId: pipeDragState.productId,
+      componentId: "pipe_main",
+      portId: getPipeEndpointPortId(pipeDragState.endpoint),
+    });
+    setStatus(
+      snap
+        ? `已将管道${pipeDragState.endpoint === "start" ? "入口" : "出口"}对接到 ${getProductInstanceLabel(scene, snap.productId)} / ${getPortDisplayName(scene, snap)}`
+        : `已释放管道${pipeDragState.endpoint === "start" ? "入口" : "出口"}，当前为自由端。`
+    );
+    setPipeDragState(null);
+    setPipeSnapTarget(null);
+  };
+
+  const onBeginPipeEndpointDrag = (evt: any, productId: string, endpoint: PipeEndpointKey) => {
+    const nativeEvent = evt?.evt as MouseEvent | TouchEvent | undefined;
+    const shiftHeld = nativeEvent instanceof MouseEvent ? nativeEvent.shiftKey : shiftPressed;
+    if (!shiftHeld) return;
+    evt.cancelBubble = true;
+    setDrawerMode(null);
+    setConnectMode(false);
+    setConnectSource(null);
+    setPipeDragState({ productId, endpoint });
+    setSelected({
+      type: "port",
+      productId,
+      componentId: "pipe_main",
+      portId: getPipeEndpointPortId(endpoint),
+    });
+    setStatus(`正在拖动管道${endpoint === "start" ? "入口" : "出口"}，可吸附到设备端口。`);
+  };
+
   const onSelectComponent = (productId: string, componentId: string) => {
     setSelected({ type: "component", productId, componentId });
   };
 
   const onSelectPort = (productId: string, componentId: string, portId: string) => {
     const targetPort: SelectedTarget = { type: "port", productId, componentId, portId };
+    const targetProduct = scene.products.find((item) => item.id === productId) || null;
     if (!connectMode) {
       setSelected(targetPort);
+      return;
+    }
+    if (isPipeProduct(targetProduct) || (connectSource?.type === "port" && isPipeProduct(scene.products.find((item) => item.id === connectSource.productId) || null))) {
+      setSelected(targetPort);
+      setStatus("管道端口请按住 Shift 后拖动完成对接。");
       return;
     }
     if (!connectSource || connectSource.type !== "port") {
@@ -1164,6 +1715,34 @@ function App() {
     setSelected(targetPort);
   };
 
+  const handleMoveProduct = (productId: string, x: number, y: number) => {
+    updateScene((current) => ({
+      ...current,
+      products: current.products.map((item) => {
+        if (item.id !== productId) return item;
+        if (item.pipeState) {
+          const deltaX = x - item.x;
+          const deltaY = y - item.y;
+          return {
+            ...item,
+            x,
+            y,
+            pipeState: {
+              ...item.pipeState,
+              startFreePoint: item.pipeState.startBinding
+                ? item.pipeState.startFreePoint
+                : { x: item.pipeState.startFreePoint.x + deltaX, y: item.pipeState.startFreePoint.y + deltaY },
+              endFreePoint: item.pipeState.endBinding
+                ? item.pipeState.endFreePoint
+                : { x: item.pipeState.endFreePoint.x + deltaX, y: item.pipeState.endFreePoint.y + deltaY },
+            },
+          };
+        }
+        return { ...item, x, y };
+      }),
+    }));
+  };
+
   const onDeleteSelected = () => {
     setContextMenu(null);
     if (!selected) {
@@ -1180,7 +1759,25 @@ function App() {
         const removedComponentIds = new Set((removedProduct?.components || []).map((component) => component.id));
         return {
           ...current,
-          products: current.products.filter((product) => product.id !== productId),
+          products: current.products
+            .filter((product) => product.id !== productId)
+            .map((product) => {
+              if (!product.pipeState) return product;
+              const startPoint = getPipeEndpointPoint(current, product, "start") || product.pipeState.startFreePoint;
+              const endPoint = getPipeEndpointPoint(current, product, "end") || product.pipeState.endFreePoint;
+              const clearStart = product.pipeState.startBinding?.productId === productId;
+              const clearEnd = product.pipeState.endBinding?.productId === productId;
+              if (!clearStart && !clearEnd) return product;
+              return {
+                ...product,
+                pipeState: {
+                  startBinding: clearStart ? null : product.pipeState.startBinding,
+                  endBinding: clearEnd ? null : product.pipeState.endBinding,
+                  startFreePoint: clearStart ? startPoint : product.pipeState.startFreePoint,
+                  endFreePoint: clearEnd ? endPoint : product.pipeState.endFreePoint,
+                },
+              };
+            }),
           links: current.links.filter((link) => {
             const hitsFrom = link.from.productId === productId && removedComponentIds.has(link.from.componentId);
             const hitsTo = link.to.productId === productId && removedComponentIds.has(link.to.componentId);
@@ -1193,6 +1790,8 @@ function App() {
     setSelected(null);
     setConnectMode(false);
     setConnectSource(null);
+    setPipeDragState(null);
+    setPipeSnapTarget(null);
     setHoveredPort(null);
     setPointerWorld(null);
     setHoveredComponent(null);
@@ -1471,17 +2070,16 @@ function App() {
                     hoveredComponentId={hoveredComponent?.productId === product.id ? hoveredComponent.componentId : ""}
                     hoveredPort={hoveredPort}
                     connectSource={connectSource}
+                    pipeSnapTarget={pipeSnapTarget}
+                    activePipeEndpoint={pipeDragState?.productId === product.id ? pipeDragState.endpoint : null}
+                    shiftPressed={shiftPressed}
                     onSelect={onSelectComponent}
                     onSelectPort={onSelectPort}
-                    onMove={(productId, x, y) =>
-                      updateScene((current) => ({
-                        ...current,
-                        products: current.products.map((item) => (item.id === productId ? { ...item, x, y } : item)),
-                      }))
-                    }
+                    onMove={handleMoveProduct}
                     onHoverChange={handleHoverChange}
                     onHoverPortChange={setHoveredPort}
                     onContextMenu={(evt, productId, componentId) => openDeleteMenu(evt, { type: "component", productId, componentId })}
+                    onBeginPipeEndpointDrag={onBeginPipeEndpointDrag}
                   />
                 ))}
               </Layer>
@@ -1514,14 +2112,9 @@ function App() {
                   </dl>
                   <p className="inspector-note">
                     已连接：
-                    {selectedPort.links.length > 0
-                      ? selectedPort.links
-                          .map((link) => {
-                            const isSource =
-                              link.from.productId === selectedPort.product.id &&
-                              link.from.componentId === selectedPort.component.id &&
-                              link.from.portId === selectedPort.port.id;
-                            const endpoint = isSource ? link.to : link.from;
+                    {selectedPort.connections.length > 0
+                      ? selectedPort.connections
+                          .map((endpoint) => {
                             return `${getProductInstanceLabel(scene, endpoint.productId)} / ${getPortDisplayName(scene, endpoint)}`;
                           })
                           .join("；")

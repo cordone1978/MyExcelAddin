@@ -1,5 +1,5 @@
 import { PRODUCT_LIBRARY } from "./productLibrary";
-import { GraphScene, SelectedTarget } from "./sceneTypes";
+import { GraphScene, PipeEndpointKey, SelectedTarget } from "./sceneTypes";
 
 type ComponentEndpoint = {
   productId: string;
@@ -61,6 +61,34 @@ function getPortUsage(scene: GraphScene, endpoint: ComponentEndpoint) {
     if (link.to.productId === endpoint.productId && link.to.componentId === endpoint.componentId && link.to.portId === endpoint.portId) {
       usage.asTarget += 1;
     }
+  });
+  scene.products.forEach((product) => {
+    const pipeState = product.pipeState;
+    if (!pipeState) return;
+    const pipeMain = product.components.find((component) => component.kind === "pipe");
+    if (!pipeMain) return;
+    ([
+      { key: "start", binding: pipeState.startBinding },
+      { key: "end", binding: pipeState.endBinding },
+    ] as Array<{ key: PipeEndpointKey; binding: typeof pipeState.startBinding }>).forEach(({ key, binding }) => {
+      if (!binding) return;
+      const matchesBoundDevice =
+        binding.productId === endpoint.productId &&
+        binding.componentId === endpoint.componentId &&
+        binding.portId === endpoint.portId;
+      if (matchesBoundDevice) {
+        if (key === "start") usage.asSource += 1;
+        else usage.asTarget += 1;
+      }
+      const matchesPipePort =
+        product.id === endpoint.productId &&
+        pipeMain.id === endpoint.componentId &&
+        (key === "start" ? "pipe_left" : "pipe_right") === endpoint.portId;
+      if (matchesPipePort) {
+        if (key === "start") usage.asTarget += 1;
+        else usage.asSource += 1;
+      }
+    });
   });
   return usage;
 }

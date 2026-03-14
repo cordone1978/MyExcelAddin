@@ -21,6 +21,21 @@ export type ComponentPort = {
   direction?: "in" | "out" | "both";
 };
 
+export type PortEndpointRef = {
+  productId: string;
+  componentId: string;
+  portId: string;
+};
+
+export type PipeEndpointKey = "start" | "end";
+
+export type PipeState = {
+  startBinding: PortEndpointRef | null;
+  endBinding: PortEndpointRef | null;
+  startFreePoint: { x: number; y: number };
+  endFreePoint: { x: number; y: number };
+};
+
 export type ProductComponent = {
   id: string;
   name: string;
@@ -64,6 +79,7 @@ export type ProductModel = {
   viewMode: ViewMode;
   templateId?: string;
   components: ProductComponent[];
+  pipeState?: PipeState;
 };
 
 export type MaterialFlowLink = {
