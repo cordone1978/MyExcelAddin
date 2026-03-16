@@ -46,6 +46,10 @@ type DisplayDialogFn = (
   size?: { width: number; height: number }
 ) => Promise<Office.Dialog>;
 
+function getDialogMessage(args: { message: string; origin: string } | { error: number }) {
+  return "message" in args ? args.message : "";
+}
+
 export function createDevCraftController(displayDialog: DisplayDialogFn) {
   let devModifyState: DevModifyState | null = null;
   let craftModifyState: CraftModifyState | null = null;
@@ -56,7 +60,10 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
 
     try {
       const componentContext = await resolveSelectedComponentContext(selection);
-      if (String(componentContext.component.whatkind || "").trim() === CRAFTING_CONSTANTS.outsourcedKind) {
+      if (
+        String(componentContext.component.whatkind || "").trim() ===
+        CRAFTING_CONSTANTS.outsourcedKind
+      ) {
         await openQueryPriceDialogControllerWithOptions(displayDialog, {
           initialKeyword: selection.componentName,
         });
@@ -72,11 +79,14 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
     }
   }
 
-  async function openDevModifyDialogWithData(initData: Record<string, unknown>, selection: SelectionContext) {
+  async function openDevModifyDialogWithData(
+    initData: Record<string, unknown>,
+    selection: SelectionContext
+  ) {
     const dialog = await displayDialog(DIALOG_PATHS.devModify, DIALOG_SIZES.devModify);
 
     dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
-      const payload = JSON.parse(args.message || "{}");
+      const payload = JSON.parse(getDialogMessage(args) || "{}");
 
       if (payload?.action === DIALOG_ACTIONS.DEVMODIFY_READY) {
         dialog.messageChild(JSON.stringify({ action: DIALOG_ACTIONS.INIT, data: initData }));
@@ -109,7 +119,7 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
       craftModifyState = initData.state;
 
       dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
-        const payload = JSON.parse(args.message || "{}");
+        const payload = JSON.parse(getDialogMessage(args) || "{}");
 
         if (payload?.action === DIALOG_ACTIONS.CRAFTMODIFY_READY) {
           dialog.messageChild(JSON.stringify({ action: DIALOG_ACTIONS.INIT, data: initData.data }));
@@ -129,6 +139,8 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
       });
     } catch (error) {
       console.error(FLOW_MESSAGES.openCraftDialogFailed, error);
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(message);
     }
   }
 
@@ -140,7 +152,10 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
       return;
     }
 
-    const price = data?.whatKind === CRAFTING_CONSTANTS.outsourcedKind ? data?.currentPrice : data?.refreshedPrice;
+    const price =
+      data?.whatKind === CRAFTING_CONSTANTS.outsourcedKind
+        ? data?.currentPrice
+        : data?.refreshedPrice;
 
     await writeToSheet(devModifyState.selection, {
       desc: data?.desc || devModifyState.selection.componentDesc,
@@ -178,7 +193,9 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
     });
   }
 
-  async function resolveSelectedComponentContext(selection: SelectionContext): Promise<SelectedComponentContext> {
+  async function resolveSelectedComponentContext(
+    selection: SelectionContext
+  ): Promise<SelectedComponentContext> {
     const projectId = await resolveProjectId(selection.categoryName, selection.projectModel);
     const configData = await fetchJson<ComponentRecord[]>(`${API_PATHS.config}/${projectId}`);
     const component = findComponent(configData, selection.componentName);
@@ -188,13 +205,20 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
     return { projectId, configData, component };
   }
 
-  async function buildDevModifyInit(selection: SelectionContext, componentContext?: SelectedComponentContext) {
+  async function buildDevModifyInit(
+    selection: SelectionContext,
+    componentContext?: SelectedComponentContext
+  ) {
     const resolvedContext = componentContext || (await resolveSelectedComponentContext(selection));
     const { projectId, configData, component } = resolvedContext;
 
     const componentId = Number(component.config_id || component.component_id);
-    const materialOptions = await fetchJson<MaterialOptionRecord[]>(`${API_PATHS.materials}/${componentId}`);
-    const craftingConfigList = await fetchJson<Record<string, unknown>[]>(`${API_PATHS.crafting}/${componentId}`);
+    const materialOptions = await fetchJson<MaterialOptionRecord[]>(
+      `${API_PATHS.materials}/${componentId}`
+    );
+    const craftingConfigList = await fetchJson<Record<string, unknown>[]>(
+      `${API_PATHS.crafting}/${componentId}`
+    );
     const craftingConfig = craftingConfigList?.[0] || null;
     const craftPrices = await fetchJson<CraftPriceRecord[]>(API_PATHS.craftPrices);
 
@@ -249,7 +273,9 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
         price: Number(item.price || 0),
         craftType: item.craftType || "",
       })),
-      craftAreas: buildCraftItems(craftingConfig, "Inner").concat(buildCraftItems(craftingConfig, "Outter")),
+      craftAreas: buildCraftItems(craftingConfig, "Inner").concat(
+        buildCraftItems(craftingConfig, "Outter")
+      ),
       baseDesc: selection.componentDesc,
     };
 
@@ -269,7 +295,9 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
     const { configData, component } = await resolveSelectedComponentContext(selection);
 
     const componentId = Number(component.config_id || component.component_id);
-    const craftingConfigList = await fetchJson<Record<string, unknown>[]>(`${API_PATHS.crafting}/${componentId}`);
+    const craftingConfigList = await fetchJson<Record<string, unknown>[]>(
+      `${API_PATHS.crafting}/${componentId}`
+    );
     const craftingConfig = craftingConfigList?.[0] || null;
     const craftPrices = await fetchJson<CraftPriceRecord[]>(API_PATHS.craftPrices);
 

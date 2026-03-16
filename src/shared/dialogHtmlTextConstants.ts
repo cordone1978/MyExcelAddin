@@ -79,6 +79,7 @@ export const COMMAND_TEXT = {
 
 export const TASKPANE_LOG_TEXT = {
   rangeAddressPrefix: "The range address was",
+  runFailed: "Excel.run failed",
   dialogOpenedPrefix: "Dialog opened successfully in",
   dialogOpenedSuffix: "ms",
   dialogOpenFailedPrefix: "Error opening dialog after",

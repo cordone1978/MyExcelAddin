@@ -1,7 +1,12 @@
-﻿/* global Excel */
+﻿/* global Excel, console */
 
 import { BUILDSHEET_STYLE } from "../shared/buildsheetConstants";
-import { BUILDSHEET_TEXT, BUSINESS_TERMS, FLOW_MESSAGES, SECTION_TITLE_PREFIX_REGEX } from "../shared/businessTextConstants";
+import {
+  BUILDSHEET_TEXT,
+  BUSINESS_TERMS,
+  FLOW_MESSAGES,
+  SECTION_TITLE_PREFIX_REGEX,
+} from "../shared/businessTextConstants";
 import { SHEET_NAMES } from "../shared/sheetNames";
 
 type InsertSectionInfo = {
@@ -16,7 +21,9 @@ type DeviceMergeGroup = {
 };
 
 function buildNumberFormatMatrix(rowCount: number, columnCount: number, format: string) {
-  return Array.from({ length: Math.max(0, rowCount) }, () => Array.from({ length: Math.max(0, columnCount) }, () => format));
+  return Array.from({ length: Math.max(0, rowCount) }, () =>
+    Array.from({ length: Math.max(0, columnCount) }, () => format)
+  );
 }
 
 function getAssemblyGroupValue(component: any): number {
@@ -114,7 +121,8 @@ export async function insertComponentsToConfigSheet(
 
       let groups: DeviceMergeGroup[] = [];
       try {
-        groups = mergeDeviceColumnsByGroup(sheet, dataStartRow, dataEndRow, projectName, components) || [];
+        groups =
+          mergeDeviceColumnsByGroup(sheet, dataStartRow, dataEndRow, projectName, components) || [];
       } catch (error) {
         console.warn("mergeDeviceColumnsByGroup failed, fallback to plain rows:", error);
         // 回退：不做分组合并，避免“有标注时整次插入失败”
@@ -131,8 +139,10 @@ export async function insertComponentsToConfigSheet(
       sheet.getRange("M:M").format.fill.color = BUILDSHEET_STYLE.costAreaColor;
       sheet.getRange("N:N").format.fill.color = BUILDSHEET_STYLE.costAreaColor;
       sheet.getRange("Q:Q").format.fill.color = BUILDSHEET_STYLE.costAreaColor;
-      sheet.getRange(`N${dataStartRow}:N${dataEndRow}`).format.fill.color = BUILDSHEET_STYLE.costAreaColor;
-      sheet.getRange(`Q${dataStartRow}:Q${dataEndRow}`).format.fill.color = BUILDSHEET_STYLE.costAreaColor;
+      sheet.getRange(`N${dataStartRow}:N${dataEndRow}`).format.fill.color =
+        BUILDSHEET_STYLE.costAreaColor;
+      sheet.getRange(`Q${dataStartRow}:Q${dataEndRow}`).format.fill.color =
+        BUILDSHEET_STYLE.costAreaColor;
 
       const borders = insertedRange.format.borders;
       borders.getItem("InsideHorizontal").style = "Continuous";
@@ -152,7 +162,9 @@ export async function insertComponentsToConfigSheet(
       rightEdgeRange.format.borders.getItem("EdgeRight").style = "Continuous";
       rightEdgeRange.format.borders.getItem("EdgeRight").weight = "Medium";
 
-      const mFormulas = Array.from({ length: dataRowCount }, (_, i) => [`=L${dataStartRow + i}*H${dataStartRow + i}`]);
+      const mFormulas = Array.from({ length: dataRowCount }, (_, i) => [
+        `=L${dataStartRow + i}*H${dataStartRow + i}`,
+      ]);
       sheet.getRange(`M${dataStartRow}:M${dataEndRow}`).formulas = mFormulas;
       groups.forEach((group) => {
         try {
@@ -163,13 +175,17 @@ export async function insertComponentsToConfigSheet(
           console.warn("group formula write failed:", error);
         }
       });
-      const priceFormatMatrix = buildNumberFormatMatrix(dataRowCount, 5, BUILDSHEET_STYLE.numberFormat);
+      const priceFormatMatrix = buildNumberFormatMatrix(
+        dataRowCount,
+        5,
+        BUILDSHEET_STYLE.numberFormat
+      );
       sheet.getRange(`L${dataStartRow}:P${dataEndRow}`).numberFormat = priceFormatMatrix;
-      sheet.getRange(`L:L`).format.numberFormat = BUILDSHEET_STYLE.numberFormat;
-      sheet.getRange(`M:M`).format.numberFormat = BUILDSHEET_STYLE.numberFormat;
-      sheet.getRange(`N:N`).format.numberFormat = BUILDSHEET_STYLE.numberFormat;
-      sheet.getRange(`O:O`).format.numberFormat = BUILDSHEET_STYLE.numberFormat;
-      sheet.getRange(`P:P`).format.numberFormat = BUILDSHEET_STYLE.numberFormat;
+      sheet.getRange(`L:L`).numberFormat = [[BUILDSHEET_STYLE.numberFormat]];
+      sheet.getRange(`M:M`).numberFormat = [[BUILDSHEET_STYLE.numberFormat]];
+      sheet.getRange(`N:N`).numberFormat = [[BUILDSHEET_STYLE.numberFormat]];
+      sheet.getRange(`O:O`).numberFormat = [[BUILDSHEET_STYLE.numberFormat]];
+      sheet.getRange(`P:P`).numberFormat = [[BUILDSHEET_STYLE.numberFormat]];
 
       await renumberSectionSerialsByLayout(context, sheet, sectionInfo.sectionRow);
       ensureSectionBoundaryRowsBoldBorders(sheet, sectionInfo.sectionRow);
@@ -200,7 +216,10 @@ function ensureSectionBoundaryRowsBoldBorders(sheet: Excel.Worksheet, sectionRow
   adjacentRange.format.borders.getItem("EdgeBottom").weight = "Medium";
 }
 
-async function refreshAllSectionTitleBorders(context: Excel.RequestContext, sheet: Excel.Worksheet) {
+async function refreshAllSectionTitleBorders(
+  context: Excel.RequestContext,
+  sheet: Excel.Worksheet
+) {
   const abUsedRange = sheet.getRange("A:B").getUsedRangeOrNullObject(false);
   abUsedRange.load(["values", "rowIndex", "isNullObject"]);
   await context.sync();
@@ -295,7 +314,11 @@ function findInsertRowBySelectionSync(
   return { insertRow: rowOffset + groupEndIndex + 2, sectionRow };
 }
 
-function findDeviceGroupEndIndex(values: unknown[][], selectedIndex: number, headerSerialText: string): number {
+function findDeviceGroupEndIndex(
+  values: unknown[][],
+  selectedIndex: number,
+  headerSerialText: string
+): number {
   let endIndex = selectedIndex;
   for (let i = selectedIndex + 1; i < values.length; i++) {
     const aText = String(values[i]?.[0] ?? "").trim();
@@ -311,7 +334,11 @@ function findDeviceGroupEndIndex(values: unknown[][], selectedIndex: number, hea
   return endIndex;
 }
 
-function findSectionRowBySelectedIndex(values: unknown[][], rowOffset: number, selectedIndex: number): number {
+function findSectionRowBySelectedIndex(
+  values: unknown[][],
+  rowOffset: number,
+  selectedIndex: number
+): number {
   for (let i = selectedIndex; i >= 0; i--) {
     const aText = String(values[i]?.[0] ?? "").trim();
     const bText = String(values[i]?.[1] ?? "").trim();
@@ -418,7 +445,10 @@ function getDeviceGroupLabel(component: any, projectName: string): string {
   return String(component?.component_name || "").trim() || projectName;
 }
 
-function findInsertRowForCategorySync(abUsedRange: Excel.Range, categoryName: string): InsertSectionInfo {
+function findInsertRowForCategorySync(
+  abUsedRange: Excel.Range,
+  categoryName: string
+): InsertSectionInfo {
   if (abUsedRange.isNullObject) {
     return { insertRow: 1, sectionRow: 1 };
   }

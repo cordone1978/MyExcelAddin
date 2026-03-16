@@ -1,31 +1,40 @@
+/* global console, document, Excel, Office, window, localStorage, URL, performance, fetch, Image, HTMLImageElement, RequestInit */
 import React from "react";
 import { createRoot, Root } from "react-dom/client";
-import { createQuotationSheet } from "../buildsheet";
-import { handleDialogData } from "../dialog/handleDialogData";
-import { API_PATHS, APP_URLS, DIALOG_PATHS, DIALOG_SIZES, UI_DEFAULTS } from "../shared/appConstants";
-import { createDevCraftController } from "./devCraftController";
-import { openQueryPriceDialogController } from "./querypriceController";
-import { BUILDSHEET_TEXT, FLOW_MESSAGES } from "../shared/businessTextConstants";
+import {
+  API_PATHS,
+  APP_URLS,
+  DIALOG_PATHS,
+  DIALOG_SIZES,
+  UI_DEFAULTS,
+} from "../shared/appConstants";
+import { BUILDSHEET_TEXT } from "../shared/businessTextConstants";
 import { TASKPANE_HTML_TEXT, TASKPANE_LOG_TEXT } from "../shared/dialogHtmlTextConstants";
 import { SHEET_NAMES } from "../shared/sheetNames";
-import {
+import type {
   GraphProductLibraryEntry,
-  loadGraphFromWorkbook,
-  loadGraphProductLibraryEntries,
-  loadQuoteConfigProductsFromWorkbook,
-  saveGraphToWorkbook,
   WorkbookGraphPayload,
 } from "../graph-editor/workbookStore";
-import { TaskpaneApp, TaskpaneViewState } from "./taskpaneApp";
+import type { TaskpaneViewState } from "./taskpaneApp";
 
 /* global console, document, Excel, Office */
 
-const devCraftController = createDevCraftController(displayDialog);
+type DevCraftController = {
+  openDevModifyDialog: () => Promise<void>;
+  openCraftModifyDialog: () => Promise<void>;
+};
+
+let devCraftControllerPromise: Promise<DevCraftController> | null = null;
 let authToken = "";
 let currentUser: { username: string; fullName: string } | null = null;
 let isResetPasswordMode = false;
 let isAccountDockExpanded = false;
 let taskpaneRoot: Root | null = null;
+let TaskpaneAppComponent: React.ComponentType<{
+  state: TaskpaneViewState;
+  handlers: Record<string, unknown>;
+}> | null = null;
+let taskpaneAppModulePromise: Promise<void> | null = null;
 let generateTemplateConfirmResolver: ((value: boolean) => void) | null = null;
 let operationErrorResolver: (() => void) | null = null;
 const QUOTE_PREVIEW_STORAGE_KEY = "quotation_addin_quote_preview_payload";
@@ -42,6 +51,61 @@ const GRAPH_EDITOR_SAVE_RESULT_MSG = "graph_editor_save_result";
 const INFO_REF_REQUEST_DEVICES_MSG = "info_reference_request_devices";
 const INFO_REF_DEVICES_MSG = "info_reference_devices";
 const INFO_REF_ERROR_MSG = "info_reference_error";
+
+async function getDevCraftController(): Promise<DevCraftController> {
+  if (!devCraftControllerPromise) {
+    devCraftControllerPromise = import(
+      /* webpackChunkName: "dev-craft-controller" */
+      "./devCraftController"
+    ).then((module) => module.createDevCraftController(displayDialog));
+  }
+  return devCraftControllerPromise;
+}
+
+async function createQuotationSheetLazy() {
+  const module = await import(
+    /* webpackChunkName: "buildsheet" */
+    "../buildsheet"
+  );
+  return module.createQuotationSheet();
+}
+
+async function openQueryPriceDialogLazy() {
+  const module = await import(
+    /* webpackChunkName: "query-price-controller" */
+    "./querypriceController"
+  );
+  return module.openQueryPriceDialogController(displayDialog);
+}
+
+async function getWorkbookStoreModule() {
+  return import(
+    /* webpackChunkName: "graph-workbook-store" */
+    "../graph-editor/workbookStore"
+  );
+}
+
+async function getDialogDataModule() {
+  return import(
+    /* webpackChunkName: "dialog-data-handler" */
+    "../dialog/handleDialogData"
+  );
+}
+
+async function ensureTaskpaneAppLoaded() {
+  if (TaskpaneAppComponent) {
+    return;
+  }
+  if (!taskpaneAppModulePromise) {
+    taskpaneAppModulePromise = import(
+      /* webpackChunkName: "taskpane-app" */
+      "./taskpaneApp"
+    ).then((module) => {
+      TaskpaneAppComponent = module.TaskpaneApp;
+    });
+  }
+  await taskpaneAppModulePromise;
+}
 
 const taskpaneViewState: TaskpaneViewState = {
   isExcelReady: false,
@@ -94,11 +158,17 @@ const taskpaneViewState: TaskpaneViewState = {
 
 function renderTaskpane() {
   if (!taskpaneRoot) return;
+  if (!TaskpaneAppComponent) {
+    void ensureTaskpaneAppLoaded().then(() => {
+      renderTaskpane();
+    });
+    return;
+  }
   taskpaneViewState.currentUser = currentUser;
   taskpaneViewState.isResetPasswordMode = isResetPasswordMode;
   taskpaneViewState.isAccountDockExpanded = isAccountDockExpanded;
   taskpaneRoot.render(
-    React.createElement(TaskpaneApp, {
+    React.createElement(TaskpaneAppComponent, {
       state: taskpaneViewState,
       handlers: {
         onUsernameChange: (value: string) => {
@@ -121,15 +191,23 @@ function renderTaskpane() {
         onModifyDeviceClick: () =>
           void runGuardedWithModal(async () => {
             ensureLoggedInOrThrow();
+            const devCraftController = await getDevCraftController();
             await devCraftController.openDevModifyDialog();
           }),
-        onGenerateSheetClick: () => void runGuarded(() => withLoginGuard(() => handleGenerateSheetClick())),
-        onQueryPriceClick: () => void runGuarded(() => withLoginGuard(() => openQueryPriceDialog())),
-        onGraphEditorClick: () => void runGuarded(() => withLoginGuard(() => openGraphEditorDialog())),
-        onInfoReferenceClick: () => void runGuarded(() => withLoginGuard(() => openInfoReferenceDialog())),
-        onGenerateQuoteClick: () => void runGuarded(() => withLoginGuard(() => handleGenerateQuoteClick())),
-        onGenerateSimpleQuoteClick: () => void runGuarded(() => withLoginGuard(() => handleGenerateSimpleTemplateClick())),
-        onGenerateDetailQuoteClick: () => void runGuarded(() => withLoginGuard(() => handleGenerateDetailTemplateClick())),
+        onGenerateSheetClick: () =>
+          void runGuarded(() => withLoginGuard(() => handleGenerateSheetClick())),
+        onQueryPriceClick: () =>
+          void runGuarded(() => withLoginGuard(() => openQueryPriceDialog())),
+        onGraphEditorClick: () =>
+          void runGuarded(() => withLoginGuard(() => openGraphEditorDialog())),
+        onInfoReferenceClick: () =>
+          void runGuarded(() => withLoginGuard(() => openInfoReferenceDialog())),
+        onGenerateQuoteClick: () =>
+          void runGuarded(() => withLoginGuard(() => handleGenerateQuoteClick())),
+        onGenerateSimpleQuoteClick: () =>
+          void runGuarded(() => withLoginGuard(() => handleGenerateSimpleTemplateClick())),
+        onGenerateDetailQuoteClick: () =>
+          void runGuarded(() => withLoginGuard(() => handleGenerateDetailTemplateClick())),
         onAccountDockToggle: handleAccountDockToggle,
         onConfirmGenerateTemplateOk: () => resolveGenerateTemplateConfirm(true),
         onConfirmGenerateTemplateCancel: () => resolveGenerateTemplateConfirm(false),
@@ -298,14 +376,6 @@ function setInputDisabled(id: string, disabled: boolean) {
   renderTaskpane();
 }
 
-function bindLoginInputEvents() {
-  // handled by React
-}
-
-function bindGenerateTemplateDrawerAutoClose() {
-  // handled by React callbacks
-}
-
 export async function run() {
   try {
     await Excel.run(async (context) => {
@@ -316,7 +386,7 @@ export async function run() {
       console.log(`${TASKPANE_LOG_TEXT.rangeAddressPrefix} ${range.address}.`);
     });
   } catch (error) {
-    console.error(error);
+    console.error(`${TASKPANE_LOG_TEXT.runFailed}:`, error);
   }
 }
 
@@ -325,20 +395,24 @@ function openDialog(url?: string) {
   const dialogUrl = new URL(dialogPath, window.location.origin).toString();
   const start = performance.now();
   const isOfficeOnline = Office.context.platform === Office.PlatformType.OfficeOnline;
-  const dialogSize = dialogPath === DIALOG_PATHS.generateQuote ? DIALOG_SIZES.generateQuote : DIALOG_SIZES.main;
+  const dialogSize =
+    dialogPath === DIALOG_PATHS.generateQuote ? DIALOG_SIZES.generateQuote : DIALOG_SIZES.main;
   Office.context.ui.displayDialogAsync(
     dialogUrl,
     { ...dialogSize, displayInIframe: isOfficeOnline },
     (result) => {
       const elapsedMs = Math.round(performance.now() - start);
       if (result.status === Office.AsyncResultStatus.Succeeded) {
-        console.log(`${TASKPANE_LOG_TEXT.dialogOpenedPrefix} ${elapsedMs}${TASKPANE_LOG_TEXT.dialogOpenedSuffix}`);
+        console.log(
+          `${TASKPANE_LOG_TEXT.dialogOpenedPrefix} ${elapsedMs}${TASKPANE_LOG_TEXT.dialogOpenedSuffix}`
+        );
         const dialog = result.value;
         dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
           dialog.close();
           let data: any = null;
           try {
-            data = JSON.parse(args.message);
+            const dialogMessage = "message" in args ? args.message : "";
+            data = JSON.parse(dialogMessage);
           } catch (error: any) {
             console.error("解析对话框返回数据失败", error);
             setAuthFeedback(error?.message || "解析对话框返回数据失败", "error");
@@ -355,7 +429,8 @@ function openDialog(url?: string) {
           }
 
           try {
-            await retryExcelInternalError(() => handleDialogData(data));
+            const dialogDataModule = await getDialogDataModule();
+            await retryExcelInternalError(() => dialogDataModule.handleDialogData(data));
           } catch (error: any) {
             const message = error?.message || String(error);
             console.error("写入报价配置表失败", error);
@@ -363,10 +438,11 @@ function openDialog(url?: string) {
           }
         });
       } else {
-        notifyVisibleError(result.error?.message || "打开窗口失败");
+        const errorMessage = result.error?.message || "打开窗口失败";
+        notifyVisibleError(errorMessage);
         console.error(
           `${TASKPANE_LOG_TEXT.dialogOpenFailedPrefix} ${elapsedMs}${TASKPANE_LOG_TEXT.dialogOpenFailedSuffix}`,
-          result.error.message
+          errorMessage
         );
       }
     }
@@ -399,7 +475,7 @@ async function retryExcelInternalError<T>(action: () => Promise<T>, retries = 1)
 }
 
 async function openQueryPriceDialog() {
-  await openQueryPriceDialogController(displayDialog);
+  await openQueryPriceDialogLazy();
 }
 
 async function handleGenerateSheetClick() {
@@ -408,11 +484,12 @@ async function handleGenerateSheetClick() {
     return;
   }
   clearTemplateCachesBeforeGenerate();
-  await createQuotationSheet();
+  await createQuotationSheetLazy();
 }
 
 function toggleGenerateTemplateDrawer(forceOpen?: boolean) {
-  const willOpen = typeof forceOpen === "boolean" ? forceOpen : !taskpaneViewState.isGenerateTemplateDrawerOpen;
+  const willOpen =
+    typeof forceOpen === "boolean" ? forceOpen : !taskpaneViewState.isGenerateTemplateDrawerOpen;
   taskpaneViewState.isGenerateTemplateDrawerOpen = willOpen;
   renderTaskpane();
 }
@@ -517,7 +594,10 @@ async function readInfoReferenceDevicesFromWorkbook(): Promise<InfoRefPayload> {
 
     const quoteSheetName = workbookSheets.items
       .map((s) => String(s.name || "").trim())
-      .find((name) => name === SHEET_NAMES.quoteConfig || name === "配置报价表" || name.includes("报价配置"));
+      .find(
+        (name) =>
+          name === SHEET_NAMES.quoteConfig || name === "配置报价表" || name.includes("报价配置")
+      );
     if (!quoteSheetName) {
       return { devices: [], columnWidths: [] };
     }
@@ -610,11 +690,12 @@ async function handleGraphEditorDialogMessage(dialog: Office.Dialog, args: any) 
 }
 
 async function buildGraphEditorDialogPayload(): Promise<GraphEditorDialogPayload> {
+  const workbookStore = await getWorkbookStoreModule();
   const raw = localStorage.getItem(GRAPH_STORE_DEV_CACHE_KEY);
   const cache = raw ? JSON.parse(raw) : null;
-  const graph = await loadGraphFromWorkbook().catch(() => null);
-  const quoteProductNames = await loadQuoteConfigProductsFromWorkbook().catch(() => []);
-  const libraryEntries = await loadGraphProductLibraryEntries().catch(() => []);
+  const graph = await workbookStore.loadGraphFromWorkbook().catch(() => null);
+  const quoteProductNames = await workbookStore.loadQuoteConfigProductsFromWorkbook().catch(() => []);
+  const libraryEntries = await workbookStore.loadGraphProductLibraryEntries().catch(() => []);
   return {
     cache,
     graph,
@@ -639,7 +720,8 @@ async function handleGraphEditorSaveRequest(dialog: Office.Dialog, payload: any)
   let message = "";
   try {
     const workbookPayload = (payload?.payload || {}) as WorkbookGraphPayload;
-    await saveGraphToWorkbook(workbookPayload);
+    const workbookStore = await getWorkbookStoreModule();
+    await workbookStore.saveGraphToWorkbook(workbookPayload);
     ok = true;
     message = "ok";
   } catch (error: any) {
@@ -749,7 +831,24 @@ function roundRatio(value: number): number {
 }
 
 function toChineseSectionOrdinal(value: number): string {
-  const map = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五"];
+  const map = [
+    "",
+    "一",
+    "二",
+    "三",
+    "四",
+    "五",
+    "六",
+    "七",
+    "八",
+    "九",
+    "十",
+    "十一",
+    "十二",
+    "十三",
+    "十四",
+    "十五",
+  ];
   return map[value] || String(value);
 }
 
@@ -764,10 +863,14 @@ function buildQuoteSummarySections(configValues: unknown[][]): QuoteSummarySecti
 
     if (isConfigSectionTitleRow(aText, bText)) {
       if (currentSection) {
-        currentSection.quantity = currentSection.children.reduce((sum, item) => sum + item.quantity, 0);
+        currentSection.quantity = currentSection.children.reduce(
+          (sum, item) => sum + item.quantity,
+          0
+        );
         currentSection.cost = currentSection.children.reduce((sum, item) => sum + item.cost, 0);
         currentSection.price = currentSection.children.reduce((sum, item) => sum + item.price, 0);
-        currentSection.ratio = currentSection.cost > 0 ? roundRatio(currentSection.price / currentSection.cost) : 0;
+        currentSection.ratio =
+          currentSection.cost > 0 ? roundRatio(currentSection.price / currentSection.cost) : 0;
       }
       sectionIndex += 1;
       currentSection = {
@@ -807,7 +910,8 @@ function buildQuoteSummarySections(configValues: unknown[][]): QuoteSummarySecti
     currentSection.quantity = currentSection.children.reduce((sum, item) => sum + item.quantity, 0);
     currentSection.cost = currentSection.children.reduce((sum, item) => sum + item.cost, 0);
     currentSection.price = currentSection.children.reduce((sum, item) => sum + item.price, 0);
-    currentSection.ratio = currentSection.cost > 0 ? roundRatio(currentSection.price / currentSection.cost) : 0;
+    currentSection.ratio =
+      currentSection.cost > 0 ? roundRatio(currentSection.price / currentSection.cost) : 0;
   }
 
   return sections;
@@ -822,31 +926,35 @@ function buildQuoteSummaryDisplayRows(sections: QuoteSummarySectionRow[]) {
   sections.forEach((section) => {
     rows.push({
       level: "section",
-      values: [[
-        section.serial,
-        section.name,
-        "",
-        1,
-        section.cost ? Math.round(section.cost) : "",
-        section.price ? Math.round(section.price) : "",
-        section.ratio ? section.ratio : "",
-        "",
-      ]],
+      values: [
+        [
+          section.serial,
+          section.name,
+          "",
+          1,
+          section.cost ? Math.round(section.cost) : "",
+          section.price ? Math.round(section.price) : "",
+          section.ratio ? section.ratio : "",
+          "",
+        ],
+      ],
     });
 
     section.children.forEach((child) => {
       rows.push({
         level: "child",
-        values: [[
-          child.serial,
-          `    ${child.name}`,
-          "",
-          child.quantity ? Math.round(child.quantity) : "",
-          child.cost ? Math.round(child.cost) : "",
-          child.price ? Math.round(child.price) : "",
-          child.ratio ? child.ratio : "",
-          child.remark,
-        ]],
+        values: [
+          [
+            child.serial,
+            `    ${child.name}`,
+            "",
+            child.quantity ? Math.round(child.quantity) : "",
+            child.cost ? Math.round(child.cost) : "",
+            child.price ? Math.round(child.price) : "",
+            child.ratio ? child.ratio : "",
+            child.remark,
+          ],
+        ],
       });
     });
   });
@@ -887,11 +995,16 @@ function buildQuoteSummaryMergeCells(
   }
 
   if (notesEndRow >= notesStartRow) {
-      merges.push({ row: notesStartRow, col: 1, rowspan: notesEndRow - notesStartRow + 1, colspan: 2 });
-      for (let row = notesStartRow; row <= notesEndRow; row += 1) {
+    merges.push({
+      row: notesStartRow,
+      col: 1,
+      rowspan: notesEndRow - notesStartRow + 1,
+      colspan: 2,
+    });
+    for (let row = notesStartRow; row <= notesEndRow; row += 1) {
       merges.push({ row, col: 3, rowspan: 1, colspan: 6 });
-      }
     }
+  }
 
   return merges;
 }
@@ -1013,7 +1126,9 @@ function buildDetailQuotePreviewPayload(
   alignments: string[][]
 ) {
   const removedCols = new Set([12, 13, 14, 17]); // L/M/N/Q
-  const keptIndexes = Array.from({ length: 18 }, (_, idx) => idx).filter((idx) => !removedCols.has(idx + 1));
+  const keptIndexes = Array.from({ length: 18 }, (_, idx) => idx).filter(
+    (idx) => !removedCols.has(idx + 1)
+  );
   const lastMeaningfulIndex = getLastMeaningfulConfigRowIndex(values);
   const trimmedValues = (values || [])
     .slice(0, lastMeaningfulIndex + 1)
@@ -1039,8 +1154,12 @@ function buildDetailQuotePreviewPayload(
 
 async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = "detail") {
   const payload = await Excel.run(async (context) => {
-    const quoteConfigSheet = context.workbook.worksheets.getItemOrNullObject(SHEET_NAMES.quoteConfig);
-    const quoteSummarySheet = context.workbook.worksheets.getItemOrNullObject(SHEET_NAMES.quoteSummary);
+    const quoteConfigSheet = context.workbook.worksheets.getItemOrNullObject(
+      SHEET_NAMES.quoteConfig
+    );
+    const quoteSummarySheet = context.workbook.worksheets.getItemOrNullObject(
+      SHEET_NAMES.quoteSummary
+    );
     quoteConfigSheet.load("name");
     quoteSummarySheet.load("name,isNullObject");
     await context.sync();
@@ -1057,7 +1176,9 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
       const summaryCustomerRange = quoteSummarySheet.getRange("A1:H6");
       summaryCustomerRange.load(["values", "text"]);
       await context.sync();
-      summaryCustomerMatrix = ((summaryCustomerRange as any).text || summaryCustomerRange.values || []) as unknown[][];
+      summaryCustomerMatrix = ((summaryCustomerRange as any).text ||
+        summaryCustomerRange.values ||
+        []) as unknown[][];
     }
 
     const configUsedRange = quoteConfigSheet.getRange("A:P").getUsedRangeOrNullObject(false);
@@ -1074,16 +1195,42 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
     if (mode === "detail") {
       const detailPreviewRange = quoteConfigSheet.getRange("A:R").getUsedRangeOrNullObject(false);
       detailPreviewRange.load(["values", "rowCount", "isNullObject"]);
-      const detailAlignmentRange = quoteConfigSheet.getRange(`A1:R${Math.max(1, Number(configValues.length || 0))}`);
-      const alignmentCells = Array.from({ length: Math.max(1, Number(configValues.length || 0)) }, (_, rowIdx) =>
-        Array.from({ length: 18 }, (_, colIdx) => detailAlignmentRange.getCell(rowIdx, colIdx))
+      const detailAlignmentRange = quoteConfigSheet.getRange(
+        `A1:R${Math.max(1, Number(configValues.length || 0))}`
       );
-      alignmentCells.forEach((row) => row.forEach((cell) => cell.format.load("horizontalAlignment")));
-      const rowRanges = Array.from({ length: Math.max(1, Number(configValues.length || 0)) }, (_, i) =>
-        quoteConfigSheet.getRange(`${i + 1}:${i + 1}`)
+      const alignmentCells = Array.from(
+        { length: Math.max(1, Number(configValues.length || 0)) },
+        (_, rowIdx) =>
+          Array.from({ length: 18 }, (_, colIdx) => detailAlignmentRange.getCell(rowIdx, colIdx))
+      );
+      alignmentCells.forEach((row) =>
+        row.forEach((cell) => cell.format.load("horizontalAlignment"))
+      );
+      const rowRanges = Array.from(
+        { length: Math.max(1, Number(configValues.length || 0)) },
+        (_, i) => quoteConfigSheet.getRange(`${i + 1}:${i + 1}`)
       );
       rowRanges.forEach((r) => r.format.load("rowHeight"));
-      const colKeys = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"];
+      const colKeys = [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+      ];
       const colRanges = colKeys.map((col) => quoteConfigSheet.getRange(`${col}:${col}`));
       colRanges.forEach((r) => r.format.load("columnWidth"));
       await context.sync();
@@ -1100,7 +1247,12 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
         .slice(0, detailValues.length)
         .map((r) => Number((r.format as any).rowHeight || 0));
       const detailColWidths = colRanges.map((r) => Number((r.format as any).columnWidth || 0));
-      const detailPayload = buildDetailQuotePreviewPayload(detailValues, detailRowHeights, detailColWidths, detailAlignments) as any;
+      const detailPayload = buildDetailQuotePreviewPayload(
+        detailValues,
+        detailRowHeights,
+        detailColWidths,
+        detailAlignments
+      ) as any;
       detailPayload.pdfFileName = buildPreviewPdfFileName(summaryCustomerMatrix, "detail");
       return detailPayload;
     }
@@ -1131,7 +1283,8 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
       quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).values = item.values;
       quoteSummarySheet.getRange(`B${rowNum}:C${rowNum}`).merge();
       quoteSummarySheet.getRange(`A${rowNum}`).format.horizontalAlignment = "Center";
-      quoteSummarySheet.getRange(`B${rowNum}:C${rowNum}`).format.horizontalAlignment = item.level === "section" ? "Left" : "Center";
+      quoteSummarySheet.getRange(`B${rowNum}:C${rowNum}`).format.horizontalAlignment =
+        item.level === "section" ? "Left" : "Center";
       quoteSummarySheet.getRange(`D${rowNum}:G${rowNum}`).format.horizontalAlignment = "Center";
       quoteSummarySheet.getRange(`H${rowNum}`).format.horizontalAlignment = "Left";
       if (item.level === "section") {
@@ -1150,7 +1303,9 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
     quoteSummarySheet.getRange(`A${totalRow}:D${totalRow}`).merge();
     quoteSummarySheet.getRange(`A${totalRow}`).values = [[BUILDSHEET_TEXT.totalLabel]];
     quoteSummarySheet.getRange(`E${totalRow}`).values = [[totalCost ? Math.round(totalCost) : ""]];
-    quoteSummarySheet.getRange(`F${totalRow}`).values = [[totalPrice ? Math.round(totalPrice) : ""]];
+    quoteSummarySheet.getRange(`F${totalRow}`).values = [
+      [totalPrice ? Math.round(totalPrice) : ""],
+    ];
     quoteSummarySheet.getRange(`G${totalRow}`).values = [[totalRatio ? totalRatio : ""]];
     quoteSummarySheet.getRange(`H${totalRow}`).values = [[""]];
     quoteSummarySheet.getRange(`A${totalRow}:H${totalRow}`).format.font.bold = true;
@@ -1168,7 +1323,8 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
         quoteSummarySheet.getRange(`C${rowNum}`).values = [[text]];
       });
       quoteSummarySheet.getRange(`C${notesStartRow}:H${notesEndRow}`).format.wrapText = true;
-      quoteSummarySheet.getRange(`C${notesStartRow}:H${notesEndRow}`).format.verticalAlignment = "Center";
+      quoteSummarySheet.getRange(`C${notesStartRow}:H${notesEndRow}`).format.verticalAlignment =
+        "Center";
     }
 
     const activeRange = quoteSummarySheet.getRange(`A8:H${notesEndRow}`);
@@ -1180,12 +1336,16 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
     activeRange.format.borders.getItem("EdgeBottom").style = "Continuous";
     activeRange.format.borders.getItem("EdgeLeft").style = "Continuous";
     activeRange.format.borders.getItem("EdgeRight").style = "Continuous";
-    quoteSummarySheet.getRange(`D${dataStartRow}:F${totalRow}`).format.numberFormat = "#,##0";
-    quoteSummarySheet.getRange(`G${dataStartRow}:G${totalRow}`).format.numberFormat = "0.0";
+    quoteSummarySheet.getRange(`D${dataStartRow}:F${totalRow}`).numberFormat = [
+      ["#,##0", "#,##0", "#,##0"],
+    ];
+    quoteSummarySheet.getRange(`G${dataStartRow}:G${totalRow}`).numberFormat = [["0.0"]];
 
     const fullPreviewRange = quoteSummarySheet.getRange(`A1:H${notesEndRow}`);
     fullPreviewRange.load(["values", "text"]);
-    const rowRanges = Array.from({ length: notesEndRow }, (_, i) => quoteSummarySheet.getRange(`${i + 1}:${i + 1}`));
+    const rowRanges = Array.from({ length: notesEndRow }, (_, i) =>
+      quoteSummarySheet.getRange(`${i + 1}:${i + 1}`)
+    );
     rowRanges.forEach((r) => r.format.load("rowHeight"));
     const colKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
     const colRanges = colKeys.map((col) => quoteSummarySheet.getRange(`${col}:${col}`));
@@ -1230,7 +1390,11 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
 
 function toPreliminaryPreviewPayload(payload: {
   quoteSheetGrid: string[][];
-  quoteSheetLayout: { rowHeights?: number[]; colWidths?: number[]; merges?: Array<{ row: number; col: number; rowspan: number; colspan: number }> };
+  quoteSheetLayout: {
+    rowHeights?: number[];
+    colWidths?: number[];
+    merges?: Array<{ row: number; col: number; rowspan: number; colspan: number }>;
+  };
   totalPriceText: string;
   generatedAt: string;
   quotePreviewMode: "detail" | "preliminary";
@@ -1245,7 +1409,9 @@ function toPreliminaryPreviewPayload(payload: {
     return n;
   };
 
-  const nextGrid = (payload.quoteSheetGrid || []).map((row) => keptIdx.map((i) => String(row?.[i] ?? "")));
+  const nextGrid = (payload.quoteSheetGrid || []).map((row) =>
+    keptIdx.map((i) => String(row?.[i] ?? ""))
+  );
   const nextColWidths = keptIdx.map((i) => Number(payload.quoteSheetLayout?.colWidths?.[i] || 0));
   const nextMerges = (payload.quoteSheetLayout?.merges || [])
     .map((m) => {
@@ -1275,9 +1441,9 @@ function toPreliminaryPreviewPayload(payload: {
   };
 }
 
-function parseA1MergeAddress(address: string):
-  | { row: number; col: number; rowspan: number; colspan: number }
-  | null {
+function parseA1MergeAddress(
+  address: string
+): { row: number; col: number; rowspan: number; colspan: number } | null {
   const normalized = String(address || "").trim();
   if (!normalized) return null;
   const local = normalized.includes("!") ? normalized.split("!").pop() || "" : normalized;
@@ -1429,7 +1595,9 @@ async function saveDialogCompositeToDevSheet(data: any) {
       sheet.getUsedRangeOrNullObject(true).clear(Excel.ClearApplyTo.contents);
       sheet.getRange("A1").values = [[GRAPH_STORE_DEV_SHEET_MARK]];
       sheet.getRange("B1").values = [[String(10)]];
-      sheet.getRange("A2").values = [["A列: ENTRY标记；B=保存时间；C=项目；D=元数据JSON；E=图片分块数；F列起=图片分块"]];
+      sheet.getRange("A2").values = [
+        ["A列: ENTRY标记；B=保存时间；C=项目；D=元数据JSON；E=图片分块数；F列起=图片分块"],
+      ];
       nextRow = 10;
     }
 
@@ -1565,12 +1733,19 @@ function persistAuthToken(token: string) {
 }
 
 function setLoginUiState() {
-  const loginText = currentUser ? `退出（${currentUser.fullName || currentUser.username}）` : TASKPANE_HTML_TEXT.loginBtn;
+  const loginText = currentUser
+    ? `退出（${currentUser.fullName || currentUser.username}）`
+    : TASKPANE_HTML_TEXT.loginBtn;
   setText("loginBtn", loginText);
-  setText("loginStatusLabel", currentUser ? `已登录：${currentUser.fullName || currentUser.username}` : "未登录");
+  setText(
+    "loginStatusLabel",
+    currentUser ? `已登录：${currentUser.fullName || currentUser.username}` : "未登录"
+  );
   setText(
     "userInfoLabel",
-    currentUser ? `当前用户：${currentUser.fullName || currentUser.username}（${currentUser.username}）` : ""
+    currentUser
+      ? `当前用户：${currentUser.fullName || currentUser.username}（${currentUser.username}）`
+      : ""
   );
   const authPanel = document.getElementById("authPanel");
   const actionPanel = document.getElementById("actionPanel");
@@ -1805,6 +1980,3 @@ function displayDialog(
     );
   });
 }
-
-
-

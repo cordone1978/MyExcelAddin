@@ -1,6 +1,10 @@
-﻿/* global Excel */
+﻿/* global Excel, console, fetch, btoa */
 
-import { BUILDSHEET_COLUMNS, BUILDSHEET_RANGES, BUILDSHEET_STYLE } from "../shared/buildsheetConstants";
+import {
+  BUILDSHEET_COLUMNS,
+  BUILDSHEET_RANGES,
+  BUILDSHEET_STYLE,
+} from "../shared/buildsheetConstants";
 import { BUILDSHEET_TEXT } from "../shared/businessTextConstants";
 import { SHEET_NAMES } from "../shared/sheetNames";
 
@@ -27,13 +31,16 @@ async function fetchImageAsBase64(url: string): Promise<string> {
   const chunkSize = 0x8000;
   for (let i = 0; i < bytes.length; i += chunkSize) {
     const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
+    binary += String.fromCharCode(...Array.from(chunk));
   }
   quoteCompanyLogoBase64Cache = btoa(binary);
   return quoteCompanyLogoBase64Cache;
 }
 
-async function addCompanyLogoToQuoteSheet(context: Excel.RequestContext, sheet: Excel.Worksheet): Promise<void> {
+async function addCompanyLogoToQuoteSheet(
+  context: Excel.RequestContext,
+  sheet: Excel.Worksheet
+): Promise<void> {
   const logoBase64 = await fetchImageAsBase64("/assets/logo-large.png");
   const titleRange = sheet.getRange("A1:H1");
   titleRange.load("left,top,height,width");
@@ -49,7 +56,12 @@ async function addCompanyLogoToQuoteSheet(context: Excel.RequestContext, sheet: 
   shape.top = titleRange.top + Math.max(0, (titleRange.height - logoHeight) / 2);
 }
 
-function buildConfigSectionTotalFormula(titleRow: number, labelColumn: string, sumColumn: string, labelText: string): string {
+function buildConfigSectionTotalFormula(
+  titleRow: number,
+  labelColumn: string,
+  sumColumn: string,
+  labelText: string
+): string {
   const labelCol = String(labelColumn || "O").toUpperCase();
   const sumCol = String(sumColumn || "P").toUpperCase();
   const text = String(labelText || "总价");
@@ -153,9 +165,10 @@ async function buildQuotationSheet(context: Excel.RequestContext, systems?: Syst
   sheet.getRange(BUILDSHEET_RANGES.quoteHeader).format.verticalAlignment = "Center";
 
   const defaultItems = BUILDSHEET_TEXT.quoteDefaultItems;
-  const items = systems && systems.length > 0
-    ? systems.slice(0, 13).map((s, i) => [i + 1, s.name || "", "", "", "", "", "", ""])
-    : defaultItems;
+  const items =
+    systems && systems.length > 0
+      ? systems.slice(0, 13).map((s, i) => [i + 1, s.name || "", "", "", "", "", "", ""])
+      : defaultItems;
 
   sheet.getRange(BUILDSHEET_RANGES.quoteItems).values = items;
   for (let row = 8; row <= 21; row += 1) {
@@ -261,7 +274,9 @@ async function buildConfigSheet(context: Excel.RequestContext) {
     sheet.getRange(`M${row}`).format.horizontalAlignment = "Center";
     sheet.getRange(`M${row}`).format.font.bold = true;
 
-    sheet.getRange(`N${row}`).formulas = [[buildConfigSectionTotalFormula(row, "M", "M", "成本总价")]];
+    sheet.getRange(`N${row}`).formulas = [
+      [buildConfigSectionTotalFormula(row, "M", "M", "成本总价")],
+    ];
     sheet.getRange(`N${row}`).format.horizontalAlignment = "Center";
     sheet.getRange(`N${row}`).format.font.bold = true;
 
@@ -335,13 +350,14 @@ async function buildConfigSheet(context: Excel.RequestContext) {
   sheet.getRange("Q:Q").format.columnWidth = cfg.Q;
   sheet.getRange("R:R").format.columnWidth = cfg.R;
 
-  sheet.getRange("L:L").format.numberFormat = "#,##0";
-  sheet.getRange("M:M").format.numberFormat = "#,##0";
-  sheet.getRange("N:N").format.numberFormat = "#,##0";
-  sheet.getRange("O:O").format.numberFormat = "#,##0";
-  sheet.getRange("P:P").format.numberFormat = "#,##0";
+  sheet.getRange("L:L").numberFormat = [["#,##0"]];
+  sheet.getRange("M:M").numberFormat = [["#,##0"]];
+  sheet.getRange("N:N").numberFormat = [["#,##0"]];
+  sheet.getRange("O:O").numberFormat = [["#,##0"]];
+  sheet.getRange("P:P").numberFormat = [["#,##0"]];
 
-  sheet.getRange(BUILDSHEET_RANGES.configLongRows).format.rowHeight = BUILDSHEET_STYLE.defaultRowHeight;
+  sheet.getRange(BUILDSHEET_RANGES.configLongRows).format.rowHeight =
+    BUILDSHEET_STYLE.defaultRowHeight;
   await context.sync();
 }
 
@@ -377,7 +393,8 @@ async function buildEasypartsSheet(context: Excel.RequestContext) {
   sheet.getRange(BUILDSHEET_RANGES.easypartsHeader).format.verticalAlignment = "Center";
   sheet.getRange(BUILDSHEET_RANGES.easypartsHeader).format.font.name = BUILDSHEET_STYLE.fontName;
   sheet.getRange(BUILDSHEET_RANGES.easypartsHeader).format.font.size = BUILDSHEET_STYLE.fontSize;
-  sheet.getRange(BUILDSHEET_RANGES.easypartsHeader).format.rowHeight = BUILDSHEET_STYLE.defaultRowHeight;
+  sheet.getRange(BUILDSHEET_RANGES.easypartsHeader).format.rowHeight =
+    BUILDSHEET_STYLE.defaultRowHeight;
 
   // 预生成 30 行空白数据区（第 3~32 行），并给前 5 行写序号 1~5
   const presetRows = 30;
@@ -436,11 +453,12 @@ async function buildEasypartsSheet(context: Excel.RequestContext) {
   borderRange.getItem("InsideVertical").style = "Continuous";
   borderRange.getItem("InsideVertical").weight = "Thin";
 
-  sheet.getRange("L:L").format.numberFormat = BUILDSHEET_STYLE.numberFormat;
-  sheet.getRange("M:M").format.numberFormat = BUILDSHEET_STYLE.numberFormat;
-  sheet.getRange("N:N").format.numberFormat = BUILDSHEET_STYLE.numberFormat;
-  sheet.getRange("O:O").format.numberFormat = BUILDSHEET_STYLE.numberFormat;
+  sheet.getRange("L:L").numberFormat = [[BUILDSHEET_STYLE.numberFormat]];
+  sheet.getRange("M:M").numberFormat = [[BUILDSHEET_STYLE.numberFormat]];
+  sheet.getRange("N:N").numberFormat = [[BUILDSHEET_STYLE.numberFormat]];
+  sheet.getRange("O:O").numberFormat = [[BUILDSHEET_STYLE.numberFormat]];
 
-  sheet.getRange(BUILDSHEET_RANGES.easypartsLongRows).format.rowHeight = BUILDSHEET_STYLE.defaultRowHeight;
+  sheet.getRange(BUILDSHEET_RANGES.easypartsLongRows).format.rowHeight =
+    BUILDSHEET_STYLE.defaultRowHeight;
   await context.sync();
 }

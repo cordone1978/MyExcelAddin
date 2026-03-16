@@ -1,3 +1,4 @@
+/* global URL, window, fetch */
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
 import { buildEquipmentImageUrl } from "../shared/equipmentImagePath";
 import { ProductTemplate } from "./sceneTypes";
@@ -23,13 +24,14 @@ export function normalizeLibraryName(value: string) {
 }
 
 export function tokenizeLibraryName(value: string) {
-  return String(value || "").match(/[a-z0-9]+|[\u4e00-\u9fa5]+/g) || [];
+  return (String(value || "").match(/[a-z0-9]+|[\u4e00-\u9fa5]+/g) || []) as string[];
 }
 
 export function resolveTemplateThumbnail(template: ProductTemplate) {
   const firstComponent = (template.components || [])[0];
   const firstLayer =
-    (firstComponent?.layers || []).find((layer) => (layer.role || "base") === "base") || firstComponent?.layers?.[0];
+    (firstComponent?.layers || []).find((layer) => (layer.role || "base") === "base") ||
+    firstComponent?.layers?.[0];
   return firstLayer?.imageUrl || firstLayer?.fallbackImageUrl || firstComponent?.imageUrl || "";
 }
 
@@ -37,9 +39,13 @@ export function resolveTemplateFromProductName(productName: string) {
   const source = String(productName || "").trim();
   if (!source) return null;
 
-  const familyRule = TEMPLATE_FAMILY_RULES.find((rule) => rule.keywords.some((keyword) => source.includes(keyword)));
+  const familyRule = TEMPLATE_FAMILY_RULES.find((rule) =>
+    rule.keywords.some((keyword) => source.includes(keyword))
+  );
   if (familyRule) {
-    return PRODUCT_LIBRARY.find((template) => template.templateId === familyRule.templateId) || null;
+    return (
+      PRODUCT_LIBRARY.find((template) => template.templateId === familyRule.templateId) || null
+    );
   }
 
   const normalizedSource = normalizeLibraryName(source);
@@ -85,16 +91,20 @@ async function apiGet<T>(path: string): Promise<T> {
 
 export async function resolveProductThumbnail(productName: string, fallbackUrl: string) {
   try {
-    const product = await apiGet<{ product_id?: number }>(`${API_PATHS.projectByModel}/${encodeURIComponent(productName)}`);
+    const product = await apiGet<{ product_id?: number }>(
+      `${API_PATHS.projectByModel}/${encodeURIComponent(productName)}`
+    );
     const productId = Number(product?.product_id || 0);
     if (!productId) return fallbackUrl;
 
-    const configRows = await apiGet<Array<{ component_sn?: number; image_url?: string; component_pic?: string }>>(
-      `${API_PATHS.config}/${productId}`
-    );
+    const configRows = await apiGet<
+      Array<{ component_sn?: number; image_url?: string; component_pic?: string }>
+    >(`${API_PATHS.config}/${productId}`);
     const mainRow =
       (configRows || []).find((row) => Number(row?.component_sn || 0) === 1) ||
-      (configRows || []).find((row) => String(row?.image_url || "").trim() || String(row?.component_pic || "").trim());
+      (configRows || []).find(
+        (row) => String(row?.image_url || "").trim() || String(row?.component_pic || "").trim()
+      );
 
     const configImageUrl =
       normalizeGraphImageUrl(mainRow?.image_url) ||
@@ -104,7 +114,9 @@ export async function resolveProductThumbnail(productName: string, fallbackUrl: 
       return configImageUrl;
     }
 
-    const annotations = await apiGet<Array<{ image_url?: string }>>(`${API_PATHS.annotations}/${productId}`);
+    const annotations = await apiGet<Array<{ image_url?: string }>>(
+      `${API_PATHS.annotations}/${productId}`
+    );
     return normalizeGraphImageUrl(annotations?.[0]?.image_url) || fallbackUrl;
   } catch {
     return fallbackUrl;

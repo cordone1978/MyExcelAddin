@@ -61,9 +61,15 @@ module.exports = async (env, options) => {
       splitChunks: {
         chunks: "all",
         cacheGroups: {
-          graphicsVendor: {
-            test: /[\\/]node_modules[\\/](react-konva|konva|react|react-dom|react-reconciler|scheduler|its-fine)[\\/]/,
-            name: "graphics-vendor",
+          reactVendor: {
+            test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+            name: "react-vendor",
+            chunks: "all",
+            priority: 30,
+          },
+          konvaVendor: {
+            test: /[\\/]node_modules[\\/](react-konva|konva|react-reconciler|its-fine)[\\/]/,
+            name: "konva-vendor",
             chunks: "all",
             priority: 20,
           },

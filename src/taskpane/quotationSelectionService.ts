@@ -2,7 +2,7 @@
 
 import { parseNumber } from "./devCraftDataService";
 import { CellWritePayload } from "./devCraftTypes";
-import { SHEET_NAMES, SHEET_NAME_ALIASES } from "../shared/sheetNames";
+import { SHEET_NAMES, isWearPartsSheetName } from "../shared/sheetNames";
 import { UI_DEFAULTS } from "../shared/appConstants";
 import { FLOW_MESSAGES } from "../shared/businessTextConstants";
 
@@ -25,17 +25,25 @@ export type SelectionContext = {
 
 function isSelectionAllowedSheet(sheetName: string): boolean {
   const normalized = String(sheetName || "").trim();
-  return normalized === SHEET_NAMES.quoteConfig || SHEET_NAME_ALIASES.wearParts.includes(normalized);
+  return normalized === SHEET_NAMES.quoteConfig || isWearPartsSheetName(normalized);
 }
 
-function findNearestProjectModel(values: unknown[][], selectedIndex: number, currentComponentName: string): string {
+function findNearestProjectModel(
+  values: unknown[][],
+  selectedIndex: number,
+  currentComponentName: string
+): string {
   const normalizedCurrentComponentName = String(currentComponentName || "").trim();
   for (let i = selectedIndex; i >= 0; i -= 1) {
     const projectModel = String(values[i]?.[1] || "").trim();
     const componentName = String(values[i]?.[2] || "").trim();
     const aValue = String(values[i]?.[0] || "").trim();
 
-    if (projectModel && projectModel !== componentName && projectModel !== normalizedCurrentComponentName) {
+    if (
+      projectModel &&
+      projectModel !== componentName &&
+      projectModel !== normalizedCurrentComponentName
+    ) {
       return projectModel;
     }
 
@@ -51,7 +59,11 @@ function findNearestProjectModel(values: unknown[][], selectedIndex: number, cur
   return "";
 }
 
-function isLikelyInvalidComponentRow(projectModel: string, componentName: string, rowValues: unknown[]): boolean {
+function isLikelyInvalidComponentRow(
+  projectModel: string,
+  componentName: string,
+  rowValues: unknown[]
+): boolean {
   if (projectModel || componentName) return false;
   return rowValues.some((value) => String(value ?? "").trim().length > 0);
 }
@@ -67,8 +79,7 @@ export async function getSelectionContext(): Promise<SelectionContext> {
 
       const row = range.rowIndex + 1;
       const column = range.columnIndex + 1;
-      const targetColumn =
-        column === 3 || column === 4 || column === 5 || column === 6 ? "C" : "";
+      const targetColumn = column === 3 || column === 4 || column === 5 || column === 6 ? "C" : "";
 
       if (!isSelectionAllowedSheet(sheet.name)) {
         throw new Error(`${FLOW_MESSAGES.selectQuoteConfigSheetPrefix}。当前工作表：${sheet.name}`);
@@ -102,7 +113,7 @@ export async function getSelectionContext(): Promise<SelectionContext> {
       const componentMaterial = String(values[5] || "").trim();
       const componentBrand = String(values[6] || "").trim();
       const componentUnit = String(values[8] || "").trim();
-      const isEasyparts = SHEET_NAME_ALIASES.wearParts.includes(sheet.name);
+      const isEasyparts = isWearPartsSheetName(sheet.name);
       const priceCellValue = values[11];
       const currentPrice = parseNumber(priceCellValue);
 
@@ -161,15 +172,15 @@ export async function writeToSheet(selection: SelectionContext, payload: CellWri
     const priceValue = payload.price ?? "";
     if (selection.isEasyparts) {
       targetCell.getOffsetRange(0, 9).values = [[priceValue]];
-      targetCell.getOffsetRange(0, 9).format.numberFormat = "#,##0";
-      targetCell.getOffsetRange(0, 10).format.numberFormat = "#,##0";
+      targetCell.getOffsetRange(0, 9).numberFormat = [["#,##0"]];
+      targetCell.getOffsetRange(0, 10).numberFormat = [["#,##0"]];
     } else {
       targetCell.getOffsetRange(0, 9).values = [[priceValue]];
-      targetCell.getOffsetRange(0, 9).format.numberFormat = "#,##0";
-      targetCell.getOffsetRange(0, 10).format.numberFormat = "#,##0";
-      targetCell.getOffsetRange(0, 11).format.numberFormat = "#,##0";
-      targetCell.getOffsetRange(0, 12).format.numberFormat = "#,##0";
-      targetCell.getOffsetRange(0, 13).format.numberFormat = "#,##0";
+      targetCell.getOffsetRange(0, 9).numberFormat = [["#,##0"]];
+      targetCell.getOffsetRange(0, 10).numberFormat = [["#,##0"]];
+      targetCell.getOffsetRange(0, 11).numberFormat = [["#,##0"]];
+      targetCell.getOffsetRange(0, 12).numberFormat = [["#,##0"]];
+      targetCell.getOffsetRange(0, 13).numberFormat = [["#,##0"]];
     }
 
     await context.sync();

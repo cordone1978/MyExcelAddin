@@ -1,7 +1,7 @@
-﻿/* global Excel, Office, alert, console */
+﻿/* global Excel, Office, alert, console, URLSearchParams */
 import { QueryPriceSelectedData } from "./devCraftTypes";
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
-import { SHEET_NAMES, SHEET_NAME_ALIASES } from "../shared/sheetNames";
+import { SHEET_NAMES, isWearPartsSheetName } from "../shared/sheetNames";
 import { DIALOG_PATHS, DIALOG_SIZES, EXCEL_LAYOUT, UI_DEFAULTS } from "../shared/appConstants";
 import { BUILDSHEET_TEXT, FLOW_MESSAGES } from "../shared/businessTextConstants";
 import { BUILDSHEET_STYLE } from "../shared/buildsheetConstants";
@@ -19,6 +19,10 @@ type DisplayDialogFn = (
   size?: { width: number; height: number }
 ) => Promise<Office.Dialog>;
 
+function getDialogMessage(args: { message: string; origin: string } | { error: number }) {
+  return "message" in args ? args.message : "";
+}
+
 export async function openQueryPriceDialogController(displayDialog: DisplayDialogFn) {
   return openQueryPriceDialogControllerWithOptions(displayDialog);
 }
@@ -32,7 +36,7 @@ export async function openQueryPriceDialogControllerWithOptions(
     const dialog = await displayDialog(path, DIALOG_SIZES.queryPrice);
 
     dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
-      const payload = JSON.parse(args.message || "{}");
+      const payload = JSON.parse(getDialogMessage(args) || "{}");
 
       if (payload?.action === DIALOG_ACTIONS.QUERYPRICE_REPLACE) {
         const check = await validateSelectionForQueryPrice();
@@ -92,7 +96,7 @@ async function validateSelectionForQueryPrice(): Promise<QueryPriceSelectionChec
 
       const sheetName = String(sheet.name || "").trim();
       const isQuoteConfig = sheetName === SHEET_NAMES.quoteConfig;
-      const isWearSheet = SHEET_NAME_ALIASES.wearParts.includes(sheetName);
+      const isWearSheet = isWearPartsSheetName(sheetName);
 
       if (!isQuoteConfig && !isWearSheet) {
         return {
@@ -130,7 +134,10 @@ async function validateSelectionForQueryPrice(): Promise<QueryPriceSelectionChec
   }
 }
 
-async function handleQueryPriceReplace(data: QueryPriceSelectedData, check: QueryPriceSelectionCheck) {
+async function handleQueryPriceReplace(
+  data: QueryPriceSelectedData,
+  check: QueryPriceSelectionCheck
+) {
   if (!check.row || !check.sheetName) return;
   await fillCellsByRule(data, check.row, check.sheetName);
 }
@@ -149,7 +156,7 @@ async function fillCellsByRule(rowData: QueryPriceSelectedData, row: number, she
 
     await assertReplaceAllowed(context, sheet, row, sheetName);
 
-    const isWearSheet = SHEET_NAME_ALIASES.wearParts.includes(sheetName);
+    const isWearSheet = isWearPartsSheetName(sheetName);
     if (isWearSheet) {
       await applyWearSheetReplace(context, sheet, rowData, row);
     } else {
@@ -190,7 +197,7 @@ async function applyWearSheetReplace(
   sheet.getRange(`I${row}`).values = [[rowData.price || 0]];
   sheet.getRange(`J${row}`).formulas = [[`=IF(OR(G${row}="",I${row}=""),"",G${row}*I${row})`]];
   sheet.getRange(`K${row}`).values = [[rowData.price || 0]];
-  sheet.getRange(`I${row}:K${row}`).format.numberFormat = "#,##0";
+  sheet.getRange(`I${row}:K${row}`).numberFormat = [["#,##0", "#,##0", "#,##0"]];
 
   if (!serialCell.values[0][0]) {
     serialCell.values = [[row - 2]];
@@ -228,7 +235,9 @@ async function applyQuoteConfigReplace(
   currentRowRange.format.load("rowHeight");
   sheet.getRange(`I${row}`).values = [[rowData.unit || UI_DEFAULTS.defaultUnit]];
   sheet.getRange(`L${row}`).values = [[rowData.price || 0]];
-  sheet.getRange(`L${row}:P${row}`).format.numberFormat = "#,##0";
+  sheet.getRange(`L${row}:P${row}`).numberFormat = [
+    ["#,##0", "#,##0", "#,##0", "#,##0", "#,##0"],
+  ];
 
   if (!configQtyCell.values[0][0]) {
     configQtyCell.values = [[UI_DEFAULTS.defaultQuantity]];
@@ -258,7 +267,7 @@ async function assertReplaceAllowed(
   sheetName: string
 ) {
   // 鏄撴崯浠惰〃锛氱1琛屼负鏍囬锛岀2琛屼负琛ㄥご
-  const isWearSheet = SHEET_NAME_ALIASES.wearParts.includes(sheetName);
+  const isWearSheet = isWearPartsSheetName(sheetName);
   if (isWearSheet) {
     if (row <= 2) {
       throw new Error(FLOW_MESSAGES.replaceOnHeaderOrSectionForbidden);
