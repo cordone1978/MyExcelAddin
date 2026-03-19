@@ -209,31 +209,51 @@ CASE
 END
 `;
 
-const ALLOWED_INDUSTRY_TYPES = new Set(["calcium", "lfp", "lfp_raw"]);
+const INDUSTRY_CODE_ALIASES = {
+  calcium: "CALCIUM_CARBONATE",
+  lfp: "LITHIUM_IRON_PHOSPHATE",
+  lfp_raw: "FERRIC_PHOSPHATE",
+};
 
-function normalizeIndustryType(value) {
-  const normalized = String(value || "").trim().toLowerCase();
-  return ALLOWED_INDUSTRY_TYPES.has(normalized) ? normalized : "";
+function normalizeIndustryCode(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return INDUSTRY_CODE_ALIASES[raw.toLowerCase()] || raw.toUpperCase();
+}
+
+async function resolveIndustryRecord(industryValue) {
+  const industryCode = normalizeIndustryCode(industryValue);
+  if (!industryCode) return null;
+  const [rows] = await pool.query(
+    `
+    SELECT industry_id, industry_code, industry_name, short_name
+    FROM ht_sales_industries
+    WHERE industry_code = ?
+      AND is_active = 1
+    LIMIT 1
+    `,
+    [industryCode]
+  );
+  return rows.length ? rows[0] : null;
 }
 
 async function resolveProductIndustryConfigContext(productId, industryType) {
   const numericProductId = Number(productId || 0);
-  const normalizedIndustryType = normalizeIndustryType(industryType);
+  const industry = await resolveIndustryRecord(industryType);
   if (!numericProductId) {
-    return { productId: 0, configProductId: null, industryType: normalizedIndustryType };
+    return { productId: 0, configProductId: null, industryId: Number(industry?.industry_id || 0) || null };
   }
 
-  if (normalizedIndustryType) {
+  if (industry?.industry_id) {
     const [mappingRows] = await pool.query(
       `
       SELECT product_id, config_product_id
       FROM ht_sales_product_industry_config
       WHERE product_id = ?
-        AND industry_type = ?
-        AND is_active = 1
+        AND industry_id = ?
       LIMIT 1
       `,
-      [numericProductId, normalizedIndustryType]
+      [numericProductId, Number(industry.industry_id)]
     );
     if (mappingRows.length) {
       const mappedConfigProductId = mappingRows[0].config_product_id;
@@ -243,14 +263,14 @@ async function resolveProductIndustryConfigContext(productId, industryType) {
           mappedConfigProductId === null || mappedConfigProductId === undefined
             ? null
             : Number(mappedConfigProductId || 0) || null,
-        industryType: normalizedIndustryType,
+        industryId: Number(industry.industry_id),
       };
     }
   }
   return {
     productId: numericProductId,
     configProductId: numericProductId,
-    industryType: normalizedIndustryType,
+    industryId: Number(industry?.industry_id || 0) || null,
   };
 }
 
@@ -286,13 +306,32 @@ app.get(API_ROUTES.categories, async (req, res) => {
   }
 });
 
+app.get(API_ROUTES.industries, async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT
+        industry_code as value,
+        industry_name as label,
+        short_name as shortName,
+        sort_order as sortOrder
+      FROM ht_sales_industries
+      WHERE is_active = 1
+      ORDER BY sort_order ASC, industry_id ASC
+    `);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Fetch industries failed:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 2. Get products by category
 app.get(API_ROUTES.projects, async (req, res) => {
   try {
     const { categoryId } = req.params;
-    const industryType = normalizeIndustryType(req.query.industryType);
+    const industryCode = normalizeIndustryCode(req.query.industryType || req.query.industryCode);
     let rows;
-    if (industryType) {
+    if (industryCode) {
       [rows] = await pool.query(
         `
         SELECT 
@@ -303,13 +342,15 @@ app.get(API_ROUTES.projects, async (req, res) => {
         FROM ht_sales_products p
         INNER JOIN ht_sales_product_industry_config pi
           ON pi.product_id = p.product_id
-         AND pi.industry_type = ?
-         AND pi.is_active = 1
+        INNER JOIN ht_sales_industries i
+          ON i.industry_id = pi.industry_id
+         AND i.industry_code = ?
+         AND i.is_active = 1
         WHERE p.product_type_id = ?
           AND p.is_active = 1
         ORDER BY (p.sort_by IS NULL) ASC, p.sort_by ASC, p.product_model ASC
         `,
-        [industryType, categoryId]
+        [industryCode, categoryId]
       );
     } else {
       [rows] = await pool.query(
@@ -351,6 +392,7 @@ app.get(API_ROUTES.details, async (req, res) => {
         component_name as name,
         component_pic,
         component_sn,
+        pic_level,
         CAST(is_active AS SIGNED) as is_required
       FROM ht_sales_product_default_config
       WHERE ${scope.whereSql}
@@ -385,8 +427,7 @@ app.get(API_ROUTES.annotations, async (req, res) => {
         config_id as id,
         component_name as name,
         component_pic,
-        pic_level as position_x,
-        NULL as position_y,
+        pic_level,
         CAST(is_Assembly AS SIGNED) as is_Assembly,
         ${ASSEMBLY_GROUP_SQL} as assembly_group
       FROM ht_sales_product_default_config
@@ -455,12 +496,42 @@ app.get(API_ROUTES.config, async (req, res) => {
 app.get(API_ROUTES.crafting, async (req, res) => {
   try {
     const { componentId } = req.params;
-    
-    const [rows] = await pool.query(`
-      SELECT * FROM ht_sales_config_crafting
-      WHERE component_id = ?
+    const [mappedRows] = await pool.query(`
+      SELECT
+        map.component_id,
+        m.material_name
+      FROM ht_sales_component_craft_map map
+      INNER JOIN ht_sales_materials m
+        ON m.material_id = map.craft_id
+       AND m.material_type = '工艺'
+       AND m.is_active = 1
+      WHERE map.component_id = ?
+      ORDER BY m.sort_order ASC, m.material_id ASC
     `, [componentId]);
-    
+
+    const synthesized = {
+      component_id: Number(componentId || 0),
+      MaterialsPrice: null,
+      InnerArea1: null,
+      InnerArea2: null,
+      InnerArea3: null,
+      OutterArea1: null,
+      OutterArea2: null,
+      OutterArea3: null,
+      InnerCraftType1: null,
+      InnerCraftType2: null,
+      InnerCraftType3: null,
+      OutterCraftType1: null,
+      OutterCraftType2: null,
+      OutterCraftType3: null,
+    };
+    (mappedRows || []).slice(0, 6).forEach((row, index) => {
+      const slot =
+        index < 3 ? `InnerCraftType${index + 1}` : `OutterCraftType${index - 2}`;
+      synthesized[slot] = String(row.material_name || "").trim() || null;
+    });
+
+    const rows = mappedRows.length ? [synthesized] : [];
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error(`${SERVER_LOGS.fetchCraftingFailed}:`, error);
@@ -473,7 +544,7 @@ app.get(API_ROUTES.materials, async (req, res) => {
   try {
     const { componentId } = req.params;
 
-    const [rows] = await pool.query(`
+    let [rows] = await pool.query(`
       SELECT
         material_id,
         product_id,
@@ -484,9 +555,56 @@ app.get(API_ROUTES.materials, async (req, res) => {
       WHERE component_id = ?
     `, [componentId]);
 
+    if (!rows.length) {
+      [rows] = await pool.query(`
+        SELECT
+          m.material_id,
+          c.product_id,
+          c.config_id AS component_id,
+          m.material_name AS material_type,
+          m.material_unitprice AS totalprice
+        FROM ht_sales_product_default_config c
+        INNER JOIN ht_sales_materials m
+          ON m.material_id = c.material_id
+         AND m.material_type = '材料'
+         AND m.is_active = 1
+        WHERE c.config_id = ?
+        LIMIT 1
+      `, [componentId]);
+    }
+
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error(`${SERVER_LOGS.fetchMaterialsFailed}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 7.1 Get component craft mappings
+app.get("/api/component-crafts/:componentId", async (req, res) => {
+  try {
+    const { componentId } = req.params;
+    const [rows] = await pool.query(
+      `
+      SELECT
+        map.component_id,
+        map.craft_id,
+        m.material_name AS craft_name,
+        m.material_unit AS craft_unit,
+        m.material_unitprice AS craft_price
+      FROM ht_sales_component_craft_map map
+      INNER JOIN ht_sales_materials m
+        ON m.material_id = map.craft_id
+       AND m.material_type = '工艺'
+       AND m.is_active = 1
+      WHERE map.component_id = ?
+      ORDER BY m.sort_order ASC, m.material_id ASC
+      `,
+      [componentId]
+    );
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Fetch component crafts failed:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -520,6 +638,7 @@ app.get(API_ROUTES.craftPrices, async (req, res) => {
         material_unitprice
       FROM ht_sales_materials
       WHERE material_type = ?
+        AND is_active = 1
       ORDER BY material_name
     `, [DOMAIN_TERMS.craftingKind]);
 
@@ -544,22 +663,24 @@ app.get(API_ROUTES.craftPrices, async (req, res) => {
 app.get(API_ROUTES.projectByModel, async (req, res) => {
   try {
     const { productModel } = req.params;
-    const industryType = normalizeIndustryType(req.query.industryType);
+    const industryCode = normalizeIndustryCode(req.query.industryType || req.query.industryCode);
     let rows;
-    if (industryType) {
+    if (industryCode) {
       [rows] = await pool.query(
         `
         SELECT p.product_id, p.product_model, p.product_type_id
         FROM ht_sales_products p
         INNER JOIN ht_sales_product_industry_config pi
           ON pi.product_id = p.product_id
-         AND pi.industry_type = ?
-         AND pi.is_active = 1
+        INNER JOIN ht_sales_industries i
+          ON i.industry_id = pi.industry_id
+         AND i.industry_code = ?
+         AND i.is_active = 1
         WHERE p.product_model = ?
         ORDER BY p.product_id ASC
         LIMIT 1
         `,
-        [industryType, productModel]
+        [industryCode, productModel]
       );
     } else {
       [rows] = await pool.query(
@@ -642,7 +763,7 @@ app.get(API_ROUTES.warehouseCleanSearch, async (req, res) => {
       `
       SELECT DISTINCT sheet_name
       FROM ht_sales_warehouse_sheet_meta
-      WHERE custom_product_model LIKE ?
+      WHERE device_name LIKE ?
       ORDER BY sheet_name
       LIMIT ?
       `,

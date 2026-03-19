@@ -54,6 +54,7 @@ const ACTIVE_DB = envString("DB_PROFILE", "localhost");
 const API_ROUTES = {
   test: "/api/test",
   categories: "/api/categories",
+  industries: "/api/industries",
   projects: "/api/projects/:categoryId",
   details: "/api/details/:projectId",
   annotations: "/api/annotations/:projectId",

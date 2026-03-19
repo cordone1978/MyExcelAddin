@@ -9,6 +9,7 @@ import {
 } from "./devCraftDataService";
 import { openQueryPriceDialogControllerWithOptions } from "./querypriceController";
 import {
+  ComponentCraftRecord,
   ComponentRecord,
   CraftModifySubmitPayload,
   CraftPriceRecord,
@@ -79,11 +80,37 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
     }
   }
 
+  async function openDevModifyDialogV2() {
+    const selection = await getSelectionContext();
+
+    try {
+      const componentContext = await resolveSelectedComponentContext(selection);
+      if (
+        String(componentContext.component.whatkind || "").trim() ===
+        CRAFTING_CONSTANTS.outsourcedKind
+      ) {
+        await openQueryPriceDialogControllerWithOptions(displayDialog, {
+          initialKeyword: selection.componentName,
+        });
+        return;
+      }
+      const initData = await buildDevModifyInitV2(selection, componentContext);
+      devModifyState = initData.state;
+      await openDevModifyDialogWithData(initData.data, selection, DIALOG_PATHS.devModifyV2, DIALOG_SIZES.devModifyV2);
+    } catch (error: any) {
+      console.error(FLOW_MESSAGES.openDevDialogFailed, error);
+      const message = String(error?.message || FLOW_MESSAGES.openDevDialogFailed);
+      throw new Error(message);
+    }
+  }
+
   async function openDevModifyDialogWithData(
     initData: Record<string, unknown>,
-    selection: SelectionContext
+    selection: SelectionContext,
+    dialogPath = DIALOG_PATHS.devModify,
+    dialogSize = DIALOG_SIZES.devModify
   ) {
-    const dialog = await displayDialog(DIALOG_PATHS.devModify, DIALOG_SIZES.devModify);
+    const dialog = await displayDialog(dialogPath, dialogSize);
 
     dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
       const payload = JSON.parse(getDialogMessage(args) || "{}");
@@ -245,7 +272,7 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
           id: String(item.config_id || item.component_id || componentName || index),
           name: componentName,
           imageUrl: buildImageUrl(item.component_pic),
-          order: Number(item.component_sn || index || 0),
+          order: Number(item.pic_level || index || 0),
           highlighted: componentName === selection.componentName,
         };
       })
@@ -322,8 +349,83 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
     };
   }
 
+  async function buildDevModifyInitV2(
+    selection: SelectionContext,
+    componentContext?: SelectedComponentContext
+  ) {
+    const resolvedContext = componentContext || (await resolveSelectedComponentContext(selection));
+    const { projectId, configData, component } = resolvedContext;
+
+    const componentId = Number(component.config_id || component.component_id);
+    const materialOptions = await fetchJson<MaterialOptionRecord[]>(
+      `${API_PATHS.materials}/${componentId}`
+    );
+    const componentCrafts = await fetchJson<ComponentCraftRecord[]>(
+      `${API_PATHS.componentCrafts}/${componentId}`
+    );
+
+    const materialList = (materialOptions || []).map((item) => ({
+      name: item.material_type,
+      price: Number(item.totalprice || 0),
+    }));
+
+    const previewLayers = (configData || [])
+      .filter((item) => String(item.component_pic || "").trim())
+      .map((item, index) => {
+        const componentName = String(item.component_name || "").trim();
+        return {
+          id: String(item.config_id || item.component_id || componentName || index),
+          name: componentName,
+          imageUrl: buildImageUrl(item.component_pic),
+          order: Number(item.pic_level || index || 0),
+          highlighted: componentName === selection.componentName,
+        };
+      })
+      .filter((item) => String(item.imageUrl || "").trim())
+      .sort((a, b) => a.order - b.order);
+
+    const craftItems = (componentCrafts || []).map((item, index) => ({
+      id: Number(item.craft_id || index + 1),
+      name: String(item.craft_name || ""),
+      unit: String(item.craft_unit || "㎡"),
+      price: Number(item.craft_price || 0),
+      quantity: "",
+    }));
+
+    const data: Record<string, unknown> = {
+      deviceName: selection.componentName,
+      currentPrice: selection.currentPrice ?? 0,
+      materials: materialList,
+      selectedMaterial: selection.componentMaterial,
+      materialPrice:
+        materialList.find((item) => item.name === selection.componentMaterial)?.price ?? 0,
+      desc: selection.componentDesc,
+      type: selection.componentType,
+      unit: selection.componentUnit,
+      brand: selection.componentBrand,
+      whatKind: component.whatkind || "",
+      imageUrl: buildImageUrl(component.component_pic),
+      previewLayers,
+      craftItems,
+      baseDesc: selection.componentDesc,
+    };
+
+    return {
+      data,
+      state: {
+        selection,
+        initData: data,
+        projectId,
+        componentId,
+        materialPrice:
+          materialList.find((item) => item.name === selection.componentMaterial)?.price ?? 0,
+      } as DevModifyState,
+    };
+  }
+
   return {
     openDevModifyDialog,
+    openDevModifyDialogV2,
     openCraftModifyDialog,
   };
 }

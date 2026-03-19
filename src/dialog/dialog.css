@@ -219,8 +219,12 @@
         }
 
         .listbox-item.preview-hovered {
-            background: #e8f4fd;
-            box-shadow: inset 3px 0 0 #0078d4;
+            background: #0078d4;
+            color: white;
+        }
+
+        .listbox-item.preview-hovered label {
+            color: white !important;
         }
 
         .listbox-item.multi-select {
@@ -228,7 +232,20 @@
         }
         
         .listbox-item.multi-select:hover {
-            background: #e8f4fd;
+            background: #0078d4;
+            color: white;
+        }
+
+        .listbox-item.multi-select:hover label {
+            color: white !important;
+        }
+
+        .listbox-item.multi-select:hover label {
+            color: white !important;
+        }
+
+        .listbox-item.multi-select:hover label {
+            color: white !important;
         }
         
         .listbox-item input[type="checkbox"] {

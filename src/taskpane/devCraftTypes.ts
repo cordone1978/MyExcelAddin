@@ -30,6 +30,13 @@ export type CraftPriceRecord = JsonMap & {
   craftType?: string;
 };
 
+export type ComponentCraftRecord = JsonMap & {
+  craft_id?: number | string;
+  craft_name?: string;
+  craft_unit?: string;
+  craft_price?: number | string;
+};
+
 export type DevModifySubmitPayload = {
   whatKind?: string;
   isPriceChanged?: boolean;

@@ -1,6 +1,9 @@
-﻿/* global fetch, Excel */
+﻿/* global fetch, URL, window, console */
 import { insertComponentsToConfigSheet } from "../buildsheet/insertRows";
-import { resolveTemplateFromProductName, resolveTemplateThumbnail } from "../graph-editor/productLibraryLookup";
+import {
+  resolveTemplateFromProductName,
+  resolveTemplateThumbnail,
+} from "../graph-editor/productLibraryLookup";
 import { upsertGraphProductLibraryEntry } from "../graph-editor/workbookStore";
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
 import { FLOW_MESSAGES } from "../shared/businessTextConstants";
@@ -31,16 +34,21 @@ export async function handleDialogData(data: any) {
 
 async function fetchProjectConfig(projectId: number, materialPreset?: string): Promise<any[]> {
   try {
-    const url = new URL(`${APP_URLS.apiBase}${API_PATHS.config}/${projectId}`, window.location.origin);
+    const url = new URL(
+      `${APP_URLS.apiBase}${API_PATHS.config}/${projectId}`,
+      window.location.origin
+    );
     if (materialPreset) {
-      url.searchParams.set("industryType", String(materialPreset));
+      url.searchParams.set("industryCode", String(materialPreset));
     }
 
     const response = await fetch(`${url.pathname}${url.search}`);
     const result = await response.json();
 
     if (!result.success) {
-      throw new Error(`${FLOW_MESSAGES.fetchConfigFailedPrefix}: ${result.error || result.message}`);
+      throw new Error(
+        `${FLOW_MESSAGES.fetchConfigFailedPrefix}: ${result.error || result.message}`
+      );
     }
 
     return result.data;
@@ -52,7 +60,9 @@ async function fetchProjectConfig(projectId: number, materialPreset?: string): P
 
 async function getSystemNameForType(typeName: string): Promise<string | null> {
   try {
-    const response = await fetch(`${APP_URLS.apiBase}${API_PATHS.systemMapping}/${encodeURIComponent(typeName)}`);
+    const response = await fetch(
+      `${APP_URLS.apiBase}${API_PATHS.systemMapping}/${encodeURIComponent(typeName)}`
+    );
     const result = await response.json();
 
     if (result.success && result.data) {

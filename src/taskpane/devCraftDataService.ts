@@ -1,4 +1,5 @@
-﻿import { API_PATHS, APP_URLS, CRAFTING_CONSTANTS } from "../shared/appConstants";
+﻿/* global fetch */
+import { API_PATHS, APP_URLS, CRAFTING_CONSTANTS } from "../shared/appConstants";
 import { ComponentRecord, JsonMap } from "./devCraftTypes";
 import { FLOW_MESSAGES } from "../shared/businessTextConstants";
 import { buildEquipmentImageUrl } from "../shared/equipmentImagePath";
@@ -15,7 +16,10 @@ export async function fetchJson<T = unknown>(path: string): Promise<T> {
   return result.data as T;
 }
 
-export async function resolveProjectId(categoryName: string, projectModel: string): Promise<number> {
+export async function resolveProjectId(
+  categoryName: string,
+  projectModel: string
+): Promise<number> {
   const normalizedCategoryName = String(categoryName || "").trim();
   const normalizedProjectModel = String(projectModel || "").trim();
   const categories = await fetchJson<Array<JsonMap>>(API_PATHS.categories);
@@ -26,11 +30,15 @@ export async function resolveProjectId(categoryName: string, projectModel: strin
 
   if (category) {
     const projects = await fetchJson<Array<JsonMap>>(`${API_PATHS.projects}/${category.id}`);
-    const project = (projects || []).find((item) => String(item.name || "").trim() === normalizedProjectModel);
+    const project = (projects || []).find(
+      (item) => String(item.name || "").trim() === normalizedProjectModel
+    );
     if (project) return Number(project.id);
   }
 
-  const fallback = await fetchJson<JsonMap>(`${API_PATHS.projectByModel}/${encodeURIComponent(normalizedProjectModel)}`);
+  const fallback = await fetchJson<JsonMap>(
+    `${API_PATHS.projectByModel}/${encodeURIComponent(normalizedProjectModel)}`
+  );
   if (fallback?.product_id) return Number(fallback.product_id);
 
   throw new Error(`${FLOW_MESSAGES.projectModelNotFoundPrefix}: ${normalizedProjectModel}`);
@@ -38,15 +46,22 @@ export async function resolveProjectId(categoryName: string, projectModel: strin
 
 export function findComponent(configData: ComponentRecord[], componentName: string) {
   const target = componentName.trim().toLowerCase();
-  return configData.find((item) =>
-    String(item.component_name || "").trim().toLowerCase() === target
+  return configData.find(
+    (item) =>
+      String(item.component_name || "")
+        .trim()
+        .toLowerCase() === target
   );
 }
 
 export function getStandardPartPrice(configData: ComponentRecord[]): number | null {
   if (!Array.isArray(configData)) return null;
-  const byName = configData.find((item) => String(item.component_name || "").trim() === CRAFTING_CONSTANTS.standardPart);
-  const byKind = configData.find((item) => String(item.whatkind || "").trim() === CRAFTING_CONSTANTS.standardPart);
+  const byName = configData.find(
+    (item) => String(item.component_name || "").trim() === CRAFTING_CONSTANTS.standardPart
+  );
+  const byKind = configData.find(
+    (item) => String(item.whatkind || "").trim() === CRAFTING_CONSTANTS.standardPart
+  );
   const target = byName || byKind;
   if (!target) return null;
   return parseNumber(target.component_unitprice) || 0;

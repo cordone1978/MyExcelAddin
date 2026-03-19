@@ -1,4 +1,4 @@
-/* global Office, document, fetch */
+/* global Office, console, document, window, URL, fetch, HTMLDivElement, HTMLTableSectionElement, HTMLTableElement */
 
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
 
@@ -48,10 +48,8 @@ const DISPLAY_COLUMN_INDEXES = [0, 1, 2, 3, 4, 5, 6, 9, 10];
 function debugLog(step: string, extra?: unknown) {
   try {
     if (extra === undefined) {
-      // eslint-disable-next-line no-console
       console.log(`${INFO_REF_DEBUG_PREFIX} ${step}`);
     } else {
-      // eslint-disable-next-line no-console
       console.log(`${INFO_REF_DEBUG_PREFIX} ${step}`, extra);
     }
   } catch {
@@ -89,7 +87,12 @@ function bindListboxWheelSelection(list: HTMLDivElement, kind: "device" | "wareh
       const warehouseKeys = getWarehouseKeys();
       const total = kind === "device" ? deviceItems.length : warehouseKeys.length;
       if (total <= 0) return;
-      const current = Math.max(0, kind === "device" ? selectedDeviceIndex : warehouseKeys.findIndex((x) => x === selectedWarehouseKey));
+      const current = Math.max(
+        0,
+        kind === "device"
+          ? selectedDeviceIndex
+          : warehouseKeys.findIndex((x) => x === selectedWarehouseKey)
+      );
       const step = event.deltaY > 0 ? 1 : -1;
       const next = Math.max(0, Math.min(total - 1, current + step));
       if (next === current) {
@@ -134,7 +137,9 @@ function bindParentMessageEvents() {
           ? { devices: data as DeviceItem[], columnWidths: [] }
           : {
               devices: Array.isArray(data?.devices) ? (data.devices as DeviceItem[]) : [],
-              columnWidths: Array.isArray(data?.columnWidths) ? (data.columnWidths as number[]) : [],
+              columnWidths: Array.isArray(data?.columnWidths)
+                ? (data.columnWidths as number[])
+                : [],
             };
         deviceItems = normalized.devices;
         applyQuoteTableColumnWidths(normalized.columnWidths);
@@ -242,7 +247,9 @@ function renderQuoteRows(rows: DeviceRow[]) {
   let costTotalSum = 0;
   rows.forEach((row) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = DISPLAY_COLUMN_INDEXES.map((i) => `<td>${escapeHtml(formatNumericText(row.cToP[i]))}</td>`).join("");
+    tr.innerHTML = DISPLAY_COLUMN_INDEXES.map(
+      (i) => `<td>${escapeHtml(formatNumericText(row.cToP[i]))}</td>`
+    ).join("");
     tbody.appendChild(tr);
     costTotalSum += parseNumber(row.cToP[10]);
   });
@@ -390,9 +397,11 @@ function renderDbDetail(rows: Array<Record<string, unknown>>) {
 function normalizeWarehouseRow(row: Record<string, unknown>): DbDisplayRow {
   const legacy = normalizeWarehouseRowLegacy(row);
   const costTotal = pickText(row, ["category_amount", "sheet_total_amount"]) || legacy.price;
-  const componentName = pickText(row, ["category_name", "component_name", "name"]) || legacy.category || legacy.name;
+  const componentName =
+    pickText(row, ["category_name", "component_name", "name"]) || legacy.category || legacy.name;
   const componentQuantity = pickText(row, ["quantity_value"]);
-  const componentUnit = pickText(row, ["component_unit", "单位", "unit", "ItemUnit", "item_unit"]) || "";
+  const componentUnit =
+    pickText(row, ["component_unit", "单位", "unit", "ItemUnit", "item_unit"]) || "";
   return {
     componentName,
     contentSpec: pickText(row, ["content_spec"]) || legacy.desc,
@@ -413,9 +422,34 @@ function normalizeWarehouseRow(row: Record<string, unknown>): DbDisplayRow {
 
 function normalizeWarehouseRowLegacy(row: Record<string, unknown>): DbDisplayRowLegacy {
   return {
-    category: pickText(row, ["分类", "category", "category_name", "Category", "产品类型", "type_name", "system_name", "系统"]) || "未分类",
-    name: pickText(row, ["ItemName", "item_name", "product_model", "product_name", "name", "material_name"]),
-    desc: pickText(row, ["ItemDesc", "item_desc", "desc", "description", "规格", "规格描述", "内容及规格"]),
+    category:
+      pickText(row, [
+        "分类",
+        "category",
+        "category_name",
+        "Category",
+        "产品类型",
+        "type_name",
+        "system_name",
+        "系统",
+      ]) || "未分类",
+    name: pickText(row, [
+      "ItemName",
+      "item_name",
+      "product_model",
+      "product_name",
+      "name",
+      "material_name",
+    ]),
+    desc: pickText(row, [
+      "ItemDesc",
+      "item_desc",
+      "desc",
+      "description",
+      "规格",
+      "规格描述",
+      "内容及规格",
+    ]),
     model: pickText(row, ["型号", "model", "item_model", "type", "ItemType", "item_type"]),
     material: pickText(row, ["主体材质", "材质", "material", "main_material"]),
     brand: pickText(row, ["品牌", "brand", "manufacturer", "制造商", "maker"]),
@@ -434,7 +468,10 @@ function pickText(row: Record<string, unknown>, keys: string[]) {
 }
 
 async function searchWarehouseByKeyword(keyword: string) {
-  const url = new URL(`${APP_URLS.apiBase}${API_PATHS.warehouseCleanSearch}`, window.location.origin);
+  const url = new URL(
+    `${APP_URLS.apiBase}${API_PATHS.warehouseCleanSearch}`,
+    window.location.origin
+  );
   url.searchParams.set("keyword", keyword);
   url.searchParams.set("limit", "20");
   url.searchParams.set("detailLimit", "2500");
@@ -531,7 +568,9 @@ function formatNumericText(raw: unknown) {
 }
 
 function normalizeKey(text: unknown) {
-  return String(text == null ? "" : text).trim().replace(/\s+/g, "");
+  return String(text == null ? "" : text)
+    .trim()
+    .replace(/\s+/g, "");
 }
 
 function buildQuoteCostMap(rows: DeviceRow[]) {
@@ -587,7 +626,10 @@ function renderDbMeta(meta: MetaInfoRow | null) {
   box.innerHTML = `
     <div class="meta-grid">
       ${fields
-        .map(([label, value]) => `<div class="meta-item"><b>${escapeHtml(label)}:</b>${escapeHtml(String(value || "-"))}</div>`)
+        .map(
+          ([label, value]) =>
+            `<div class="meta-item"><b>${escapeHtml(label)}:</b>${escapeHtml(String(value || "-"))}</div>`
+        )
         .join("")}
     </div>
   `;

@@ -1,6 +1,11 @@
 import React from "react";
 
-type MaterialPreset = "calcium" | "lfp" | "lfp_raw";
+export type DialogIndustryItem = {
+  value: string;
+  label: string;
+  shortName?: string;
+  sortOrder?: number;
+};
 
 export type DialogCategoryItem = {
   id: string | number;
@@ -30,7 +35,8 @@ export type DialogAnnotationItem = {
 };
 
 export type DialogViewState = {
-  currentMaterialPreset: MaterialPreset;
+  currentMaterialPreset: string;
+  materialOptions: DialogIndustryItem[];
   categoryTitle: string;
   projectTitle: string;
   detailTitle: string;
@@ -57,7 +63,7 @@ export type DialogViewState = {
 };
 
 export type DialogViewHandlers = {
-  onMaterialPresetChange: (value: MaterialPreset) => void;
+  onMaterialPresetChange: (value: string) => void;
   onCategoryClick: (id: string | number, name: string) => void;
   onProjectClick: (id: string | number, name: string) => void;
   onDetailToggle: (id: string | number, checked: boolean) => void;
@@ -86,21 +92,27 @@ export function DialogApp({
   state: DialogViewState;
   handlers: DialogViewHandlers;
 }) {
-  const materialOptions: Array<{ value: MaterialPreset; label: string }> = [
-    { value: "calcium", label: "碳酸钙" },
-    { value: "lfp", label: "铁锂" },
-    { value: "lfp_raw", label: "磷酸铁" },
-  ];
+  const materialOptions = state.materialOptions || [];
   const activeIndex = materialOptions.findIndex((item) => item.value === state.currentMaterialPreset);
+  const thumbWidth = materialOptions.length ? `calc((100% - 6px) / ${materialOptions.length})` : "0";
+  const trackColumns = materialOptions.length ? `repeat(${materialOptions.length}, minmax(0, 1fr))` : "1fr";
 
   return (
     <div className="container">
       <div className="material-selector-panel" id="materialSelectorPanel">
-        <div className="material-selector-track" id="materialSelectorTrack">
+        <div
+          className="material-selector-track"
+          id="materialSelectorTrack"
+          style={{ gridTemplateColumns: trackColumns }}
+        >
           <div
             className="material-selector-thumb"
             id="materialSelectorThumb"
-            style={{ transform: `translateX(${Math.max(0, activeIndex) * 100}%)` }}
+            style={{
+              width: thumbWidth,
+              transform: `translateX(${Math.max(0, activeIndex) * 100}%)`,
+              display: materialOptions.length ? "block" : "none",
+            }}
           />
           {materialOptions.map((option) => (
             <button

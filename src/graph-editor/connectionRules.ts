@@ -31,9 +31,11 @@ function normalizeDirection(direction?: "in" | "out" | "both") {
 }
 
 function getComponentById(scene: GraphScene, productId: string, componentId: string) {
-  return scene.products
-    .find((product) => product.id === productId)
-    ?.components.find((component) => component.id === componentId) || null;
+  return (
+    scene.products
+      .find((product) => product.id === productId)
+      ?.components.find((component) => component.id === componentId) || null
+  );
 }
 
 function getProductById(scene: GraphScene, productId: string) {
@@ -55,10 +57,18 @@ function getPortById(scene: GraphScene, productId: string, componentId: string, 
 function getPortUsage(scene: GraphScene, endpoint: ComponentEndpoint) {
   const usage = { asSource: 0, asTarget: 0 };
   scene.links.forEach((link) => {
-    if (link.from.productId === endpoint.productId && link.from.componentId === endpoint.componentId && link.from.portId === endpoint.portId) {
+    if (
+      link.from.productId === endpoint.productId &&
+      link.from.componentId === endpoint.componentId &&
+      link.from.portId === endpoint.portId
+    ) {
       usage.asSource += 1;
     }
-    if (link.to.productId === endpoint.productId && link.to.componentId === endpoint.componentId && link.to.portId === endpoint.portId) {
+    if (
+      link.to.productId === endpoint.productId &&
+      link.to.componentId === endpoint.componentId &&
+      link.to.portId === endpoint.portId
+    ) {
       usage.asTarget += 1;
     }
   });
@@ -67,10 +77,12 @@ function getPortUsage(scene: GraphScene, endpoint: ComponentEndpoint) {
     if (!pipeState) return;
     const pipeMain = product.components.find((component) => component.kind === "pipe");
     if (!pipeMain) return;
-    ([
-      { key: "start", binding: pipeState.startBinding },
-      { key: "end", binding: pipeState.endBinding },
-    ] as Array<{ key: PipeEndpointKey; binding: typeof pipeState.startBinding }>).forEach(({ key, binding }) => {
+    (
+      [
+        { key: "start", binding: pipeState.startBinding },
+        { key: "end", binding: pipeState.endBinding },
+      ] as Array<{ key: PipeEndpointKey; binding: typeof pipeState.startBinding }>
+    ).forEach(({ key, binding }) => {
       if (!binding) return;
       const matchesBoundDevice =
         binding.productId === endpoint.productId &&
@@ -97,9 +109,11 @@ const RULES: ConnectionRule[] = [
   {
     id: "disallow-self",
     applies: ({ sourceEndpoint, targetEndpoint }) =>
-      !(sourceEndpoint.productId === targetEndpoint.productId &&
+      !(
+        sourceEndpoint.productId === targetEndpoint.productId &&
         sourceEndpoint.componentId === targetEndpoint.componentId &&
-        sourceEndpoint.portId === targetEndpoint.portId),
+        sourceEndpoint.portId === targetEndpoint.portId
+      ),
   },
   {
     id: "disallow-support",
@@ -114,7 +128,10 @@ const RULES: ConnectionRule[] = [
       const targetTemplateId = targetProduct?.templateId;
 
       if (sourceTemplate?.connectionRules?.allowsTargetTemplateIds?.length) {
-        if (!targetTemplateId || !sourceTemplate.connectionRules.allowsTargetTemplateIds.includes(targetTemplateId)) {
+        if (
+          !targetTemplateId ||
+          !sourceTemplate.connectionRules.allowsTargetTemplateIds.includes(targetTemplateId)
+        ) {
           return false;
         }
       }
@@ -148,7 +165,8 @@ const RULES: ConnectionRule[] = [
   },
   {
     id: "single-input",
-    applies: ({ targetDirection, targetUsage }) => !(targetDirection === "in" && targetUsage.asTarget > 0),
+    applies: ({ targetDirection, targetUsage }) =>
+      !(targetDirection === "in" && targetUsage.asTarget > 0),
   },
 ];
 

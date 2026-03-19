@@ -1,0 +1,7 @@
+<i> [webpack-dev-server] [HPM] Proxy created: /api,/public  -> https://localhost:3001
+<i> [webpack-dev-server] Project is running at:
+<i> [webpack-dev-server] Loopback: [36mhttps://localhost:3000/[39m, [36mhttps://[::1]:3000/[39m
+<i> [webpack-dev-server] On Your Network (IPv4): [36mhttps://26.26.26.1:3000/[39m
+<i> [webpack-dev-server] Content not from webpack is served from '[36mE:\OfficeAddinProjects\quotationaddin\public[39m' directory
+<i> [webpack-dev-server] Gracefully shutting down. To force exit, press ^C again. Please wait...
+<i> [webpack-dev-server] [HPM] server close signal received: closing proxy server

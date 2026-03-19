@@ -10,6 +10,7 @@ import {
   DialogAnnotationItem,
   DialogCategoryItem,
   DialogDetailItem,
+  DialogIndustryItem,
   DialogProjectItem,
   DialogViewState,
 } from "./dialogApp";
@@ -23,7 +24,8 @@ type ApiListResponse<T> = {
 
 let dialogRoot: Root | null = null;
 const dialogViewState: DialogViewState = {
-  currentMaterialPreset: "lfp",
+  currentMaterialPreset: "",
+  materialOptions: [],
   categoryTitle: "",
   projectTitle: "",
   detailTitle: "",
@@ -93,8 +95,7 @@ function renderDialogApp() {
           toggleAnnotation(
             key,
             normalized.name,
-            normalized.position_x,
-            normalized.position_y,
+            Number(normalized.pic_level || 0),
             resolvePreviewItemImageUrl(normalized),
             normalized.assembly_group,
             checked
@@ -134,9 +135,9 @@ let currentCategoryName = null;
 let currentProjectId = null;
 let currentProjectName = null;
 let currentProjectBaseDescription = "";
-let currentMaterialPreset = "lfp";
+let currentMaterialPreset = "";
 let selectedDetails = new Map(); // 改用 Map，key=id, value={name, imageUrl, layer}
-let selectedAnnotations = new Map(); // key=id, value={name, posX, posY, imageUrl, assemblyGroup}
+let selectedAnnotations = new Map(); // key=id, value={name, pic_level, imageUrl, assemblyGroup}
 let currentDetailRecords: any[] = [];
 let currentNormalizedAnnotations: any[] = [];
 
@@ -176,6 +177,16 @@ function syncPreviewScene(placeholderMessage?: string) {
 function updateListHoverState(hoveredId?: string | null) {
   dialogViewState.hoveredPreviewId = hoveredId ? String(hoveredId) : null;
   renderDialogApp();
+  window.requestAnimationFrame(() => {
+    scrollHoveredListItemIntoView();
+  });
+}
+
+function scrollHoveredListItemIntoView() {
+  const hoveredItem = document.querySelector(
+    "#detailList .listbox-item.preview-hovered, #annotationList .listbox-item.preview-hovered"
+  ) as HTMLDivElement | null;
+  hoveredItem?.scrollIntoView({ block: "nearest" });
 }
 
 function togglePreviewItemById(itemId: string) {
@@ -203,8 +214,7 @@ function togglePreviewItemById(itemId: string) {
     toggleAnnotation(
       annotationItem.key,
       normalized.name,
-      normalized.position_x,
-      normalized.position_y,
+      Number(normalized.pic_level || 0),
       resolvePreviewItemImageUrl(normalized),
       normalized.assembly_group,
       !annotationItem.checked
@@ -275,15 +285,38 @@ Office.onReady(() => {
   window.addEventListener("resize", resizeImageArea);
   showCanvasPlaceholder(DIALOG_TEXT.selectProjectPlaceholder);
   renderDialogApp();
-  loadCategories();
+  void loadIndustriesAndCategories();
 });
 
 function buildApiUrl(path: string) {
   const url = new URL(`${API_BASE}${path}`, window.location.origin);
   if (currentMaterialPreset) {
-    url.searchParams.set("industryType", currentMaterialPreset);
+    url.searchParams.set("industryCode", currentMaterialPreset);
   }
   return `${url.pathname}${url.search}`;
+}
+
+async function loadIndustriesAndCategories() {
+  try {
+    const response = await fetch(`${API_BASE}${API_PATHS.industries}`);
+    const result = await response.json();
+    if (result.success) {
+      dialogViewState.materialOptions = (result.data || []).map((item: any) => ({
+        value: String(item.value || ""),
+        label: String(item.label || ""),
+        shortName: String(item.shortName || ""),
+        sortOrder: Number(item.sortOrder || 0),
+      })) as DialogIndustryItem[];
+      if (!currentMaterialPreset && dialogViewState.materialOptions.length) {
+        currentMaterialPreset = dialogViewState.materialOptions[0].value;
+      }
+      dialogViewState.currentMaterialPreset = currentMaterialPreset;
+      renderDialogApp();
+    }
+  } catch (error) {
+    console.error("加载行业列表失败:", error);
+  }
+  void loadCategories();
 }
 
 function resetSelectionState(options?: { preserveCategory?: boolean }) {
@@ -603,7 +636,7 @@ function resolveDetailPreviewImageUrl(detailId) {
 
 function resolveDetailLayer(detailId) {
   const record = resolveDetailRecord(detailId);
-  return record ? Number(record.component_sn || 0) : 0;
+  return record ? Number(record.pic_level || 0) : 0;
 }
 
 function addPreviewSelection(targetMap, itemId, previewData, layerOrder, group = "detail") {
@@ -636,6 +669,7 @@ function displayDetails(details) {
   }
   dialogViewState.details = details.map((detail, index) => {
     const imageUrl = resolvePreviewItemImageUrl(detail);
+    const layer = Number(detail.pic_level || 0) || index;
     if (detail.is_required === 1) {
       addPreviewSelection(
         selectedDetails,
@@ -643,9 +677,9 @@ function displayDetails(details) {
         {
           name: detail.name,
           imageUrl: imageUrl,
-          layer: detail.component_sn || index,
+          layer: layer,
         },
-        detail.component_sn || index,
+        layer,
         "detail"
       );
     }
@@ -726,28 +760,6 @@ function normalizeAnnotations(annotations) {
       existing.image_url = anno.image_url;
       existing.component_pic = anno.component_pic;
       existing.id = anno.id;
-    }
-
-    if (
-      (existing.position_x === null ||
-        existing.position_x === undefined ||
-        existing.position_x === "") &&
-      anno.position_x !== null &&
-      anno.position_x !== undefined &&
-      anno.position_x !== ""
-    ) {
-      existing.position_x = anno.position_x;
-    }
-
-    if (
-      (existing.position_y === null ||
-        existing.position_y === undefined ||
-        existing.position_y === "") &&
-      anno.position_y !== null &&
-      anno.position_y !== undefined &&
-      anno.position_y !== ""
-    ) {
-      existing.position_y = anno.position_y;
     }
 
     if (!existing.assembly_group && groupKey > 0) {
@@ -833,8 +845,7 @@ function displayImage(imageUrl) {
 function toggleAnnotation(
   annotationKey,
   annotationName,
-  posX,
-  posY,
+  picLevel,
   imageUrl,
   assemblyGroup,
   isChecked
@@ -845,12 +856,11 @@ function toggleAnnotation(
       annotationKey,
       {
         name: annotationName,
-        posX,
-        posY,
+        pic_level: picLevel,
         imageUrl,
         assemblyGroup: Number(assemblyGroup || 0),
       },
-      posX || 0,
+      picLevel || 0,
       "annotation"
     );
   } else {

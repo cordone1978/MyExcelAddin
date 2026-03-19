@@ -1,7 +1,7 @@
-﻿import { DIALOG_ACTIONS } from "../shared/dialogActions";
+﻿/* global Office, console, document, window, URL, URLSearchParams, fetch, HTMLDivElement, HTMLInputElement, HTMLButtonElement, KeyboardEvent */
+import { DIALOG_ACTIONS } from "../shared/dialogActions";
 import { API_PATHS, APP_URLS, UI_DEFAULTS } from "../shared/appConstants";
 import { DIALOG_TEXT, QUERYPRICE_HTML_TEXT } from "../shared/businessTextConstants";
-/* global Office, console, document, window */
 
 const API_BASE = APP_URLS.apiBase;
 
@@ -35,16 +35,19 @@ Office.onReady(() => {
     }
   });
 
-  Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: Office.DialogParentMessageReceivedEventArgs) => {
-    try {
-      const payload = JSON.parse(arg?.message || "{}");
-      if (payload?.action === DIALOG_ACTIONS.QUERYPRICE_WARNING) {
-        showWarningModal(payload.message || UI_DEFAULTS.defaultWarningMessage);
+  Office.context.ui.addHandlerAsync(
+    Office.EventType.DialogParentMessageReceived,
+    (arg: Office.DialogParentMessageReceivedEventArgs) => {
+      try {
+        const payload = JSON.parse(arg?.message || "{}");
+        if (payload?.action === DIALOG_ACTIONS.QUERYPRICE_WARNING) {
+          showWarningModal(payload.message || UI_DEFAULTS.defaultWarningMessage);
+        }
+      } catch (error) {
+        console.error(`${DIALOG_TEXT.handleParentMessageFailed}:`, error);
       }
-    } catch (error) {
-      console.error(`${DIALOG_TEXT.handleParentMessageFailed}:`, error);
     }
-  });
+  );
 
   const mainKeywordInput = document.getElementById("mainKeyword") as HTMLInputElement | null;
   const initialKeyword = new URLSearchParams(window.location.search).get("keyword") || "";
@@ -86,8 +89,10 @@ function setPlaceholder(id: string, text: string) {
 }
 
 async function handleSearch() {
-  const mainKeyword = (document.getElementById("mainKeyword") as HTMLInputElement | null)?.value?.trim() || "";
-  const secondKeyword = (document.getElementById("secondKeyword") as HTMLInputElement | null)?.value?.trim() || "";
+  const mainKeyword =
+    (document.getElementById("mainKeyword") as HTMLInputElement | null)?.value?.trim() || "";
+  const secondKeyword =
+    (document.getElementById("secondKeyword") as HTMLInputElement | null)?.value?.trim() || "";
 
   if (!mainKeyword) {
     showPlaceholder(UI_DEFAULTS.defaultSearchPrompt);
@@ -275,4 +280,3 @@ function escapeHtml(value: string): string {
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
-

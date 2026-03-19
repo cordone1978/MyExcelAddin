@@ -9,6 +9,7 @@ export type TaskpaneViewState = {
   isResetPasswordMode: boolean;
   isAccountDockExpanded: boolean;
   isGenerateTemplateDrawerOpen: boolean;
+  isModifyDeviceDrawerOpen: boolean;
   authFeedback: string;
   authFeedbackKind: FeedbackKind;
   actionFeedback: string;
@@ -32,6 +33,8 @@ export type TaskpaneViewHandlers = {
   onConfirmResetPasswordClick: () => void;
   onAddDeviceClick: () => void;
   onModifyDeviceClick: () => void;
+  onModifyDeviceLegacyClick: () => void;
+  onModifyDeviceNewClick: () => void;
   onGenerateSheetClick: () => void;
   onQueryPriceClick: () => void;
   onGraphEditorClick: () => void;
@@ -204,6 +207,14 @@ export function TaskpaneApp({
                 <button className="dialog-btn btn-secondary" id="modifyDeviceBtn" onClick={handlers.onModifyDeviceClick}>
                   {state.texts.modifyDeviceBtn}
                 </button>
+                <div id="modifyDeviceDrawer" className={`template-action-drawer ${state.isModifyDeviceDrawerOpen ? "" : "is-hidden"}`}>
+                  <button className="dialog-btn btn-secondary" id="modifyDeviceLegacyBtn" onClick={handlers.onModifyDeviceLegacyClick}>
+                    {state.texts.modifyDeviceLegacyBtn}
+                  </button>
+                  <button className="dialog-btn btn-secondary" id="modifyDeviceNewBtn" onClick={handlers.onModifyDeviceNewClick}>
+                    {state.texts.modifyDeviceNewBtn}
+                  </button>
+                </div>
                 <button className="dialog-btn btn-secondary" id="generateSheetBtn" onClick={handlers.onGenerateSheetClick}>
                   {state.texts.generateSheetBtn}
                 </button>

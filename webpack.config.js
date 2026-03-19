@@ -45,6 +45,7 @@ module.exports = async (env, options) => {
       taskpane: ["./src/taskpane/taskpane.ts", "./src/taskpane/taskpane.html"],
       dialog: ["./src/dialog/dialog.ts", "./src/dialog/dialog.html"],
       devmodify: ["./src/dialog/devmodify.tsx", "./src/dialog/devmodify.html"],
+      devmodifyv2: ["./src/dialog/devmodifyv2.tsx", "./src/dialog/devmodifyv2.html"],
       craftmodify: ["./src/dialog/craftmodify.ts", "./src/dialog/craftmodify.html"],
       queryprice: ["./src/dialog/queryprice.tsx", "./src/dialog/queryprice.html"],
       graphEditor: ["./src/graph-editor/graphEditor.tsx", "./src/graph-editor/graphEditor.html"],
@@ -119,6 +120,11 @@ module.exports = async (env, options) => {
         chunks: ["polyfill", "devmodify"],
       }),
       new HtmlWebpackPlugin({
+        filename: "devmodifyv2.html",
+        template: "./src/dialog/devmodifyv2.html",
+        chunks: ["polyfill", "devmodifyv2"],
+      }),
+      new HtmlWebpackPlugin({
         filename: "craftmodify.html",
         template: "./src/dialog/craftmodify.html",
         chunks: ["polyfill", "craftmodify"],
@@ -166,6 +172,10 @@ module.exports = async (env, options) => {
           {
             from: "src/dialog/devmodify.css",
             to: "devmodify.css",
+          },
+          {
+            from: "src/dialog/devmodifyv2.css",
+            to: "devmodifyv2.css",
           },
           {
             from: "src/dialog/craftmodify.css",

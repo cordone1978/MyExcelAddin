@@ -1,0 +1,191 @@
+
+> office-addin-taskpane@0.0.1 start
+> node scripts/start-dev.js
+
+[start-dev] started API service
+[start-dev] started webpack dev server
+========================================
+HTTPS server running at https://localhost:3001
+SSL certificate loaded
+SSL cert dir: E:\OfficeAddinProjects
+========================================
+API endpoints:
+   test: https://localhost:3001/api/test
+   categories: https://localhost:3001/api/categories
+   config: https://localhost:3001/api/config/:projectId
+   warehouseCleanSearch: https://localhost:3001/api/warehouse-clean-search?keyword=xxx
+   systemMapping: https://localhost:3001/api/system-mapping/:productModel
+   images: https://localhost:3001/assets/equipment/
+   static: https://localhost:3001/
+========================================
+example: https://localhost:3001/api/system-mapping/demo
+========================================
+assets by path [1m[32massets/[39m[22m 653 KiB
+  assets by path [1m[32massets/equipment/[39m[22m 493 KiB 27 assets
+  assets by path [1m[32massets/*.png[39m[22m 159 KiB 7 assets
+assets by path [1m[32m*.js[39m[22m 4.86 MiB
+  assets by chunk 1.28 MiB (id hint: vendors) 2 assets
+  + 20 assets
+assets by path [1m[32m*.css[39m[22m 88 KiB
+  assets by info 48.8 KiB [1m[32m[immutable][39m[22m 8 assets
+  + 7 assets
+assets by path [1m[32m*.html[39m[22m 10.2 KiB
+  asset [1m[32mcraftmodify.html[39m[22m 3.82 KiB [1m[32m[emitted][39m[22m
+  + 8 assets
+assets by path [1m[32m*.xml[39m[22m 8.23 KiB
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+runtime modules 308 KiB 140 modules
+modules by path [1m./node_modules/core-js/[39m[22m 693 KiB 628 modules
+modules by path [1m./node_modules/konva/lib/[39m[22m 416 KiB 59 modules
+modules by path [1m./src/[39m[22m 679 KiB (javascript) 48.8 KiB (asset) 49 modules
+modules by path [1m./node_modules/webpack-dev-server/client/[39m[22m 90.2 KiB 8 modules
+modules by path [1m./node_modules/webpack/hot/*.js[39m[22m 5.56 KiB 4 modules
+modules by path [1m./node_modules/react/[39m[22m 58.7 KiB 4 modules
+modules by path [1m./node_modules/react-dom/[39m[22m 1.04 MiB 4 modules
+modules by path [1m./node_modules/react-konva/es/*.js[39m[22m 19.1 KiB 4 modules
+modules by path [1m./node_modules/react-reconciler/[39m[22m 734 KiB 4 modules
+modules by path [1m./node_modules/scheduler/[39m[22m 12 KiB
+  [1m./node_modules/scheduler/index.js[39m[22m 194 bytes [1m[33m[built][39m[22m [1m[33m[code generated][39m[22m
+  [1m./node_modules/scheduler/cjs/scheduler.development.js[39m[22m 11.9 KiB [1m[33m[built][39m[22m [1m[33m[code generated][39m[22m
++ 5 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 6555 ms
+assets by status 3.5 MiB [1m[32m[cached][39m[22m 70 assets
+assets by path [1m[32m.[39m[22m 2.1 MiB
+  assets by path [1m[32m*.js[39m[22m 2.09 MiB
+    assets by info 3.88 KiB [1m[32m[immutable][39m[22m
+      asset [1m[32mquoteSummaryPreview.c94148fa588a07f3108a.hot-update.js[39m[22m 415 bytes [1m[32m[emitted][39m[22m [1m[32m[immutable][39m[22m [1m[32m[hmr][39m[22m (name: quoteSummaryPreview) 1 related asset
+      + 9 assets
+    + 10 assets
+  assets by path [1m[32m*.json[39m[22m 343 bytes
+    asset [1m[32mquoteSummaryPreview.c94148fa588a07f3108a.hot-update.json[39m[22m 43 bytes [1m[32m[emitted][39m[22m [1m[32m[immutable][39m[22m [1m[32m[hmr][39m[22m
+    asset [1m[32minfoReference.c94148fa588a07f3108a.hot-update.json[39m[22m 37 bytes [1m[32m[emitted][39m[22m [1m[32m[immutable][39m[22m [1m[32m[hmr][39m[22m
+    asset [1m[32mcraftmodify.c94148fa588a07f3108a.hot-update.json[39m[22m 35 bytes [1m[32m[emitted][39m[22m [1m[32m[immutable][39m[22m [1m[32m[hmr][39m[22m
+    + 7 assets
+  assets by path [1m[32m*.xml[39m[22m 8.23 KiB
+    asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+    asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) [1m[32m[cached][39m[22m 771 modules
+runtime modules 308 KiB 140 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 3058 ms
+assets by status 5.59 MiB [1m[32m[cached][39m[22m 80 assets
+assets by path [1m[32m.[39m[22m 8.23 KiB
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 148 ms
+assets by status 5.59 MiB [1m[32m[cached][39m[22m 80 assets
+assets by path [1m[32m.[39m[22m 8.23 KiB
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 76 ms
+assets by status 5.59 MiB [1m[32m[cached][39m[22m 80 assets
+assets by path [1m[32m.[39m[22m 17.7 KiB
+  asset [1m[32massets/equipment/fjm-1250/inlet-outlet - 副本.png[39m[22m 9.5 KiB [1m[32m[emitted][39m[22m [from: assets/equipment/fjm-1250/inlet-outlet - 副本.png] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 110 ms
+assets by status 5.6 MiB [1m[32m[cached][39m[22m 81 assets
+assets by path [1m[32m.[39m[22m 8.23 KiB
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 114 ms
+assets by status 5.59 MiB [1m[32m[cached][39m[22m 80 assets
+assets by path [1m[32m.[39m[22m 21.7 KiB
+  asset [1m[32massets/equipment/fjm-1250/inlet-outlet-fjm .png[39m[22m 13.5 KiB [1m[32m[emitted][39m[22m [from: assets/equipment/fjm-1250/inlet-outlet-fjm .png] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 102 ms
+assets by status 5.6 MiB [1m[32m[cached][39m[22m 81 assets
+assets by path [1m[32m.[39m[22m 19.4 KiB
+  asset [1m[32massets/equipment/fjm-1250/进料口 普通.png[39m[22m 11.2 KiB [1m[32m[emitted][39m[22m [from: assets/equipment/fjm-1250/进料口 普通.png] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 110 ms
+assets by status 5.61 MiB [1m[32m[cached][39m[22m 81 assets
+assets by path [1m[32m.[39m[22m 8.23 KiB
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 81 ms
+assets by status 5.59 MiB [1m[32m[cached][39m[22m 80 assets
+assets by path [1m[32m.[39m[22m 19.4 KiB
+  asset [1m[32massets/equipment/fjm-1250/inlet-outlet.png[39m[22m 11.2 KiB [1m[32m[emitted][39m[22m [from: assets/equipment/fjm-1250/inlet-outlet.png] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 80 ms
+assets by status 5.61 MiB [1m[32m[cached][39m[22m 81 assets
+assets by path [1m[32m.[39m[22m 70.8 KiB
+  assets by path [1m[32massets/equipment/[39m[22m 62.6 KiB
+    asset [1m[32massets/equipment/fjm-1250/总图不带电机(1).png[39m[22m 38.1 KiB [1m[32m[emitted][39m[22m [from: assets/equipment/fjm-1250/总图不带电机(1).png] [1m[32m[copied][39m[22m
+    asset [1m[32massets/equipment/fjm-1250/分级机壳体.png[39m[22m 24.5 KiB [1m[32m[emitted][39m[22m [from: assets/equipment/fjm-1250/分级机壳体.png] [1m[32m[copied][39m[22m
+  assets by path [1m[32m*.xml[39m[22m 8.23 KiB
+    asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+    asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 112 ms
+assets by status 5.63 MiB [1m[32m[cached][39m[22m 82 assets
+assets by path [1m[32m.[39m[22m 46.3 KiB
+  asset [1m[32massets/equipment/fjm-1250/body-fjm.png[39m[22m 38.1 KiB [1m[32m[emitted][39m[22m [from: assets/equipment/fjm-1250/body-fjm.png] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 82 ms
+assets by status 5.64 MiB [1m[32m[cached][39m[22m 82 assets
+assets by path [1m[32m.[39m[22m 32.7 KiB
+  asset [1m[32massets/equipment/fjm-1250/classifier-body.png[39m[22m 24.5 KiB [1m[32m[emitted][39m[22m [from: assets/equipment/fjm-1250/classifier-body.png] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 97 ms
+assets by status 5.64 MiB [1m[32m[cached][39m[22m 82 assets
+assets by path [1m[32m.[39m[22m 43.4 KiB
+  asset [1m[32massets/equipment/fjm-1250/overall-fjm.png[39m[22m 35.2 KiB [1m[32m[emitted][39m[22m [from: assets/equipment/fjm-1250/overall-fjm.png] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 89 ms
+assets by status 5.67 MiB [1m[32m[cached][39m[22m 83 assets
+assets by path [1m[32m.[39m[22m 8.23 KiB
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 68 ms
+assets by status 5.67 MiB [1m[32m[cached][39m[22m 83 assets
+assets by path [1m[32m.[39m[22m 43.4 KiB
+  asset [1m[32massets/equipment/fjm-1250/overall-fjm - 副本.png[39m[22m 35.2 KiB [1m[32m[emitted][39m[22m [from: assets/equipment/fjm-1250/overall-fjm - 副本.png] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 93 ms
+assets by status 5.67 MiB [1m[32m[cached][39m[22m 83 assets
+assets by path [1m[32m.[39m[22m 43.4 KiB
+  asset [1m[32massets/equipment/fjm-1250/overall.png[39m[22m 35.2 KiB [1m[32m[emitted][39m[22m [from: assets/equipment/fjm-1250/overall.png] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 90 ms
+assets by status 5.7 MiB [1m[32m[cached][39m[22m 84 assets
+assets by path [1m[32m.[39m[22m 8.23 KiB
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 75 ms
+assets by status 5.7 MiB [1m[32m[cached][39m[22m 84 assets
+assets by path [1m[32m.[39m[22m 8.23 KiB
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 73 ms
+assets by status 5.7 MiB [1m[32m[cached][39m[22m 84 assets
+assets by path [1m[32m.[39m[22m 8.23 KiB
+  asset [1m[32mmanifest.xml[39m[22m 4.13 KiB [1m[32m[emitted][39m[22m [from: manifest.xml] [1m[32m[copied][39m[22m
+  asset [1m[32mmanifest.template.xml[39m[22m 4.09 KiB [1m[32m[emitted][39m[22m [from: manifest.template.xml] [1m[32m[copied][39m[22m
+cached modules 3.73 MiB (javascript) 78.7 KiB (asset) 308 KiB (runtime) [1m[32m[cached][39m[22m 911 modules
+webpack 5.105.4 compiled [1m[32msuccessfully[39m[22m in 66 ms

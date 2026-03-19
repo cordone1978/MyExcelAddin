@@ -14,4 +14,4 @@ export const DIALOG_ACTIONS = {
   QUERYPRICE_WARNING: "queryprice_warning",
 } as const;
 
-export type DialogAction = typeof DIALOG_ACTIONS[keyof typeof DIALOG_ACTIONS];
+export type DialogAction = (typeof DIALOG_ACTIONS)[keyof typeof DIALOG_ACTIONS];

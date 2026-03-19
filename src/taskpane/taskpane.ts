@@ -21,6 +21,7 @@ import type { TaskpaneViewState } from "./taskpaneApp";
 
 type DevCraftController = {
   openDevModifyDialog: () => Promise<void>;
+  openDevModifyDialogV2: () => Promise<void>;
   openCraftModifyDialog: () => Promise<void>;
 };
 
@@ -114,6 +115,7 @@ const taskpaneViewState: TaskpaneViewState = {
   isResetPasswordMode: false,
   isAccountDockExpanded: false,
   isGenerateTemplateDrawerOpen: false,
+  isModifyDeviceDrawerOpen: false,
   authFeedback: "",
   authFeedbackKind: "",
   actionFeedback: "",
@@ -139,6 +141,8 @@ const taskpaneViewState: TaskpaneViewState = {
     cancelResetPasswordBtn: TASKPANE_HTML_TEXT.cancelResetPasswordBtn,
     confirmResetPasswordBtn: TASKPANE_HTML_TEXT.confirmResetPasswordBtn,
     modifyDeviceBtn: TASKPANE_HTML_TEXT.modifyDeviceBtn,
+    modifyDeviceLegacyBtn: "旧版",
+    modifyDeviceNewBtn: "新版",
     generateSheetBtn: TASKPANE_HTML_TEXT.generateSheetBtn,
     generateSimpleQuoteBtn: "初步报价",
     generateDetailQuoteBtn: "明细报价",
@@ -188,11 +192,20 @@ function renderTaskpane() {
         onCancelResetPasswordClick: handleCancelResetPasswordClick,
         onConfirmResetPasswordClick: () => void handleConfirmResetPasswordClick(),
         onAddDeviceClick: () => void runGuarded(() => withLoginGuard(() => openDialog())),
-        onModifyDeviceClick: () =>
+        onModifyDeviceClick: () => toggleModifyDeviceDrawer(),
+        onModifyDeviceLegacyClick: () =>
           void runGuardedWithModal(async () => {
             ensureLoggedInOrThrow();
             const devCraftController = await getDevCraftController();
             await devCraftController.openDevModifyDialog();
+            toggleModifyDeviceDrawer(false);
+          }),
+        onModifyDeviceNewClick: () =>
+          void runGuardedWithModal(async () => {
+            ensureLoggedInOrThrow();
+            const devCraftController = await getDevCraftController();
+            await devCraftController.openDevModifyDialogV2();
+            toggleModifyDeviceDrawer(false);
           }),
         onGenerateSheetClick: () =>
           void runGuarded(() => withLoginGuard(() => handleGenerateSheetClick())),
@@ -278,6 +291,8 @@ function applyStaticText() {
   setText("cancelResetPasswordBtn", TASKPANE_HTML_TEXT.cancelResetPasswordBtn);
   setText("confirmResetPasswordBtn", TASKPANE_HTML_TEXT.confirmResetPasswordBtn);
   setText("modifyDeviceBtn", TASKPANE_HTML_TEXT.modifyDeviceBtn);
+  setText("modifyDeviceLegacyBtn", "旧版");
+  setText("modifyDeviceNewBtn", "新版");
   setText("generateSheetBtn", TASKPANE_HTML_TEXT.generateSheetBtn);
   setText("generateSimpleQuoteBtn", "初步报价");
   setText("generateDetailQuoteBtn", "明细报价");
@@ -491,6 +506,19 @@ function toggleGenerateTemplateDrawer(forceOpen?: boolean) {
   const willOpen =
     typeof forceOpen === "boolean" ? forceOpen : !taskpaneViewState.isGenerateTemplateDrawerOpen;
   taskpaneViewState.isGenerateTemplateDrawerOpen = willOpen;
+  if (willOpen) {
+    taskpaneViewState.isModifyDeviceDrawerOpen = false;
+  }
+  renderTaskpane();
+}
+
+function toggleModifyDeviceDrawer(forceOpen?: boolean) {
+  const willOpen =
+    typeof forceOpen === "boolean" ? forceOpen : !taskpaneViewState.isModifyDeviceDrawerOpen;
+  taskpaneViewState.isModifyDeviceDrawerOpen = willOpen;
+  if (willOpen) {
+    taskpaneViewState.isGenerateTemplateDrawerOpen = false;
+  }
   renderTaskpane();
 }
 
@@ -1336,10 +1364,15 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
     activeRange.format.borders.getItem("EdgeBottom").style = "Continuous";
     activeRange.format.borders.getItem("EdgeLeft").style = "Continuous";
     activeRange.format.borders.getItem("EdgeRight").style = "Continuous";
-    quoteSummarySheet.getRange(`D${dataStartRow}:F${totalRow}`).numberFormat = [
-      ["#,##0", "#,##0", "#,##0"],
-    ];
-    quoteSummarySheet.getRange(`G${dataStartRow}:G${totalRow}`).numberFormat = [["0.0"]];
+    const summaryValueRowCount = Math.max(totalRow - dataStartRow + 1, 1);
+    quoteSummarySheet.getRange(`D${dataStartRow}:F${totalRow}`).numberFormat = Array.from(
+      { length: summaryValueRowCount },
+      () => ["#,##0", "#,##0", "#,##0"]
+    );
+    quoteSummarySheet.getRange(`G${dataStartRow}:G${totalRow}`).numberFormat = Array.from(
+      { length: summaryValueRowCount },
+      () => ["0.0"]
+    );
 
     const fullPreviewRange = quoteSummarySheet.getRange(`A1:H${notesEndRow}`);
     fullPreviewRange.load(["values", "text"]);

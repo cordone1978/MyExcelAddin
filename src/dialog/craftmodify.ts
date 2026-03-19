@@ -1,8 +1,8 @@
-﻿import { DIALOG_ACTIONS } from "../shared/dialogActions";
+﻿/* global Office, document, console, HTMLInputElement, HTMLSelectElement, HTMLDivElement, HTMLButtonElement, HTMLOptionElement */
+import { DIALOG_ACTIONS } from "../shared/dialogActions";
 import { CRAFTING_CONSTANTS } from "../shared/appConstants";
 import { CRAFTMODIFY_TEXT } from "../shared/businessTextConstants";
 import { CRAFTMODIFY_HTML_TEXT } from "../shared/dialogHtmlTextConstants";
-/* global Office */
 
 type CraftItem = {
   area: number | null;
@@ -59,19 +59,16 @@ Office.onReady(() => {
 
   try {
     Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.CRAFTMODIFY_READY }));
-    Office.context.ui.addHandlerAsync(
-      Office.EventType.DialogParentMessageReceived,
-      (args) => {
-        try {
-          const payload = JSON.parse(args.message);
-          if (payload?.action === DIALOG_ACTIONS.INIT && payload.data) {
-            applyInit(payload.data as CraftModifyInit);
-          }
-        } catch (error) {
-          console.error(CRAFTMODIFY_TEXT.initDataHandleFailed, error);
+    Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (args) => {
+      try {
+        const payload = JSON.parse(args.message);
+        if (payload?.action === DIALOG_ACTIONS.INIT && payload.data) {
+          applyInit(payload.data as CraftModifyInit);
         }
+      } catch (error) {
+        console.error(CRAFTMODIFY_TEXT.initDataHandleFailed, error);
       }
-    );
+    });
   } catch (error) {
     console.warn(CRAFTMODIFY_TEXT.registerParentMessageFailed, error);
   }
@@ -159,7 +156,8 @@ function applyInit(data: CraftModifyInit) {
   const items = [...inner, ...outer];
   items.forEach((item, index) => {
     if (areaInputs[index]) {
-      areaInputs[index].value = item.area === null || item.area === undefined ? "" : String(item.area);
+      areaInputs[index].value =
+        item.area === null || item.area === undefined ? "" : String(item.area);
     }
     if (item.type && unitSelects[index]) {
       unitSelects[index].value = labelByType.get(item.type) || item.type || "";
@@ -214,10 +212,16 @@ function buildCraftingDescription(): string {
   result = result.replace(/[；，]\s*$/, "").trim();
 
   if (innerTypes.length > 0) {
-    result = appendSegment(result, `${CRAFTMODIFY_TEXT.innerLabel}${innerTypes.join(CRAFTMODIFY_TEXT.semicolon)}`);
+    result = appendSegment(
+      result,
+      `${CRAFTMODIFY_TEXT.innerLabel}${innerTypes.join(CRAFTMODIFY_TEXT.semicolon)}`
+    );
   }
   if (outerTypes.length > 0) {
-    result = appendSegment(result, `${CRAFTMODIFY_TEXT.outerLabel}${outerTypes.join(CRAFTMODIFY_TEXT.semicolon)}`);
+    result = appendSegment(
+      result,
+      `${CRAFTMODIFY_TEXT.outerLabel}${outerTypes.join(CRAFTMODIFY_TEXT.semicolon)}`
+    );
   }
 
   return result;
@@ -264,8 +268,3 @@ function appendSegment(text: string, segment: string): string {
   if (!text) return segment;
   return `${text}${CRAFTMODIFY_TEXT.comma}${segment}`;
 }
-
-
-
-
-

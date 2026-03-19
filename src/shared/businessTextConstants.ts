@@ -95,7 +95,8 @@ export const BUSINESS_TERMS = {
   setUnit: "套",
 } as const;
 
-export const SECTION_TITLE_PREFIX_REGEX = /^((一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十)|(\d{1,3}))[、.．]/;
+export const SECTION_TITLE_PREFIX_REGEX =
+  /^((一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十)|(\d{1,3}))[、.．]/;
 
 export const FLOW_MESSAGES = {
   dialogParseFailed: "解析对话框返回数据失败",
@@ -232,4 +233,3 @@ export const QUERYPRICE_HTML_TEXT = {
   warningTitle: "提示",
   btnOk: "确定",
 } as const;
-

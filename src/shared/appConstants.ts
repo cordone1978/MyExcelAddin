@@ -1,3 +1,5 @@
+/* global window */
+
 type ClientRuntimeConfig = {
   serverOrigin?: string;
   apiBase?: string;
@@ -67,11 +69,13 @@ export const APP_URLS = {
 export const API_PATHS = {
   test: "/test",
   categories: "/categories",
+  industries: "/industries",
   projects: "/projects",
   details: "/details",
   annotations: "/annotations",
   config: "/config",
   crafting: "/crafting",
+  componentCrafts: "/component-crafts",
   materials: "/materials",
   systems: "/systems",
   craftPrices: "/craft-prices",
@@ -89,6 +93,7 @@ export const API_PATHS = {
 export const DIALOG_PATHS = {
   main: "dialog.html",
   devModify: "devmodify.html",
+  devModifyV2: "devmodifyv2.html",
   craftModify: "craftmodify.html",
   queryPrice: "queryprice.html",
   infoReference: "infoReference.html",
@@ -99,6 +104,7 @@ export const DIALOG_PATHS = {
 export const DIALOG_SIZES = {
   main: { width: 60, height: 65 },
   devModify: { width: 70, height: 50 },
+  devModifyV2: { width: 76, height: 58 },
   queryPrice: { width: 75, height: 60 },
   infoReference: { width: 99, height: 99 },
   generateQuote: { width: 80, height: 92 },

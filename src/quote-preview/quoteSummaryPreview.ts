@@ -1,3 +1,4 @@
+/* global console, document, window, localStorage, URL, fetch, FileReader, Blob, HTMLTableElement, HTMLDivElement, HTMLButtonElement, HTMLElement, HTMLLinkElement */
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
 import logoLargeUrl from "../../assets/logo-large.png";
 
@@ -90,7 +91,9 @@ function buildPdfFileName(grid: GridRow[], payload?: QuotePreviewPayload): strin
   if (explicitName) {
     return explicitName.toLowerCase().endsWith(".pdf") ? explicitName : `${explicitName}.pdf`;
   }
-  const mode = String(payload?.quotePreviewMode || "preliminary").trim().toLowerCase();
+  const mode = String(payload?.quotePreviewMode || "preliminary")
+    .trim()
+    .toLowerCase();
   const sheetTitle = getSheetTitle(mode === "detail" ? "detail" : "preliminary");
   const customerRow = Array.isArray(grid?.[1]) ? grid[1] : [];
   const customerName = customerRow
@@ -120,8 +123,17 @@ function defaultPreliminaryGrid(colCount = 7): GridRow[] {
 function defaultDetailGrid(colCount = 14): GridRow[] {
   const count = Math.max(1, Number(colCount || 14));
   const rows: GridRow[] = Array.from({ length: 2 }, () => Array.from({ length: count }, () => ""));
-  rows[0] = ["序号", "设备名称", "组件名称", "内容及规格", "型号", "主体材质", "品牌", "组件数量", "单位"]
-    .concat(Array.from({ length: Math.max(0, count - 9) }, () => ""));
+  rows[0] = [
+    "序号",
+    "设备名称",
+    "组件名称",
+    "内容及规格",
+    "型号",
+    "主体材质",
+    "品牌",
+    "组件数量",
+    "单位",
+  ].concat(Array.from({ length: Math.max(0, count - 9) }, () => ""));
   return rows;
 }
 
@@ -143,7 +155,12 @@ function loadGrid(payload?: QuotePreviewPayload): GridRow[] {
   try {
     const parsed = payload || loadPayload();
     const grid = parsed && Array.isArray(parsed.quoteSheetGrid) ? parsed.quoteSheetGrid : null;
-    const mode = String(parsed?.quotePreviewMode || "preliminary").trim().toLowerCase() === "detail" ? "detail" : "preliminary";
+    const mode =
+      String(parsed?.quotePreviewMode || "preliminary")
+        .trim()
+        .toLowerCase() === "detail"
+        ? "detail"
+        : "preliminary";
     const inferredCols = Array.isArray(grid?.[0]) ? grid[0].length : 0;
     const maxColCount = mode === "detail" ? 18 : 8;
     const colCount = inferredCols >= 1 ? Math.min(maxColCount, inferredCols) : 8;
@@ -153,7 +170,9 @@ function loadGrid(payload?: QuotePreviewPayload): GridRow[] {
       while (r.length < colCount) r.push("");
       return r;
     });
-    const hasAnyText = normalized.some((row: string[]) => row.some((cell) => String(cell || "").trim().length > 0));
+    const hasAnyText = normalized.some((row: string[]) =>
+      row.some((cell) => String(cell || "").trim().length > 0)
+    );
     return hasAnyText ? normalized : defaultGrid(mode, colCount);
   } catch (e) {
     console.error("读取报价汇总表预览数据失败", e);
@@ -166,7 +185,9 @@ function getLayout(payload?: QuotePreviewPayload): QuoteSheetLayout {
     const parsed = payload || loadPayload();
     const layout = (parsed?.quoteSheetLayout || {}) as QuoteSheetLayout;
     return {
-      rowHeights: Array.isArray(layout.rowHeights) ? layout.rowHeights.map((n) => Number(n || 0)) : [],
+      rowHeights: Array.isArray(layout.rowHeights)
+        ? layout.rowHeights.map((n) => Number(n || 0))
+        : [],
       colWidths: Array.isArray(layout.colWidths) ? layout.colWidths.map((n) => Number(n || 0)) : [],
       merges: Array.isArray(layout.merges) ? layout.merges : [],
     };
@@ -207,7 +228,9 @@ function buildMergeMaps(merges: MergeCell[] | undefined, colCount: number) {
 }
 
 function normalizeAlignment(value: string) {
-  const normalized = String(value || "").trim().toLowerCase();
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
   if (normalized.includes("center")) return "center";
   if (normalized.includes("right")) return "right";
   if (normalized.includes("left")) return "left";
@@ -244,7 +267,8 @@ function cellClass(
     }
     return classes.join(" ");
   }
-  const noteStartRow = grid.findIndex((gridRow) => String(gridRow?.[0] || "").trim() === "备注") + 1;
+  const noteStartRow =
+    grid.findIndex((gridRow) => String(gridRow?.[0] || "").trim() === "备注") + 1;
   const inNotesBlock = noteStartRow > 0 && row >= noteStartRow;
   if (row === 1 || row === 7 || row === 8) classes.push("bold");
   if (row === 1) classes.push("title", "center");
@@ -280,7 +304,12 @@ function cellClass(
 
 async function renderGrid() {
   const payload = loadPayload();
-  const mode = String(payload?.quotePreviewMode || "preliminary").trim().toLowerCase() === "detail" ? "detail" : "preliminary";
+  const mode =
+    String(payload?.quotePreviewMode || "preliminary")
+      .trim()
+      .toLowerCase() === "detail"
+      ? "detail"
+      : "preliminary";
   const grid = loadGrid(payload);
   const alignments = Array.isArray(payload?.cellAlignments) ? payload.cellAlignments : [];
   const layout = getLayout(payload);
@@ -379,7 +408,10 @@ function bindExportMenu() {
         body: JSON.stringify({
           fileName: docTitle,
           html: exportHtml,
-          landscape: String(payload?.quotePreviewMode || "").trim().toLowerCase() === "detail",
+          landscape:
+            String(payload?.quotePreviewMode || "")
+              .trim()
+              .toLowerCase() === "detail",
         }),
       });
 
@@ -422,7 +454,9 @@ async function buildExportHtmlWithInlineStyles(): Promise<string> {
     if (css) inlineCssParts.push(css);
   });
 
-  const linkNodes = Array.from(document.querySelectorAll('link[rel="stylesheet"]')) as HTMLLinkElement[];
+  const linkNodes = Array.from(
+    document.querySelectorAll('link[rel="stylesheet"]')
+  ) as HTMLLinkElement[];
   for (const link of linkNodes) {
     const href = String(link.getAttribute("href") || "").trim();
     if (!href) continue;
@@ -430,14 +464,16 @@ async function buildExportHtmlWithInlineStyles(): Promise<string> {
       const cssUrl = new URL(href, window.location.href).toString();
       const resp = await fetch(cssUrl, { cache: "force-cache" });
       if (!resp.ok) continue;
-      const cssText = String(await resp.text() || "").trim();
+      const cssText = String((await resp.text()) || "").trim();
       if (cssText) inlineCssParts.push(cssText);
     } catch {
       // ignore CSS fetch failures and continue with available styles
     }
   }
 
-  Array.from(clonedHead.querySelectorAll('link[rel="stylesheet"]')).forEach((node) => node.remove());
+  Array.from(clonedHead.querySelectorAll('link[rel="stylesheet"]')).forEach((node) =>
+    node.remove()
+  );
   if (inlineCssParts.length) {
     const style = document.createElement("style");
     style.textContent = inlineCssParts.join("\n\n");

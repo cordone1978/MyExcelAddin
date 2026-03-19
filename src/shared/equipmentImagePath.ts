@@ -1,5 +1,3 @@
-import { APP_URLS } from "./appConstants";
-
 export function buildEquipmentImageUrl(componentPic: unknown): string | null {
   const raw = String(componentPic || "").trim();
   if (!raw) return null;

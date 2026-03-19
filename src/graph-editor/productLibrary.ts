@@ -358,6 +358,50 @@ export const PRODUCT_LIBRARY: ProductTemplate[] = [
       },
     ],
   },
+  {
+    templateId: "template_diechamoji",
+    name: "碟巢磨机",
+    aliases: ["DCM", "dcm", "DCM500"],
+    defaultViewMode: "bird",
+    connectionRules: {
+      allowsTargetTemplateIds: ["template_pipe"],
+      allowsSourceKinds: ["silo", "pipe", "port"],
+      allowsTargetKinds: ["pipe", "port"],
+    },
+    components: [
+      {
+        id: "diechamoji_body",
+        name: "碟巢磨机主体",
+        kind: "silo",
+        x: 0,
+        y: 0,
+        width: 320,
+        height: 320,
+        color: "#cfd6df",
+        zIndex: 10,
+        layers: [
+          {
+            id: "diechamoji_overall_main",
+            name: "整机主图",
+            x: 0,
+            y: 0,
+            width: 320,
+            height: 320,
+            imageUrl: equipmentAssetPath("fjm-1250", "overall.png"),
+            fallbackImageUrl: buildFullCanvasHighlightSvg(),
+            zIndex: 10,
+            role: "base",
+          },
+        ],
+        ports: [
+          { id: "diechamoji_in", name: "进料口", x: 0, y: 160, direction: "in" },
+          { id: "diechamoji_out", name: "出料口", x: 320, y: 160, direction: "out" },
+        ],
+        parameters: {},
+        hotspots: [],
+      },
+    ],
+  },
 ];
 
 export function buildDefaultScene(): GraphScene {

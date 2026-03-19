@@ -99,6 +99,7 @@ export type GraphScene = {
 export type ProductTemplate = {
   templateId: string;
   name: string;
+  aliases?: string[];
   defaultViewMode: ViewMode;
   connectionRules?: {
     allowsTargetTemplateIds?: string[];

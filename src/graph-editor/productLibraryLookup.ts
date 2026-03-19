@@ -14,6 +14,7 @@ const TEMPLATE_FAMILY_RULES: Array<{ templateId: string; keywords: string[] }> =
   { templateId: "template_silo", keywords: ["暂存仓", "料仓", "仓"] },
   { templateId: "template_pipe", keywords: ["输送管", "管道", "管"] },
   { templateId: "template_cyclone", keywords: ["旋风", "分离器"] },
+  { templateId: "template_diechamoji", keywords: ["碟巢磨机", "磨机", "DCM", "DCM", "dcm", "DCM500", "dcm500"] },
 ];
 
 export function normalizeLibraryName(value: string) {
