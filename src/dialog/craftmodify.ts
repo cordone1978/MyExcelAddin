@@ -135,7 +135,7 @@ function applyInit(data: CraftModifyInit) {
     unitPriceMap.clear();
     labelByType.clear();
     unitSelects.forEach((select) => {
-      select.innerHTML = "";
+      select.replaceChildren();
       const placeholder = document.createElement("option");
       placeholder.value = "";
       placeholder.textContent = CRAFTMODIFY_TEXT.selectPlaceholder;

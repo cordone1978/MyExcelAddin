@@ -138,4 +138,5 @@ export const CRAFTING_CONSTANTS = {
   standardPart: "标准件",
   craftTypeSeparator: "--",
   rmbSymbol: "￥",
+  craftAreaSlots: 6,
 } as const;

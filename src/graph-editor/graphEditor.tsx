@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Circle, Group, Image as KonvaImage, Label, Layer, Line, Rect, Stage, Tag, Text } from "react-konva";
+import Konva from "konva";
 import { getPortDisplayName, getPortUsageSummary, isConnectionAllowed } from "./connectionRules";
 import { buildDefaultScene, createProductFromTemplate, PRODUCT_LIBRARY } from "./productLibrary";
 import { QuoteLibraryResolvedItem, resolveTemplateFromProductName, resolveTemplateThumbnail } from "./productLibraryLookup";
@@ -179,7 +180,7 @@ function LayeredComponentImage({
         : fallbackImageState.image
           ? <KonvaImage image={fallbackImageState.image} width={component.width} height={component.height} />
           : null}
-      {(selected || hovered) && !(component.layers || []).some((layer) => (layer.role || "base") === "highlight") ? (
+      {(selected || (hovered && !(component.layers || []).some((layer) => (layer.role || "base") === "highlight"))) ? (
         <Rect
           x={-4}
           y={-4}
@@ -555,7 +556,7 @@ function getProductInstanceLabel(scene: GraphScene, productId: string) {
   return `${product.name} #${Math.max(index + 1, 1)}`;
 }
 
-function ComponentShape({
+const ComponentShape = React.memo(function ComponentShape({
   component,
   selected,
   hovered,
@@ -618,7 +619,7 @@ function ComponentShape({
       <Rect x={30} y={16} width={component.width - 60} height={8} cornerRadius={999} fill="rgba(255,255,255,0.42)" />
     </Group>
   );
-}
+});
 
 function PipeProductNode({
   scene,
@@ -1068,7 +1069,7 @@ function ProductNode({
   );
 }
 
-function FlowLink({
+const FlowLink = React.memo(function FlowLink({
   scene,
   link,
   selected,
@@ -1079,7 +1080,7 @@ function FlowLink({
   link: MaterialFlowLink;
   selected: boolean;
   onSelect: () => void;
-  onContextMenu: (evt: any) => void;
+  onContextMenu: (evt: Konva.KonvaEventObject<MouseEvent>) => void;
 }) {
   const dashOffset = useDashOffset(link.flow === "flowing");
   const points = useMemo(() => getLinkPoints(scene, link), [scene, link]);
@@ -1160,9 +1161,9 @@ function FlowLink({
       )}
     </Group>
   );
-}
+});
 
-function PreviewLink({
+const PreviewLink = React.memo(function PreviewLink({
   points,
   pipeStyle = false,
 }: {
@@ -1186,11 +1187,11 @@ function PreviewLink({
       )}
     </Group>
   );
-}
+});
 
 function registerParentMessageHandler() {
   try {
-    Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: any) => {
+    Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: Office.DialogParentMessageReceivedEventArgs) => {
       try {
         const payload = JSON.parse(String(arg?.message || "{}"));
         if (payload?.type === GRAPH_EDITOR_TEMPLATES_MSG) {

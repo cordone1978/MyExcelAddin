@@ -107,8 +107,8 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
   async function openDevModifyDialogWithData(
     initData: Record<string, unknown>,
     selection: SelectionContext,
-    dialogPath = DIALOG_PATHS.devModify,
-    dialogSize = DIALOG_SIZES.devModify
+    dialogPath: string = DIALOG_PATHS.devModify,
+    dialogSize: { width: number; height: number } = DIALOG_SIZES.devModify
   ) {
     const dialog = await displayDialog(dialogPath, dialogSize);
 

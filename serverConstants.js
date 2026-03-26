@@ -15,6 +15,43 @@ function envPort(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function envList(name, fallback = []) {
+  const value = process.env[name];
+  if (typeof value !== "string" || value.trim() === "") {
+    return [...fallback];
+  }
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function envStringAny(names, fallback) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (typeof value === "string" && value.trim() !== "") {
+      return value.trim();
+    }
+  }
+  return fallback;
+}
+
+function buildDbProfileConfig(profileName, defaults) {
+  const prefix = String(profileName || "").trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  return {
+    host: envStringAny([`QUOTATION_DB_${prefix}_HOST`, `DB_${prefix}_HOST`, "QUOTATION_DB_HOST", "DB_HOST"], defaults.host),
+    user: envStringAny([`QUOTATION_DB_${prefix}_USER`, `DB_${prefix}_USER`, "QUOTATION_DB_USER", "DB_USER"], defaults.user),
+    password: envStringAny(
+      [`QUOTATION_DB_${prefix}_PASSWORD`, `DB_${prefix}_PASSWORD`, "QUOTATION_DB_PASSWORD", "DB_PASSWORD"],
+      ""
+    ),
+    database: envStringAny(
+      [`QUOTATION_DB_${prefix}_NAME`, `DB_${prefix}_NAME`, "QUOTATION_DB_NAME", "DB_NAME"],
+      defaults.database
+    ),
+  };
+}
+
 const DEFAULT_SERVER_CONFIG = {
   protocol: "https",
   host: "localhost",
@@ -32,24 +69,27 @@ const SERVER_CONFIG = {
   port: envPort("APP_PORT", DEFAULT_SERVER_CONFIG.port),
   certKeyFile: envString("CERT_KEY_FILE", DEFAULT_SERVER_CONFIG.certKeyFile),
   certPemFile: envString("CERT_PEM_FILE", DEFAULT_SERVER_CONFIG.certPemFile),
+  allowedOrigins: envList("ALLOWED_ORIGINS", []),
 };
 
 const DATABASE_CONFIG = {
-  localhost: {
+  localhost: buildDbProfileConfig("localhost", {
     host: "localhost",
     user: "root",
-    password: "Livsun24",
     database: "quotation",
-  },
-  company: {
+  }),
+  company: buildDbProfileConfig("company", {
     host: "192.168.1.79",
     user: "root",
-    password: "ipanel",
     database: "quotation",
-  },
+  }),
 };
 
 const ACTIVE_DB = envString("DB_PROFILE", "localhost");
+const AUTH_CONFIG = {
+  cookieName: envString("AUTH_COOKIE_NAME", "dc_auth_session"),
+  defaultClientApp: envString("AUTH_CLIENT_APP", "quotationaddin"),
+};
 
 const API_ROUTES = {
   test: "/api/test",
@@ -60,6 +100,7 @@ const API_ROUTES = {
   annotations: "/api/annotations/:projectId",
   config: "/api/config/:projectId",
   crafting: "/api/crafting/:componentId",
+  componentCrafts: "/api/component-crafts/:componentId",
   materials: "/api/materials/:componentId",
   systems: "/api/systems",
   craftPrices: "/api/craft-prices",
@@ -80,20 +121,20 @@ const URLS = {
 };
 
 const DOMAIN_TERMS = {
-  craftingKind: "\u5de5\u827a",
-  standardPartKind: "\u6807\u51c6\u4ef6",
-  unknownCrafting: "\u672a\u77e5\u5de5\u827a",
+  craftingKind: "工艺",
+  standardPartKind: "标准件",
+  unknownCrafting: "未知工艺",
   craftLabelSeparator: " -- ",
-  rmbSymbol: "\u00a5",
+  rmbSymbol: "¥",
 };
 
 const SERVER_MESSAGES = {
-  projectModelNotFound: "\u672a\u627e\u5230\u5bf9\u5e94\u4ea7\u54c1\u578b\u53f7",
-  systemMappingNotFound: "\u672a\u627e\u5230\u5bf9\u5e94\u7684\u7cfb\u7edf\u6620\u5c04",
-  authMissingToken: "\u672a\u767b\u5f55\u6216\u767b\u5f55\u5df2\u5931\u6548",
-  authInvalidCredentials: "\u7528\u6237\u540d\u6216\u5bc6\u7801\u9519\u8bef",
-  authUserDisabled: "\u8d26\u53f7\u5df2\u505c\u7528",
-  authResetPasswordFailed: "\u91cd\u7f6e\u5bc6\u7801\u5931\u8d25",
+  projectModelNotFound: "未找到对应产品型号",
+  systemMappingNotFound: "未找到对应的系统映射",
+  authMissingToken: "未登录或登录已失效",
+  authInvalidCredentials: "用户名或密码错误",
+  authUserDisabled: "账号已停用",
+  authResetPasswordFailed: "重置密码失败",
 };
 
 const SERVER_LOGS = {
@@ -119,24 +160,13 @@ const SERVER_LOGS = {
   authResetPasswordFailed: "Auth reset password failed",
   sslCertMissing: "SSL certificate files are missing",
   sslCertRequiredFiles: `Required files: ${SERVER_CONFIG.certPemFile} and ${SERVER_CONFIG.certKeyFile}`,
-  startupDivider: "========================================",
-  startupServerRunning: "HTTPS server running at",
-  startupSslLoaded: "SSL certificate loaded",
-  startupApiEndpoints: "API endpoints:",
-  startupApiTest: "test",
-  startupApiCategories: "categories",
-  startupApiConfig: "config",
-  startupApiWarehouseCleanSearch: "warehouseCleanSearch",
-  startupApiSystemMapping: "systemMapping",
-  startupApiImages: "images",
-  startupApiStatic: "static",
-  startupExample: "example",
 };
 
 module.exports = {
   SERVER_CONFIG,
   DATABASE_CONFIG,
   ACTIVE_DB,
+  AUTH_CONFIG,
   API_ROUTES,
   URLS,
   DOMAIN_TERMS,

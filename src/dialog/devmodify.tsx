@@ -57,10 +57,9 @@ function DevModifyApp() {
   const [baseDesc, setBaseDesc] = useState("");
   const [priceModalOpen, setPriceModalOpen] = useState(false);
   const [priceRows, setPriceRows] = useState<PriceRow[]>([]);
-  const [craftAreas, setCraftAreas] = useState<Array<{ area: string; type: string }>>([
-    { area: "", type: "" }, { area: "", type: "" }, { area: "", type: "" },
-    { area: "", type: "" }, { area: "", type: "" }, { area: "", type: "" },
-  ]);
+  const [craftAreas, setCraftAreas] = useState<Array<{ area: string; type: string }>>(
+    Array.from({ length: CRAFTING_CONSTANTS.craftAreaSlots }, () => ({ area: "", type: "" }))
+  );
 
   useEffect(() => {
     document.title = DEVMODIFY_HTML_TEXT.title;
@@ -84,7 +83,7 @@ function DevModifyApp() {
           setPriceKeyword(data.priceKeyword || data.deviceName || "");
           setBaseDesc(data.baseDesc || data.desc || "");
           const areas = data.craftAreas || [];
-          setCraftAreas(Array.from({ length: 6 }, (_, index) => ({
+          setCraftAreas(Array.from({ length: CRAFTING_CONSTANTS.craftAreaSlots }, (_, index) => ({
             area: areas[index]?.area == null ? "" : String(areas[index].area),
             type: areas[index]?.type || "",
           })));
@@ -265,7 +264,11 @@ function DevModifyApp() {
               <button className="btn btn-primary" onClick={() => void searchPriceList()}>{DEVMODIFY_HTML_TEXT.searchPriceBtn}</button>
             </div>
             <div className="result-list">
-              <div className="result-item header" dangerouslySetInnerHTML={{ __html: DEVMODIFY_TEXT.priceTableHeaderHtml }} />
+              <div className="result-item header">
+                {DEVMODIFY_TEXT.priceTableHeaders.map((header) => (
+                  <div key={header}>{header}</div>
+                ))}
+              </div>
               {priceRows.map((row, index) => (
                 <div
                   key={`${row.ItemName}-${index}`}

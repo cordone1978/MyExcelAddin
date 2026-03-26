@@ -40,6 +40,7 @@ module.exports = async (env, options) => {
   const dev = options.mode === "development";
   const config = {
     devtool: "source-map",
+    stats: "errors-warnings",
     entry: {
       polyfill: ["core-js/stable", "regenerator-runtime/runtime"],
       taskpane: ["./src/taskpane/taskpane.ts", "./src/taskpane/taskpane.html"],
@@ -230,6 +231,10 @@ module.exports = async (env, options) => {
       port: process.env.npm_package_config_dev_server_port || 3000,
       client: {
         webSocketURL: "auto://0.0.0.0:0/ws",  // 自动检测正确的协议和主机
+        logging: "warn",
+      },
+      devMiddleware: {
+        stats: "errors-warnings",
       },
     },
   };

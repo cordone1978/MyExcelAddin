@@ -1,12 +1,8 @@
 const mysql = require('mysql2/promise');
+const { DATABASE_CONFIG, ACTIVE_DB } = require("./serverConstants");
 
 async function analyzeDiscrepancy() {
-  const connection = await mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'Livsun24',
-    database: 'quotation'
-  });
+  const connection = await mysql.createConnection(DATABASE_CONFIG[ACTIVE_DB]);
 
   try {
     console.log('分析元信息入库与整理产品型号页面产品类型不一致的原因\n');

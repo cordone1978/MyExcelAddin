@@ -141,19 +141,19 @@ const taskpaneViewState: TaskpaneViewState = {
     cancelResetPasswordBtn: TASKPANE_HTML_TEXT.cancelResetPasswordBtn,
     confirmResetPasswordBtn: TASKPANE_HTML_TEXT.confirmResetPasswordBtn,
     modifyDeviceBtn: TASKPANE_HTML_TEXT.modifyDeviceBtn,
-    modifyDeviceLegacyBtn: "旧版",
-    modifyDeviceNewBtn: "新版",
+    modifyDeviceLegacyBtn: TASKPANE_HTML_TEXT.modifyDeviceLegacyBtn,
+    modifyDeviceNewBtn: TASKPANE_HTML_TEXT.modifyDeviceNewBtn,
     generateSheetBtn: TASKPANE_HTML_TEXT.generateSheetBtn,
-    generateSimpleQuoteBtn: "初步报价",
-    generateDetailQuoteBtn: "明细报价",
+    generateSimpleQuoteBtn: TASKPANE_HTML_TEXT.generateSimpleQuoteBtn,
+    generateDetailQuoteBtn: TASKPANE_HTML_TEXT.generateDetailQuoteBtn,
     generateQuoteBtn: TASKPANE_HTML_TEXT.generateQuoteBtn,
     queryPriceBtn: TASKPANE_HTML_TEXT.queryPriceBtn,
     graphEditorBtn: TASKPANE_HTML_TEXT.graphEditorBtn,
     infoReferenceBtn: TASKPANE_HTML_TEXT.infoReferenceBtn,
-    loginStatusLabel: "未登录",
+    loginStatusLabel: TASKPANE_HTML_TEXT.loginStatusLabel,
     userInfoLabel: "",
     accountDockLabel: "",
-    logoutDockBtn: "退出",
+    logoutDockBtn: TASKPANE_HTML_TEXT.logoutDockBtn,
   },
   generateTemplateConfirmOpen: false,
   operationErrorOpen: false,
@@ -187,39 +187,39 @@ function renderTaskpane() {
           taskpaneViewState.inputValues.newPasswordInput = value;
           renderTaskpane();
         },
-        onLoginClick: () => void handleLoginClick(),
-        onResetPasswordClick: () => void handleResetPasswordClick(),
+        onLoginClick: (): void => void handleLoginClick(),
+        onResetPasswordClick: (): void => void handleResetPasswordClick(),
         onCancelResetPasswordClick: handleCancelResetPasswordClick,
-        onConfirmResetPasswordClick: () => void handleConfirmResetPasswordClick(),
-        onAddDeviceClick: () => void runGuarded(() => withLoginGuard(() => openDialog())),
-        onModifyDeviceClick: () => toggleModifyDeviceDrawer(),
-        onModifyDeviceLegacyClick: () =>
+        onConfirmResetPasswordClick: (): void => void handleConfirmResetPasswordClick(),
+        onAddDeviceClick: (): void => void runGuarded(() => withLoginGuard(() => openDialog())),
+        onModifyDeviceClick: (): void => toggleModifyDeviceDrawer(),
+        onModifyDeviceLegacyClick: (): void =>
           void runGuardedWithModal(async () => {
             ensureLoggedInOrThrow();
             const devCraftController = await getDevCraftController();
             await devCraftController.openDevModifyDialog();
             toggleModifyDeviceDrawer(false);
           }),
-        onModifyDeviceNewClick: () =>
+        onModifyDeviceNewClick: (): void =>
           void runGuardedWithModal(async () => {
             ensureLoggedInOrThrow();
             const devCraftController = await getDevCraftController();
             await devCraftController.openDevModifyDialogV2();
             toggleModifyDeviceDrawer(false);
           }),
-        onGenerateSheetClick: () =>
+        onGenerateSheetClick: (): void =>
           void runGuarded(() => withLoginGuard(() => handleGenerateSheetClick())),
-        onQueryPriceClick: () =>
+        onQueryPriceClick: (): void =>
           void runGuarded(() => withLoginGuard(() => openQueryPriceDialog())),
-        onGraphEditorClick: () =>
+        onGraphEditorClick: (): void =>
           void runGuarded(() => withLoginGuard(() => openGraphEditorDialog())),
-        onInfoReferenceClick: () =>
+        onInfoReferenceClick: (): void =>
           void runGuarded(() => withLoginGuard(() => openInfoReferenceDialog())),
-        onGenerateQuoteClick: () =>
+        onGenerateQuoteClick: (): void =>
           void runGuarded(() => withLoginGuard(() => handleGenerateQuoteClick())),
-        onGenerateSimpleQuoteClick: () =>
+        onGenerateSimpleQuoteClick: (): void =>
           void runGuarded(() => withLoginGuard(() => handleGenerateSimpleTemplateClick())),
-        onGenerateDetailQuoteClick: () =>
+        onGenerateDetailQuoteClick: (): void =>
           void runGuarded(() => withLoginGuard(() => handleGenerateDetailTemplateClick())),
         onAccountDockToggle: handleAccountDockToggle,
         onConfirmGenerateTemplateOk: () => resolveGenerateTemplateConfirm(true),
@@ -719,11 +719,16 @@ async function handleGraphEditorDialogMessage(dialog: Office.Dialog, args: any) 
 
 async function buildGraphEditorDialogPayload(): Promise<GraphEditorDialogPayload> {
   const workbookStore = await getWorkbookStoreModule();
-  const raw = localStorage.getItem(GRAPH_STORE_DEV_CACHE_KEY);
-  const cache = raw ? JSON.parse(raw) : null;
-  const graph = await workbookStore.loadGraphFromWorkbook().catch(() => null);
-  const quoteProductNames = await workbookStore.loadQuoteConfigProductsFromWorkbook().catch(() => []);
-  const libraryEntries = await workbookStore.loadGraphProductLibraryEntries().catch(() => []);
+  let cache: unknown = null;
+  try {
+    const raw = localStorage.getItem(GRAPH_STORE_DEV_CACHE_KEY);
+    cache = raw ? JSON.parse(raw) : null;
+  } catch {
+    // ignore storage read or parse failure
+  }
+  const graph = await workbookStore.loadGraphFromWorkbook().catch((): null => null);
+  const quoteProductNames = await workbookStore.loadQuoteConfigProductsFromWorkbook().catch((): string[] => []);
+  const libraryEntries = await workbookStore.loadGraphProductLibraryEntries().catch((): import("../graph-editor/workbookStore").GraphProductLibraryEntry[] => []);
   return {
     cache,
     graph,
@@ -1188,9 +1193,17 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
     const quoteSummarySheet = context.workbook.worksheets.getItemOrNullObject(
       SHEET_NAMES.quoteSummary
     );
-    quoteConfigSheet.load("name");
+
+    // 把 sheet 存在性检查、客户信息、配置表数据全部挂在同一批 load，一次 sync 取回
+    quoteConfigSheet.load("name,isNullObject");
     quoteSummarySheet.load("name,isNullObject");
-    await context.sync();
+    const summaryCustomerRange = quoteSummarySheet.getRange("A1:H6");
+    summaryCustomerRange.load(["values", "text"]);
+    const configUsedRange = quoteConfigSheet.getRange("A:P").getUsedRangeOrNullObject(false);
+    configUsedRange.load(["values", "isNullObject"]);
+    const summaryUsedRange = quoteSummarySheet.getUsedRangeOrNullObject(false);
+    summaryUsedRange.load(["rowCount", "isNullObject"]);
+    await context.sync(); // sync 1：取回所有基础信息
 
     if (quoteConfigSheet.isNullObject) {
       throw new Error("报价配置表不存在，请先生成并填写报价配置表。");
@@ -1198,83 +1211,66 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
     if (mode !== "detail" && quoteSummarySheet.isNullObject) {
       throw new Error("报价汇总表不存在，请先生成报价模板。");
     }
-
-    let summaryCustomerMatrix: unknown[][] = [];
-    if (!quoteSummarySheet.isNullObject) {
-      const summaryCustomerRange = quoteSummarySheet.getRange("A1:H6");
-      summaryCustomerRange.load(["values", "text"]);
-      await context.sync();
-      summaryCustomerMatrix = ((summaryCustomerRange as any).text ||
-        summaryCustomerRange.values ||
-        []) as unknown[][];
-    }
-
-    const configUsedRange = quoteConfigSheet.getRange("A:P").getUsedRangeOrNullObject(false);
-    configUsedRange.load(["values", "isNullObject"]);
-    const summaryUsedRange = quoteSummarySheet.getUsedRangeOrNullObject(false);
-    summaryUsedRange.load(["rowCount", "isNullObject"]);
-    await context.sync();
-
     if (configUsedRange.isNullObject) {
       throw new Error("报价配置表为空，无法生成报价。");
     }
+
+    const summaryCustomerMatrix: unknown[][] = quoteSummarySheet.isNullObject
+      ? []
+      : (((summaryCustomerRange as any).text ||
+          summaryCustomerRange.values ||
+          []) as unknown[][]);
+
     const configValues = configUsedRange.values || [];
 
     if (mode === "detail") {
+      // 用整块 Range 替代逐行逐格 load，大幅减少 Range 对象数量
+      const rowCount = Math.max(1, Number(configValues.length || 0));
       const detailPreviewRange = quoteConfigSheet.getRange("A:R").getUsedRangeOrNullObject(false);
       detailPreviewRange.load(["values", "rowCount", "isNullObject"]);
-      const detailAlignmentRange = quoteConfigSheet.getRange(
-        `A1:R${Math.max(1, Number(configValues.length || 0))}`
-      );
-      const alignmentCells = Array.from(
-        { length: Math.max(1, Number(configValues.length || 0)) },
-        (_, rowIdx) =>
-          Array.from({ length: 18 }, (_, colIdx) => detailAlignmentRange.getCell(rowIdx, colIdx))
-      );
-      alignmentCells.forEach((row) =>
-        row.forEach((cell) => cell.format.load("horizontalAlignment"))
-      );
-      const rowRanges = Array.from(
-        { length: Math.max(1, Number(configValues.length || 0)) },
-        (_, i) => quoteConfigSheet.getRange(`${i + 1}:${i + 1}`)
-      );
-      rowRanges.forEach((r) => r.format.load("rowHeight"));
-      const colKeys = [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H",
-        "I",
-        "J",
-        "K",
-        "L",
-        "M",
-        "N",
-        "O",
-        "P",
-        "Q",
-        "R",
-      ];
-      const colRanges = colKeys.map((col) => quoteConfigSheet.getRange(`${col}:${col}`));
-      colRanges.forEach((r) => r.format.load("columnWidth"));
-      await context.sync();
+
+      // 对齐方式：整块读取，而非 N×18 个独立 Cell
+      const detailAlignmentRange = quoteConfigSheet.getRange(`A1:R${rowCount}`);
+      detailAlignmentRange.load("format/horizontalAlignment");
+
+      // 行高：整列行范围一次读取
+      const rowHeightRange = quoteConfigSheet.getRange(`1:${rowCount}`);
+      rowHeightRange.load("format/rowHeight");
+
+      // 列宽：整行列范围一次读取（A:R = 18列）
+      const colWidthRange = quoteConfigSheet.getRange("A:R");
+      colWidthRange.load("format/columnWidth");
+
+      await context.sync(); // sync 2：取回所有格式数据
 
       if (detailPreviewRange.isNullObject) {
         throw new Error("报价配置表为空，无法生成明细报价。");
       }
 
       const detailValues = detailPreviewRange.values || [];
-      const detailAlignments = alignmentCells
-        .slice(0, detailValues.length)
-        .map((row) => row.map((cell) => String((cell.format as any).horizontalAlignment || "")));
-      const detailRowHeights = rowRanges
-        .slice(0, detailValues.length)
-        .map((r) => Number((r.format as any).rowHeight || 0));
-      const detailColWidths = colRanges.map((r) => Number((r.format as any).columnWidth || 0));
+
+      // horizontalAlignment 在 range-level 可能返回单一值或二维数组，做兼容处理
+      const rawAlignment = (detailAlignmentRange.format as any).horizontalAlignment;
+      const detailAlignments: string[][] = Array.isArray(rawAlignment)
+        ? (rawAlignment as unknown[][])
+            .slice(0, detailValues.length)
+            .map((row) =>
+              Array.isArray(row) ? row.map((v) => String(v || "")) : Array(18).fill("")
+            )
+        : Array.from({ length: detailValues.length }, () => Array(18).fill(String(rawAlignment || "")));
+
+      // rowHeight 在 range-level 可能返回单一值或数组，做兼容处理
+      const rawRowHeight = (rowHeightRange.format as any).rowHeight;
+      const detailRowHeights: number[] = Array.isArray(rawRowHeight)
+        ? (rawRowHeight as unknown[]).slice(0, detailValues.length).map((v) => Number(v || 0))
+        : Array.from({ length: detailValues.length }, () => Number(rawRowHeight || 0));
+
+      // columnWidth 同理
+      const rawColWidth = (colWidthRange.format as any).columnWidth;
+      const detailColWidths: number[] = Array.isArray(rawColWidth)
+        ? (rawColWidth as unknown[]).slice(0, 18).map((v) => Number(v || 0))
+        : Array(18).fill(Number(rawColWidth || 0));
+
       const detailPayload = buildDetailQuotePreviewPayload(
         detailValues,
         detailRowHeights,
@@ -1306,22 +1302,40 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
     quoteSummarySheet.getRange("A8:H8").format.verticalAlignment = "Center";
     quoteSummarySheet.getRange("B8:C8").merge();
 
+    // 把 section 行和普通行分组，各自批量设置格式，减少 Range 对象创建次数
+    const sectionRows: number[] = [];
+    const normalRows: number[] = [];
     displayRows.forEach((item, index) => {
       const rowNum = dataStartRow + index;
       quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).values = item.values;
       quoteSummarySheet.getRange(`B${rowNum}:C${rowNum}`).merge();
+      if (item.level === "section") {
+        sectionRows.push(rowNum);
+      } else {
+        normalRows.push(rowNum);
+      }
+    });
+
+    // 逐行对齐仍需保留（B:C 列对齐方式按行不同），但颜色/粗体批量处理
+    displayRows.forEach((item, index) => {
+      const rowNum = dataStartRow + index;
       quoteSummarySheet.getRange(`A${rowNum}`).format.horizontalAlignment = "Center";
       quoteSummarySheet.getRange(`B${rowNum}:C${rowNum}`).format.horizontalAlignment =
         item.level === "section" ? "Left" : "Center";
       quoteSummarySheet.getRange(`D${rowNum}:G${rowNum}`).format.horizontalAlignment = "Center";
       quoteSummarySheet.getRange(`H${rowNum}`).format.horizontalAlignment = "Left";
-      if (item.level === "section") {
-        quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).format.fill.color = "#16a6dc";
-        quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).format.font.bold = true;
-        quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).format.font.color = "#ffffff";
-      } else {
-        quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).format.fill.color = "#f3f3f3";
-      }
+    });
+
+    // 批量设置 section 行样式
+    sectionRows.forEach((rowNum) => {
+      const r = quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`);
+      r.format.fill.color = "#16a6dc";
+      r.format.font.bold = true;
+      r.format.font.color = "#ffffff";
+    });
+    // 批量设置普通行样式
+    normalRows.forEach((rowNum) => {
+      quoteSummarySheet.getRange(`A${rowNum}:H${rowNum}`).format.fill.color = "#f3f3f3";
     });
 
     const totalCost = summarySections.reduce((sum, item) => sum + item.cost, 0);
@@ -1374,19 +1388,26 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
       () => ["0.0"]
     );
 
+    // 行高：整行范围一次读取；列宽：整列范围一次读取
     const fullPreviewRange = quoteSummarySheet.getRange(`A1:H${notesEndRow}`);
     fullPreviewRange.load(["values", "text"]);
-    const rowRanges = Array.from({ length: notesEndRow }, (_, i) =>
-      quoteSummarySheet.getRange(`${i + 1}:${i + 1}`)
-    );
-    rowRanges.forEach((r) => r.format.load("rowHeight"));
-    const colKeys = ["A", "B", "C", "D", "E", "F", "G", "H"];
-    const colRanges = colKeys.map((col) => quoteSummarySheet.getRange(`${col}:${col}`));
-    colRanges.forEach((r) => r.format.load("columnWidth"));
-    await context.sync();
+    const rowHeightRange = quoteSummarySheet.getRange(`1:${notesEndRow}`);
+    rowHeightRange.load("format/rowHeight");
+    const colWidthRange = quoteSummarySheet.getRange("A:H");
+    colWidthRange.load("format/columnWidth");
+    await context.sync(); // sync 2：写入完成后读取预览数据
 
-    const rowHeights = rowRanges.map((r) => Number((r.format as any).rowHeight || 0));
-    const colWidths = colRanges.map((r) => Number((r.format as any).columnWidth || 0));
+    // 兼容 range-level 属性返回单一值或数组两种情况
+    const rawRowHeight = (rowHeightRange.format as any).rowHeight;
+    const rowHeights: number[] = Array.isArray(rawRowHeight)
+      ? (rawRowHeight as unknown[]).slice(0, notesEndRow).map((v) => Number(v || 0))
+      : Array.from({ length: notesEndRow }, () => Number(rawRowHeight || 0));
+
+    const rawColWidth = (colWidthRange.format as any).columnWidth;
+    const colWidths: number[] = Array.isArray(rawColWidth)
+      ? (rawColWidth as unknown[]).slice(0, 8).map((v) => Number(v || 0))
+      : Array(8).fill(Number(rawColWidth || 0));
+
     const mergeCells = buildQuoteSummaryMergeCells(
       dataStartRow,
       displayRows.length,
@@ -1418,7 +1439,11 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
     return mode === "preliminary" ? toPreliminaryPreviewPayload(basePayload as any) : basePayload;
   });
 
-  localStorage.setItem(QUOTE_PREVIEW_STORAGE_KEY, JSON.stringify(payload));
+  try {
+    localStorage.setItem(QUOTE_PREVIEW_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore storage write failure (quota exceeded or private mode)
+  }
 }
 
 function toPreliminaryPreviewPayload(payload: {

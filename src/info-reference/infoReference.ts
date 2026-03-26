@@ -120,14 +120,14 @@ async function loadDevices() {
       })
     );
     debugLog("request devices message sent to parent");
-  } catch (error: any) {
+  } catch (error) {
     debugLog("failed to send request_devices message", error);
-    setStatus(`读取设备失败：${String(error?.message || error)}`, true);
+    setStatus(`读取设备失败：${String((error as Error)?.message || error)}`, true);
   }
 }
 
 function bindParentMessageEvents() {
-  Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: any) => {
+  Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: Office.DialogParentMessageReceivedEventArgs) => {
     try {
       const payload = JSON.parse(String(arg?.message || "{}"));
       debugLog("received parent message", payload?.type);
@@ -155,9 +155,9 @@ function bindParentMessageEvents() {
       if (payload?.type === INFO_REF_ERROR_MSG) {
         setStatus(`读取设备失败：${String(payload?.message || "未知错误")}`, true);
       }
-    } catch (error: any) {
+    } catch (error) {
       debugLog("failed to parse parent message", error);
-      setStatus(`读取设备失败：${String(error?.message || error)}`, true);
+      setStatus(`读取设备失败：${String((error as Error)?.message || error)}`, true);
     }
   });
 }
@@ -188,11 +188,11 @@ async function handleDeviceChanged() {
       renderDbDetailForSelected();
     }
     if (result.rows.length === 0) setStatus("仓库中未找到匹配数据。");
-  } catch (error: any) {
+  } catch (error) {
     renderWarehouseList([]);
     renderDbDetail([]);
     renderDbMeta(null);
-    setStatus(`仓库查询失败：${String(error?.message || error)}`, true);
+    setStatus(`仓库查询失败：${String((error as Error)?.message || error)}`, true);
   }
 }
 
@@ -461,7 +461,7 @@ function normalizeWarehouseRowLegacy(row: Record<string, unknown>): DbDisplayRow
 
 function pickText(row: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
-    const value = String((row as any)?.[key] || "").trim();
+    const value = String(row[key] || "").trim();
     if (value) return value;
   }
   return "";
@@ -495,7 +495,7 @@ function buildWarehouseDisplayName(row: Record<string, unknown>, idx: number) {
     "material_name",
   ];
   for (const key of preferredKeys) {
-    const value = String((row as any)?.[key] || "").trim();
+    const value = String(row[key] || "").trim();
     if (value) return value;
   }
   const firstText = Object.values(row).find((v) => typeof v === "string" && String(v).trim());

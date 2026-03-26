@@ -53,14 +53,14 @@ const dialogViewState: DialogViewState = {
 
 function renderDialogApp() {
   if (!dialogRoot) return;
-  dialogViewState.currentMaterialPreset = currentMaterialPreset as any;
+  dialogViewState.currentMaterialPreset = currentMaterialPreset;
   dialogViewState.selectedCategoryId = currentCategoryId;
   dialogViewState.selectedProjectId = currentProjectId;
   dialogRoot.render(
     React.createElement(DialogApp, {
       state: dialogViewState,
       handlers: {
-        onMaterialPresetChange: (value: any) => {
+        onMaterialPresetChange: (value: string) => {
           if (value === currentMaterialPreset) return;
           currentMaterialPreset = value;
           resetSelectionState({ preserveCategory: true });
@@ -69,14 +69,14 @@ function renderDialogApp() {
             void selectCategory(currentCategoryId, currentCategoryName);
           }
         },
-        onCategoryClick: (id: any, name: string) => {
+        onCategoryClick: (id: number | string, name: string) => {
           void selectCategory(id, name);
         },
-        onProjectClick: (id: any, name: string) => {
+        onProjectClick: (id: number | string, name: string) => {
           const project = dialogViewState.projects.find((item) => String(item.id) === String(id));
           void selectProject(id, name, project?.imageUrl || "", project?.baseDescription || "");
         },
-        onDetailToggle: (id: any, checked: boolean) => {
+        onDetailToggle: (id: number | string, checked: boolean) => {
           const item = dialogViewState.details.find((x) => String(x.id) === String(id));
           if (!item) return;
           toggleDetail(
@@ -129,31 +129,63 @@ const cache = {
   config: {} as Record<string, unknown>, // projectId -> config
 };
 
+type DetailRecord = {
+  id: number | string;
+  name: string;
+  is_required: number;
+  pic_level?: number;
+  image_url?: string;
+  component_pic?: string;
+  [key: string]: unknown;
+};
+
+type NormalizedAnnotation = {
+  key: string;
+  name: string;
+  pic_level?: number;
+  image_url?: string;
+  component_pic?: string;
+  assembly_group?: number;
+  is_Assembly?: number;
+  id?: number | string;
+  [key: string]: unknown;
+};
+
+type ComponentEntry = {
+  id: number | string;
+  name: string;
+  imageUrl: string | null;
+  layer: number;
+  visible: boolean;
+  group: string;
+  assemblyGroup: number | null;
+};
+
 // 数据存储
-let currentCategoryId = null;
-let currentCategoryName = null;
-let currentProjectId = null;
-let currentProjectName = null;
+let currentCategoryId: number | string | null = null;
+let currentCategoryName: string | null = null;
+let currentProjectId: number | string | null = null;
+let currentProjectName: string | null = null;
 let currentProjectBaseDescription = "";
 let currentMaterialPreset = "";
-let selectedDetails = new Map(); // 改用 Map，key=id, value={name, imageUrl, layer}
-let selectedAnnotations = new Map(); // key=id, value={name, pic_level, imageUrl, assemblyGroup}
-let currentDetailRecords: any[] = [];
-let currentNormalizedAnnotations: any[] = [];
+let selectedDetails = new Map<number | string, PreviewSelectionData>(); // key=id, value={name, imageUrl, layer}
+let selectedAnnotations = new Map<string, PreviewSelectionData>(); // key=id, value={name, pic_level, imageUrl, assemblyGroup}
+let currentDetailRecords: DetailRecord[] = [];
+let currentNormalizedAnnotations: NormalizedAnnotation[] = [];
 
 // 预览相关变量
 let previewController: DialogPreviewController | null = null;
 let previewModuleLoading: Promise<void> | null = null;
-let components = {}; // 存储所有组件数据 {id: {name, visible, layer, imageUrl, group}}
-let currentHighlightedComponentId = null;
+let components: Record<string, ComponentEntry> = {}; // 存储所有组件数据 {id: {name, visible, layer, imageUrl, group}}
+let currentHighlightedComponentId: string | null = null;
 let currentBaseImageUrl = "";
 const MAX_COMPOSITE_DATAURL_CHARS = 1200000; // 约 0.9MB 原始字节，避免 Excel 写入过大触发内部错误
 
 function buildPreviewItems(): PreviewItem[] {
   return Object.values(components)
-    .filter((comp: any) => comp && comp.visible)
-    .sort((a: any, b: any) => Number(a.layer || 0) - Number(b.layer || 0))
-    .map((comp: any) => ({
+    .filter((comp) => comp && comp.visible)
+    .sort((a, b) => Number(a.layer || 0) - Number(b.layer || 0))
+    .map((comp) => ({
       id: String(comp.id),
       name: String(comp.name || comp.id || ""),
       group: comp.group === "annotation" ? "annotation" : "detail",
@@ -222,7 +254,7 @@ function togglePreviewItemById(itemId: string) {
   }
 }
 
-function scheduleRender(highlightId) {
+function scheduleRender(highlightId: string | null) {
   currentHighlightedComponentId = highlightId ? String(highlightId) : null;
   syncPreviewScene();
 }
@@ -301,7 +333,7 @@ async function loadIndustriesAndCategories() {
     const response = await fetch(`${API_BASE}${API_PATHS.industries}`);
     const result = await response.json();
     if (result.success) {
-      dialogViewState.materialOptions = (result.data || []).map((item: any) => ({
+      dialogViewState.materialOptions = (result.data || []).map((item: Record<string, unknown>) => ({
         value: String(item.value || ""),
         label: String(item.label || ""),
         shortName: String(item.shortName || ""),
@@ -394,12 +426,12 @@ async function loadCategories(options?: {
 
 // 2. 显示产品类型列表
 function displayCategories(
-  categories,
+  categories: Array<{ id: number | string; name: string }>,
   options?: { preserveCategoryId?: number | null; preserveCategoryName?: string | null }
 ) {
   dialogViewState.categoriesLoading = false;
   dialogViewState.categoryError = "";
-  dialogViewState.categories = (categories || []).map((category: any) => ({
+  dialogViewState.categories = (categories || []).map((category: Record<string, unknown>) => ({
     id: category.id,
     name: category.name,
   })) as DialogCategoryItem[];
@@ -430,7 +462,7 @@ function displayCategories(
 }
 
 // 3. 选择产品类型 → 加载产品型号
-async function selectCategory(categoryId, categoryName) {
+async function selectCategory(categoryId: number | string, categoryName: string) {
   currentCategoryId = categoryId;
   currentCategoryName = categoryName;
   currentProjectId = null;
@@ -480,10 +512,10 @@ async function selectCategory(categoryId, categoryName) {
 }
 
 // 4. 显示产品型号列表
-function displayProjects(projects) {
+function displayProjects(projects: Array<Record<string, unknown>>) {
   dialogViewState.projectsLoading = false;
   dialogViewState.projectError = "";
-  dialogViewState.projects = (projects || []).map((project: any) => ({
+  dialogViewState.projects = (projects || []).map((project: Record<string, unknown>) => ({
     id: project.id,
     name: project.name,
     imageUrl: project.image_url,
@@ -494,7 +526,7 @@ function displayProjects(projects) {
 }
 
 // 5. 选择产品型号 → 加载组件详情
-async function selectProject(projectId, projectName, imageUrl, baseDescription) {
+async function selectProject(projectId: number | string, projectName: string, imageUrl: string, baseDescription: string) {
   if (!currentCategoryId) return;
 
   currentProjectId = projectId;
@@ -550,8 +582,8 @@ async function selectProject(projectId, projectName, imageUrl, baseDescription) 
     // 尝试从配置中获取图片
     if (configResult.success && configResult.data && configResult.data.length > 0) {
       // 查找有component_pic的记录
-      const componentsWithPic = configResult.data.filter(
-        (item) => item.component_pic && item.component_pic.trim() !== ""
+      const componentsWithPic = (configResult.data as Array<Record<string, unknown>>).filter(
+        (item) => item.component_pic && String(item.component_pic).trim() !== ""
       );
 
       if (componentsWithPic.length > 0) {
@@ -559,7 +591,7 @@ async function selectProject(projectId, projectName, imageUrl, baseDescription) 
         const mainComponent =
           componentsWithPic.find((comp) => comp.component_sn === 1) || componentsWithPic[0];
         const realImageUrl =
-          normalizeImageUrl(mainComponent.image_url) || getImageUrl(mainComponent.component_pic);
+          normalizeImageUrl(String(mainComponent.image_url || "")) || getImageUrl(String(mainComponent.component_pic || ""));
         if (realImageUrl) {
           displayImage(realImageUrl);
         } else {
@@ -583,7 +615,7 @@ async function selectProject(projectId, projectName, imageUrl, baseDescription) 
 }
 
 // 新增：图片路径处理函数
-function getImageUrl(componentPic) {
+function getImageUrl(componentPic: string) {
   const url = buildEquipmentImageUrl(componentPic);
   if (!url) return null;
   const normalized = new URL(url, window.location.origin);
@@ -592,7 +624,7 @@ function getImageUrl(componentPic) {
 }
 
 // 统一处理后端返回的 image_url（协议、中文编码）
-function normalizeImageUrl(rawUrl) {
+function normalizeImageUrl(rawUrl: string) {
   if (!rawUrl) return null;
   try {
     const url = new URL(rawUrl, window.location.origin);
@@ -615,31 +647,39 @@ function normalizeImageUrl(rawUrl) {
   }
 }
 
-function resolvePreviewItemImageUrl(item) {
+function resolvePreviewItemImageUrl(item: DetailRecord | NormalizedAnnotation) {
   if (item?.image_url) {
-    return normalizeImageUrl(item.image_url);
+    return normalizeImageUrl(String(item.image_url));
   }
   if (item?.component_pic) {
-    return getImageUrl(item.component_pic);
+    return getImageUrl(String(item.component_pic));
   }
   return null;
 }
 
-function resolveDetailRecord(detailId) {
+function resolveDetailRecord(detailId: number | string) {
   return (currentDetailRecords || []).find((item) => String(item.id) === String(detailId)) || null;
 }
 
-function resolveDetailPreviewImageUrl(detailId) {
+function resolveDetailPreviewImageUrl(detailId: number | string) {
   const record = resolveDetailRecord(detailId);
   return record ? resolvePreviewItemImageUrl(record) : null;
 }
 
-function resolveDetailLayer(detailId) {
+function resolveDetailLayer(detailId: number | string) {
   const record = resolveDetailRecord(detailId);
   return record ? Number(record.pic_level || 0) : 0;
 }
 
-function addPreviewSelection(targetMap, itemId, previewData, layerOrder, group = "detail") {
+type PreviewSelectionData = { name: string; imageUrl: string | null; layer?: number; assemblyGroup?: number | null; pic_level?: number };
+
+function addPreviewSelection(
+  targetMap: Map<number | string, PreviewSelectionData>,
+  itemId: number | string,
+  previewData: PreviewSelectionData,
+  layerOrder: number,
+  group = "detail"
+) {
   targetMap.set(itemId, previewData);
   addComponentToCanvas(
     itemId,
@@ -647,17 +687,17 @@ function addPreviewSelection(targetMap, itemId, previewData, layerOrder, group =
     previewData.imageUrl,
     layerOrder,
     group,
-    previewData.assemblyGroup
+    previewData.assemblyGroup ?? null
   );
 }
 
-function removePreviewSelection(targetMap, itemId) {
+function removePreviewSelection(targetMap: Map<number | string, PreviewSelectionData>, itemId: number | string) {
   targetMap.delete(itemId);
   removeComponentFromCanvas(itemId);
 }
 
 // 6. 显示组件信息（多选，必选项自动选中）
-function displayDetails(details) {
+function displayDetails(details: DetailRecord[]) {
   currentDetailRecords = details || [];
   dialogViewState.detailsLoading = false;
   dialogViewState.detailError = "";
@@ -667,7 +707,7 @@ function displayDetails(details) {
     renderDialogApp();
     return;
   }
-  dialogViewState.details = details.map((detail, index) => {
+  dialogViewState.details = details.map((detail: DetailRecord, index: number) => {
     const imageUrl = resolvePreviewItemImageUrl(detail);
     const layer = Number(detail.pic_level || 0) || index;
     if (detail.is_required === 1) {
@@ -695,7 +735,7 @@ function displayDetails(details) {
 }
 
 // 7. 显示配件信息（多选）
-function displayAnnotations(annotations) {
+function displayAnnotations(annotations: Array<Record<string, unknown>>) {
   dialogViewState.annotationsLoading = false;
   dialogViewState.annotationError = "";
 
@@ -724,21 +764,20 @@ function displayAnnotations(annotations) {
 }
 
 // 合并重复的标注项（按名称），优先保留有图片/坐标的记录
-function normalizeAnnotations(annotations) {
-  const map = new Map();
+function normalizeAnnotations(annotations: Array<Record<string, unknown>>): NormalizedAnnotation[] {
+  const map = new Map<string, NormalizedAnnotation>();
   annotations.forEach((anno) => {
     const groupKey = Number(anno.assembly_group || 0);
     const idKey = String(anno.id || "").trim();
+    const annoName = String(anno.name || "").trim();
     const key =
       groupKey > 0
         ? `group_${groupKey}`
         : idKey ||
-          ((anno.name || "").trim()
-            ? `${(anno.name || "").trim()}_${groupKey}`
-            : `__idx_${map.size}`);
+          (annoName ? `${annoName}_${groupKey}` : `__idx_${map.size}`);
     const existing = map.get(key);
     if (!existing) {
-      map.set(key, { ...anno, key, assembly_group: groupKey });
+      map.set(key, { ...(anno as NormalizedAnnotation), key, assembly_group: groupKey });
       return;
     }
 
@@ -749,17 +788,17 @@ function normalizeAnnotations(annotations) {
       candidateAssemblyValue > 0 &&
       (existingAssemblyValue <= 0 || candidateAssemblyValue < existingAssemblyValue)
     ) {
-      existing.id = anno.id;
-      existing.name = anno.name;
-      existing.is_Assembly = anno.is_Assembly;
+      existing.id = anno.id as string | number;
+      existing.name = String(anno.name || "");
+      existing.is_Assembly = Number(anno.is_Assembly || 0);
     }
 
     const existingHasImage = !!(existing.image_url || existing.component_pic);
     const candidateHasImage = !!(anno.image_url || anno.component_pic);
     if (!existingHasImage && candidateHasImage) {
-      existing.image_url = anno.image_url;
-      existing.component_pic = anno.component_pic;
-      existing.id = anno.id;
+      existing.image_url = String(anno.image_url || "");
+      existing.component_pic = String(anno.component_pic || "");
+      existing.id = anno.id as string | number;
     }
 
     if (!existing.assembly_group && groupKey > 0) {
@@ -770,7 +809,7 @@ function normalizeAnnotations(annotations) {
 }
 
 // 8. 切换组件选择
-function toggleDetail(detailId, detailName, imageUrl, layer, isChecked) {
+function toggleDetail(detailId: number | string, detailName: string, imageUrl: string | null, layer: number, isChecked: boolean) {
   if (isChecked) {
     addPreviewSelection(
       selectedDetails,
@@ -797,16 +836,17 @@ function toggleDetail(detailId, detailName, imageUrl, layer, isChecked) {
 
 // 9. 预览相关函数
 function addComponentToCanvas(
-  componentId,
-  componentName,
-  imageUrl,
-  layer,
+  componentId: number | string,
+  componentName: string,
+  imageUrl: string | null,
+  layer: number,
   group = "detail",
-  assemblyGroup = null
+  assemblyGroup: number | null = null
 ) {
   if (!imageUrl) return;
-  const existing = components[componentId] || {};
-  components[componentId] = {
+  const key = String(componentId);
+  const existing = components[key] || {};
+  components[key] = {
     ...existing,
     id: componentId,
     name: componentName,
@@ -819,36 +859,36 @@ function addComponentToCanvas(
   scheduleRender(currentHighlightedComponentId);
 }
 
-function removeComponentFromCanvas(componentId) {
-  delete components[componentId];
+function removeComponentFromCanvas(componentId: number | string) {
+  delete components[String(componentId)];
   scheduleRender(currentHighlightedComponentId);
 }
 
-function showCanvasPlaceholder(message) {
+function showCanvasPlaceholder(message: string) {
   currentBaseImageUrl = "";
   syncPreviewScene(message);
 }
 
 // 11. 显示占位图片
-function displayPlaceholderImage(projectName) {
+function displayPlaceholderImage(projectName: string) {
   currentBaseImageUrl = "";
   syncPreviewScene(`${projectName} ${DIALOG_TEXT.noProductImage}`);
 }
 
 // 12. 显示图片（用于产品主图）
-function displayImage(imageUrl) {
+function displayImage(imageUrl: string) {
   currentBaseImageUrl = imageUrl || "";
   syncPreviewScene();
 }
 
 // 12. 切换配件信息
 function toggleAnnotation(
-  annotationKey,
-  annotationName,
-  picLevel,
-  imageUrl,
-  assemblyGroup,
-  isChecked
+  annotationKey: string,
+  annotationName: string,
+  picLevel: number,
+  imageUrl: string | null,
+  assemblyGroup: number | null,
+  isChecked: boolean
 ) {
   if (isChecked) {
     addPreviewSelection(
@@ -874,7 +914,7 @@ function toggleAnnotation(
   scheduleRender(currentHighlightedComponentId);
 }
 
-function setDetailBaseDescription(text) {
+function setDetailBaseDescription(text: string) {
   const normalized = String(text || "").trim();
   dialogViewState.detailBaseDescription = normalized || "-";
   renderDialogApp();
@@ -913,7 +953,7 @@ function clearAll() {
 }
 
 // 18. 显示错误
-function showError(message) {
+function showError(message: string) {
   dialogViewState.categoriesLoading = false;
   dialogViewState.categoryError = message;
   renderDialogApp();

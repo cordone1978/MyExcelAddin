@@ -9,6 +9,7 @@
     "module": "es2020",
     "moduleResolution": "node",
     "noEmitOnError": true,
+    "noImplicitAny": true,
     "outDir": "lib",
     "skipLibCheck": true,
     "sourceMap": true,

@@ -1,12 +1,8 @@
 const mysql = require('mysql2/promise');
+const { DATABASE_CONFIG, ACTIVE_DB } = require("./serverConstants");
 
 async function checkWarehouseData() {
-  const connection = await mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'Livsun24',
-    database: 'quotation'
-  });
+  const connection = await mysql.createConnection(DATABASE_CONFIG[ACTIVE_DB]);
 
   try {
     console.log('检查仓库相关表的数据...\n');

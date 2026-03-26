@@ -189,7 +189,7 @@ export const DEVMODIFY_TEXT = {
   outsourcedPriceLabel: "外购价格",
   craftProcessLabel: "表面处理",
   priceSearchFailed: "价格查询失败",
-  priceTableHeaderHtml: "<div>物料名称</div><div>规格描述</div><div>型号</div><div>价格</div>",
+  priceTableHeaders: ["物料名称", "规格描述", "型号", "价格"] as string[],
   brandKeywords: ["品牌/制造商", "品牌", "制造商"] as string[],
   materialKeywords: ["材质"] as string[],
 } as const;

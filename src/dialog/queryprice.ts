@@ -139,7 +139,7 @@ function displayResults(results: PriceResult[]) {
     return;
   }
 
-  resultList.innerHTML = "";
+  resultList.replaceChildren();
   selectedItem = null;
   selectedRowEl = null;
   setActionButtonsEnabled(false);
@@ -147,13 +147,10 @@ function displayResults(results: PriceResult[]) {
   results.forEach((item) => {
     const row = document.createElement("div");
     row.className = "result-row";
-
-    row.innerHTML = `
-      <div class="result-cell name" title="${escapeHtml(item.ItemName || "")}">${escapeHtml(item.ItemName || "-")}</div>
-      <div class="result-cell desc" title="${escapeHtml(item.ItemDesc || "")}">${escapeHtml(item.ItemDesc || "-")}</div>
-      <div class="result-cell type" title="${escapeHtml(item.ItemType || "")}">${escapeHtml(item.ItemType || "-")}</div>
-      <div class="result-cell price" title="${formatPrice(item.ItemPrice)}">${formatPrice(item.ItemPrice)}</div>
-    `;
+    row.appendChild(createResultCell("name", item.ItemName || "-"));
+    row.appendChild(createResultCell("desc", item.ItemDesc || "-"));
+    row.appendChild(createResultCell("type", item.ItemType || "-"));
+    row.appendChild(createResultCell("price", formatPrice(item.ItemPrice)));
 
     row.addEventListener("click", () => selectRow(item, row));
     resultList.appendChild(row);
@@ -238,13 +235,29 @@ function showPlaceholder(message: string) {
   const resultList = document.getElementById("resultList");
   if (!resultList) return;
 
-  resultList.innerHTML = `
-    <div class="placeholder">
-      <div style="font-size: 24px; margin-bottom: 8px;">${UI_DEFAULTS.defaultSearchIcon}</div>
-      <div>${escapeHtml(message)}</div>
-    </div>
-  `;
+  const placeholder = document.createElement("div");
+  placeholder.className = "placeholder";
+
+  const icon = document.createElement("div");
+  icon.style.fontSize = "24px";
+  icon.style.marginBottom = "8px";
+  icon.textContent = UI_DEFAULTS.defaultSearchIcon;
+
+  const text = document.createElement("div");
+  text.textContent = message;
+
+  placeholder.appendChild(icon);
+  placeholder.appendChild(text);
+  resultList.replaceChildren(placeholder);
   setActionButtonsEnabled(false);
+}
+
+function createResultCell(className: string, text: string) {
+  const cell = document.createElement("div");
+  cell.className = `result-cell ${className}`;
+  cell.title = text;
+  cell.textContent = text;
+  return cell;
 }
 
 function setActionButtonsEnabled(enabled: boolean) {
@@ -270,13 +283,4 @@ function hideWarningModal() {
   if (!mask) return;
 
   mask.classList.add("hidden");
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }

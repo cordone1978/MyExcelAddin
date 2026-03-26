@@ -48,11 +48,17 @@ export const TASKPANE_HTML_TEXT = {
   confirmResetPasswordBtn: "确认",
   addDeviceBtn: "添加设备",
   modifyDeviceBtn: "更改设备",
+  modifyDeviceLegacyBtn: "旧版",
+  modifyDeviceNewBtn: "新版",
   generateSheetBtn: "生成模板",
   generateQuoteBtn: "生成报价",
+  generateSimpleQuoteBtn: "初步报价",
+  generateDetailQuoteBtn: "明细报价",
   queryPriceBtn: "查询价格",
   graphEditorBtn: "关系画布",
   infoReferenceBtn: "信息参考",
+  loginStatusLabel: "未登录",
+  logoutDockBtn: "退出",
 } as const;
 
 export const TASKPANE_TEXT = {

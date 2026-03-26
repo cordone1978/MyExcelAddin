@@ -3,9 +3,10 @@
 
 const fs = require("fs");
 const mysql = require("mysql2/promise");
+const { DATABASE_CONFIG, ACTIVE_DB } = require("../serverConstants");
 
 const CSV_PATH = "E:\\BOM\\销售需求\\碟巢磨-分级（磷酸铁&磷酸铁锂行业）.csv";
-const DB = { host: "localhost", user: "root", password: "Livsun24", database: "quotation" };
+const DB = DATABASE_CONFIG[ACTIVE_DB];
 const TARGET_INDUSTRIES = ["lfp", "lfp_raw"];
 const CONFIG_SUFFIX = "（铁锂磷酸铁分级配置）";
 
