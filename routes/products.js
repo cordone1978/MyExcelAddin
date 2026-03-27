@@ -195,17 +195,20 @@ router.get(API_ROUTES.details, requireAuth, async (req, res) => {
     const scope = { whereSql: "product_id = ?", params: [Number(context.configProductId || projectId)] };
     const [rows] = await pool.query(`
       SELECT
-        config_id as id,
-        component_name as name,
-        component_pic,
-        component_sn,
-        pic_level,
-        CAST(is_active AS SIGNED) as is_required
-      FROM ht_sales_product_default_config
-      WHERE ${scope.whereSql}
-        AND CAST(is_Assembly AS SIGNED) = 0
-        AND whatkind NOT IN (?, ?)
-      ORDER BY component_sn
+        c.config_id as id,
+        s.component_name as name,
+        COALESCE(c.component_pic, s.component_pic) as component_pic,
+        c.component_sn,
+        c.pic_level,
+        c.component_id as component_id,
+        CAST(c.is_active AS SIGNED) as is_required
+      FROM ht_sales_product_default_config c
+      INNER JOIN ht_sales_components s
+        ON s.component_id = c.component_id
+      WHERE ${scope.whereSql.replace(/product_id/g, "c.product_id")}
+        AND CAST(c.is_Assembly AS SIGNED) = 0
+        AND c.whatkind NOT IN (?, ?)
+      ORDER BY c.component_sn ASC, c.config_id ASC
     `, [...scope.params, DOMAIN_TERMS.craftingKind, DOMAIN_TERMS.standardPartKind]);
     (rows || []).forEach((row) => { row.image_url = buildEquipmentImageUrl(row.component_pic); });
     res.json({ success: true, data: rows });
@@ -227,16 +230,19 @@ router.get(API_ROUTES.annotations, requireAuth, async (req, res) => {
     const scope = { whereSql: "product_id = ?", params: [Number(context.configProductId || projectId)] };
     const [rows] = await pool.query(`
       SELECT
-        config_id as id,
-        component_name as name,
-        component_pic,
-        pic_level,
-        CAST(is_Assembly AS SIGNED) as is_Assembly,
-        ${ASSEMBLY_GROUP_SQL} as assembly_group
-      FROM ht_sales_product_default_config
-      WHERE ${scope.whereSql}
-        AND CAST(is_Assembly AS SIGNED) >= 1
-      ORDER BY component_sn
+        c.config_id as id,
+        s.component_name as name,
+        COALESCE(c.component_pic, s.component_pic) as component_pic,
+        c.pic_level,
+        c.component_id as component_id,
+        CAST(c.is_Assembly AS SIGNED) as is_Assembly,
+        ${ASSEMBLY_GROUP_SQL.replace(/is_Assembly/g, "c.is_Assembly")} as assembly_group
+      FROM ht_sales_product_default_config c
+      INNER JOIN ht_sales_components s
+        ON s.component_id = c.component_id
+      WHERE ${scope.whereSql.replace(/product_id/g, "c.product_id")}
+        AND CAST(c.is_Assembly AS SIGNED) >= 1
+      ORDER BY c.component_sn ASC, c.config_id ASC
     `, scope.params);
     (rows || []).forEach((row) => { row.image_url = buildEquipmentImageUrl(row.component_pic); });
     res.json({ success: true, data: rows });
@@ -258,27 +264,30 @@ router.get(API_ROUTES.config, requireAuth, async (req, res) => {
     const scope = { whereSql: "product_id = ?", params: [Number(context.configProductId || projectId)] };
     const [rows] = await pool.query(`
       SELECT
-        config_id,
-        product_id,
-        component_sn,
-        component_name,
-        component_desc,
-        component_type,
-        component_material,
-        component_brand,
-        component_quantity,
-        component_unit,
-        component_unitprice,
-        component_totalprice,
-        component_pic,
-        pic_level,
-        whatkind,
-        CAST(is_active AS SIGNED) as is_active,
-        CAST(is_Assembly AS SIGNED) as is_Assembly,
-        ${ASSEMBLY_GROUP_SQL} as assembly_group
-      FROM ht_sales_product_default_config
-      WHERE ${scope.whereSql}
-      ORDER BY component_sn
+        c.config_id,
+        c.product_id,
+        c.component_id,
+        c.component_sn,
+        s.component_name as component_name,
+        COALESCE(c.component_desc, s.description) as component_desc,
+        c.component_type,
+        c.component_material,
+        c.component_brand,
+        c.component_quantity,
+        c.component_unit,
+        c.component_unitprice,
+        c.component_totalprice,
+        COALESCE(c.component_pic, s.component_pic) as component_pic,
+        c.pic_level,
+        COALESCE(c.whatkind, s.component_kind, '组件') as whatkind,
+        CAST(c.is_active AS SIGNED) as is_active,
+        CAST(c.is_Assembly AS SIGNED) as is_Assembly,
+        ${ASSEMBLY_GROUP_SQL.replace(/is_Assembly/g, "c.is_Assembly")} as assembly_group
+      FROM ht_sales_product_default_config c
+      INNER JOIN ht_sales_components s
+        ON s.component_id = c.component_id
+      WHERE ${scope.whereSql.replace(/product_id/g, "c.product_id")}
+      ORDER BY c.component_sn ASC, c.config_id ASC
     `, scope.params);
     (rows || []).forEach((row) => { row.image_url = buildEquipmentImageUrl(row.component_pic); });
     res.json({ success: true, data: rows });

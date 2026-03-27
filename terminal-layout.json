@@ -1,0 +1,40 @@
+{
+  "tabs": [
+    {
+      "title": "AI | Codex",
+      "dir": "E:\\OfficeAddinProjects\\quotationaddin",
+      "color": "#0EA5E9",
+      "cmd": "codex"
+    },
+    {
+      "title": "AI | Claude",
+      "dir": "E:\\OfficeAddinProjects\\quotationaddin",
+      "color": "#10B981",
+      "cmd": "claude"
+    },
+    {
+      "title": "Project | Root",
+      "dir": "E:\\OfficeAddinProjects\\quotationaddin",
+      "color": "#F59E0B",
+      "cmd": ""
+    },
+    {
+      "title": "Project | Src",
+      "dir": "E:\\OfficeAddinProjects\\quotationaddin\\src",
+      "color": "#6366F1",
+      "cmd": ""
+    },
+    {
+      "title": "Project | Server",
+      "dir": "E:\\OfficeAddinProjects\\quotationaddin\\server",
+      "color": "#EF4444",
+      "cmd": ""
+    },
+    {
+      "title": "Git",
+      "dir": "E:\\OfficeAddinProjects\\quotationaddin",
+      "color": "#6B7280",
+      "cmd": "git status"
+    }
+  ]
+}

@@ -62,6 +62,85 @@ function normalizeText(value) {
   return text || null;
 }
 
+async function ensureComponentId(conn, productTypeId, componentName, componentSn, componentDesc) {
+  const typeId = Number(productTypeId || 0);
+  const name = String(componentName || "").trim();
+  if (!typeId || !name) {
+    return null;
+  }
+
+  const [exists] = await conn.query(
+    `
+    SELECT component_id
+    FROM ht_sales_components
+    WHERE product_type_id = ?
+      AND component_name = ?
+    LIMIT 1
+    `,
+    [typeId, name]
+  );
+  if (exists.length) {
+    return Number(exists[0].component_id || 0) || null;
+  }
+
+  const [maxRows] = await conn.query(
+    `
+    SELECT COALESCE(MAX(component_order), 0) AS max_order
+    FROM ht_sales_components
+    WHERE product_type_id = ?
+    `,
+    [typeId]
+  );
+  let order = Number(componentSn || 0);
+  if (!Number.isFinite(order) || order <= 0) {
+    order = Number(maxRows[0]?.max_order || 0) + 1;
+  } else {
+    const [occupied] = await conn.query(
+      `
+      SELECT component_id
+      FROM ht_sales_components
+      WHERE product_type_id = ?
+        AND component_order = ?
+      LIMIT 1
+      `,
+      [typeId, order]
+    );
+    if (occupied.length) {
+      order = Number(maxRows[0]?.max_order || 0) + 1;
+    }
+  }
+
+  const code = `AUTO_${typeId}_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+  await conn.query(
+    `
+    INSERT INTO ht_sales_components (
+      component_code,
+      component_name,
+      component_kind,
+      component_pic,
+      component_order,
+      product_type_id,
+      parent_component_id,
+      description,
+      is_active
+    ) VALUES (?, ?, '组件', NULL, ?, ?, NULL, ?, 1)
+    `,
+    [code, name, order, typeId, String(componentDesc || "").trim() || null]
+  );
+
+  const [created] = await conn.query(
+    `
+    SELECT component_id
+    FROM ht_sales_components
+    WHERE product_type_id = ?
+      AND component_name = ?
+    LIMIT 1
+    `,
+    [typeId, name]
+  );
+  return Number(created[0]?.component_id || 0) || null;
+}
+
 function loadDcmConfigRows(csvPath) {
   const text = fs.readFileSync(csvPath, "utf8");
   const rows = parseCsv(text);
@@ -157,10 +236,18 @@ async function main() {
       const modelRows = configRows.filter((item) => item.productModel === model);
       let componentSn = 1;
       for (const row of modelRows) {
+        const componentId = await ensureComponentId(
+          conn,
+          Number(source.product_type_id || 0),
+          row.componentName,
+          componentSn,
+          row.componentDesc
+        );
         await conn.query(
           `
           INSERT INTO ht_sales_product_default_config (
             product_id,
+            component_id,
             component_sn,
             component_name,
             component_desc,
@@ -177,9 +264,9 @@ async function main() {
             whatkind,
             is_active,
             is_Assembly
-          ) VALUES (?, ?, ?, ?, NULL, NULL, NULL, 1, '项', NULL, NULL, NULL, NULL, ?, '组件', 1, 0)
+          ) VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 1, '项', NULL, NULL, NULL, NULL, ?, '组件', 1, 0)
           `,
-          [configProductId, componentSn, row.componentName, row.componentDesc, row.backup]
+          [configProductId, componentId, componentSn, row.componentName, row.componentDesc, row.backup]
         );
         componentSn += 1;
       }
