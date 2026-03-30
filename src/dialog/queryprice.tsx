@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import "./queryprice.css";
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
 import { API_PATHS, APP_URLS, UI_DEFAULTS } from "../shared/appConstants";
 import { DIALOG_TEXT, QUERYPRICE_HTML_TEXT } from "../shared/businessTextConstants";
@@ -93,7 +94,7 @@ function QueryPriceApp() {
 
   return (
     <div className="dialog-shell">
-      <div className="result-panel">
+      <div className="result-panel ui-surface ui-surface--solid">
         <div className="result-table">
           <div className="result-row header">
             <div className="result-cell name">{QUERYPRICE_HTML_TEXT.colName}</div>
@@ -113,8 +114,8 @@ function QueryPriceApp() {
               ))
             ) : (
               <div className="placeholder">
-                <div>
-                  <div style={{ fontSize: 24, marginBottom: 8 }}>{UI_DEFAULTS.defaultSearchIcon}</div>
+                <div className="placeholder-content">
+                  <div className="placeholder-icon">{UI_DEFAULTS.defaultSearchIcon}</div>
                   <div>{placeholder}</div>
                 </div>
               </div>
@@ -123,12 +124,12 @@ function QueryPriceApp() {
         </div>
       </div>
 
-      <div className="search-panel">
+      <div className="search-panel ui-surface">
         <div className="input-group">
           <label htmlFor="mainKeyword">{QUERYPRICE_HTML_TEXT.labelMainKeyword}</label>
           <input
             id="mainKeyword"
-            className="input"
+            className="input ui-input"
             type="text"
             placeholder={QUERYPRICE_HTML_TEXT.phMainKeyword}
             value={mainKeyword}
@@ -144,7 +145,7 @@ function QueryPriceApp() {
           <label htmlFor="secondKeyword">{QUERYPRICE_HTML_TEXT.labelSecondKeyword}</label>
           <input
             id="secondKeyword"
-            className="input"
+            className="input ui-input"
             type="text"
             placeholder={QUERYPRICE_HTML_TEXT.phSecondKeyword}
             value={secondKeyword}
@@ -157,24 +158,24 @@ function QueryPriceApp() {
           />
         </div>
         <div className="actions">
-          <button className="btn btn-secondary" onClick={() => Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.QUERYPRICE_CANCEL }))}>
+          <button className="btn ui-btn ui-btn--secondary" onClick={() => Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.QUERYPRICE_CANCEL }))}>
             {QUERYPRICE_HTML_TEXT.btnCancel}
           </button>
-          <button className="btn btn-primary" onClick={() => void handleSearch()}>
+          <button className="btn ui-btn ui-btn--primary" onClick={() => void handleSearch()}>
             {QUERYPRICE_HTML_TEXT.btnSearch}
           </button>
-          <button className="btn btn-primary" disabled={selectedIndex < 0} onClick={handleReplace}>
+          <button className="btn ui-btn ui-btn--primary" disabled={selectedIndex < 0} onClick={handleReplace}>
             {QUERYPRICE_HTML_TEXT.btnReplace}
           </button>
         </div>
       </div>
 
-      <div className={`warning-mask ${warning ? "" : "hidden"}`} role="dialog" aria-modal="true">
-        <div className="warning-card">
-          <div className="warning-title">{QUERYPRICE_HTML_TEXT.warningTitle}</div>
-          <div className="warning-text">{warning}</div>
+      <div className={`warning-mask ui-modal-backdrop ${warning ? "" : "hidden"}`} role="dialog" aria-modal="true">
+        <div className="warning-card ui-modal-card">
+          <div className="warning-title ui-modal-title">{QUERYPRICE_HTML_TEXT.warningTitle}</div>
+          <div className="warning-text ui-modal-message">{warning}</div>
           <div className="warning-actions">
-            <button className="btn btn-primary" onClick={() => setWarning("")}>
+            <button className="btn ui-btn ui-btn--primary" onClick={() => setWarning("")}>
               {QUERYPRICE_HTML_TEXT.btnOk}
             </button>
           </div>

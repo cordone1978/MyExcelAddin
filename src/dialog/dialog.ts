@@ -1,6 +1,7 @@
 ﻿/* global Office, document, window, console, URL, fetch, alert */
 import React from "react";
 import { createRoot, Root } from "react-dom/client";
+import "./dialog.css";
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
 import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
 import { buildEquipmentImageUrl } from "../shared/equipmentImagePath";

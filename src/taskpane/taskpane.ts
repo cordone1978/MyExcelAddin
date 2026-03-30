@@ -1,6 +1,7 @@
 /* global console, document, Excel, Office, window, localStorage, URL, performance, fetch, Image, HTMLImageElement, RequestInit */
 import React from "react";
 import { createRoot, Root } from "react-dom/client";
+import "./taskpane.css";
 import {
   API_PATHS,
   APP_URLS,

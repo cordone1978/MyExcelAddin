@@ -1,3 +1,6 @@
+@import "../styles/tokens.css";
+@import "../styles/components.css";
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -5,8 +8,11 @@
 }
 
 body {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  background: #f5f5f5;
+  font-family: var(--font-family-base);
+  color: var(--color-text-body);
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 42%),
+    linear-gradient(180deg, var(--color-bg-page) 0%, var(--color-bg-page-muted) 100%);
   padding: 12px;
   height: 100vh;
   overflow: hidden;
@@ -26,10 +32,7 @@ body {
 }
 
 .panel {
-  background: #ffffff;
-  border-radius: 10px;
   padding: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -41,7 +44,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0;
-  border-bottom: 2px solid #0078d4;
+  border-bottom: 2px solid var(--color-brand-primary);
   padding-bottom: 10px;
   flex-shrink: 0;
 }
@@ -49,19 +52,19 @@ body {
 .title {
   font-size: 18px;
   font-weight: 700;
-  color: #222;
+  color: var(--color-text-primary);
 }
 
 .device-name {
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-muted);
   display: none;
 }
 
 .form-grid {
   display: grid;
   grid-template-columns: 100px 1fr;
-  gap: 10px 12px;
+  gap: 12px;
   align-items: center;
   overflow-y: auto;
   flex: 1;
@@ -70,15 +73,15 @@ body {
 
 .label {
   font-size: 13px;
-  color: #333;
+  color: var(--color-text-body);
 }
 
 .value {
   font-size: 13px;
-  color: #333;
-  background: #f7f7f7;
-  border: 1px solid #d7d7d7;
-  border-radius: 4px;
+  color: var(--color-text-body);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
   padding: 6px 8px;
   min-height: 30px;
   display: flex;
@@ -87,42 +90,32 @@ body {
 
 .value.emphasis {
   font-weight: 700;
-  color: #0078d4;
-}
-
-.input {
-  font-size: 13px;
-  padding: 6px 8px;
-  border: 1px solid #d7d7d7;
-  border-radius: 4px;
-  background: #ffffff;
-  height: 30px;
-  width: 100%;
+  color: var(--color-brand-primary);
 }
 
 .text-btn {
   text-align: left;
   font-size: 13px;
-  border: 1px solid #d7d7d7;
-  border-radius: 4px;
-  padding: 6px 8px;
-  background: #ffffff;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: var(--color-bg-card-solid);
   cursor: pointer;
-  color: #0078d4;
+  color: var(--color-brand-primary);
   width: 100%;
 }
 
 .text-btn:hover {
-  background: #eef5fb;
+  background: var(--color-bg-hover);
 }
 
 .text-btn.readonly {
-  color: #333;
+  color: var(--color-text-body);
   cursor: default;
 }
 
 .text-btn.readonly:hover {
-  background: #ffffff;
+  background: var(--color-bg-card-solid);
 }
 
 .actions {
@@ -133,39 +126,12 @@ body {
 }
 
 .btn {
-  min-height: 38px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.btn-primary {
-  background: #0078d4;
-  color: #ffffff;
-}
-
-.btn-primary:hover {
-  background: #005a9e;
-}
-
-.btn-secondary {
-  background: #f0f0f0;
-  color: #333;
-}
-
-.btn-secondary:hover {
-  background: #e0e0e0;
+  width: 100%;
 }
 
 /* ========== 预览区 - 正方形自适应 ========== */
 .preview {
-  background: #ffffff;
-  border-radius: 10px;
   padding: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -177,70 +143,16 @@ body {
   width: 100%;
   aspect-ratio: 1 / 1; /* ✅ 保持正方形 */
   max-height: 100%; /* ✅ 不超过父容器高度 */
-  border: 1px solid rgba(103, 140, 179, 0.4);
-  border-radius: 14px;
-  background:
-    radial-gradient(circle at 20% 18%, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.18) 18%, transparent 38%),
-    linear-gradient(160deg, #edf3fb 0%, #d9e4f0 48%, #b9cadb 100%);
+  border-radius: var(--radius-lg);
   position: relative;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.65),
-    inset 0 -36px 60px rgba(70, 93, 122, 0.12),
-    0 18px 40px rgba(21, 35, 54, 0.16);
-}
-
-.preview-frame::before {
-  content: "";
-  position: absolute;
-  inset: 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.5);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.preview-frame::after {
-  content: "";
-  position: absolute;
-  inset: auto 16px 14px 16px;
-  height: 54px;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(54, 74, 98, 0.28) 0%, rgba(54, 74, 98, 0.08) 46%, rgba(54, 74, 98, 0) 78%);
-  filter: blur(12px);
-  pointer-events: none;
-  z-index: 0;
 }
 
 .preview-frame .stage-plane {
-  position: absolute;
-  inset: 18px 20px 28px 20px;
   border-radius: 12px 12px 20px 20px;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.08) 22%, rgba(118, 140, 166, 0.06) 100%),
-    repeating-linear-gradient(
-      0deg,
-      rgba(75, 104, 134, 0.06) 0px,
-      rgba(75, 104, 134, 0.06) 1px,
-      transparent 1px,
-      transparent 32px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      rgba(75, 104, 134, 0.05) 0px,
-      rgba(75, 104, 134, 0.05) 1px,
-      transparent 1px,
-      transparent 40px
-    );
-  border: 1px solid rgba(255,255,255,0.36);
-  transform: perspective(1400px) rotateX(68deg) scaleY(1.22) translateY(40%);
-  transform-origin: center bottom;
-  opacity: 0.9;
-  pointer-events: none;
-  z-index: 0;
 }
 
 .preview-frame .preview-layers,
@@ -279,7 +191,7 @@ body {
 }
 
 .placeholder {
-  color: #b5b5b5;
+  color: var(--color-neutral-300);
   font-size: 12px;
   display: flex;
   align-items: center;
@@ -289,10 +201,7 @@ body {
 
 /* ========== 工艺面板 - 紧凑版本 ========== */
 .craft-panel {
-  background: #ffffff;
-  border-radius: 10px;
-  padding: 10px 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -301,9 +210,9 @@ body {
 }
 
 .craft-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
-  color: #333;
+  color: var(--color-text-primary);
   flex-shrink: 0;
 }
 
@@ -324,18 +233,18 @@ body {
 
 .craft-row.header {
   font-size: 11px;
-  color: #666;
+  color: var(--color-text-muted);
   font-weight: 600;
   position: sticky;
   top: 0;
-  background: #ffffff;
+  background: var(--color-bg-card-solid);
   z-index: 1;
   padding: 4px 0;
 }
 
 .craft-cell {
   font-size: 13px;
-  color: #333;
+  color: var(--color-text-body);
 }
 
 .craft-cell.label {
@@ -350,39 +259,33 @@ body {
 }
 
 .craft-row .input {
-  font-size: 11px;
-  padding: 4px 6px;
-  height: 26px;
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 12px;
 }
 
 .craft-summary {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid #ececec;
+  border-top: 1px solid var(--color-divider-muted);
   padding-top: 4px;
   margin-top: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
-  color: #333;
+  color: var(--color-text-body);
   flex-shrink: 0;
 }
 
 .craft-sum {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
-  color: #111;
+  color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
 }
 
 /* ========== 模态框 ========== */
 .modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 20;
 }
 
@@ -391,43 +294,23 @@ body {
 }
 
 .modal {
-  width: min(720px, 92vw);
-  max-height: 80vh;
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  padding: 0;
 }
 
 .modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid #ececec;
 }
 
 .modal-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .icon-btn {
-  border: none;
-  background: transparent;
   font-size: 18px;
-  cursor: pointer;
-  color: #666;
 }
 
 .modal-body {
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  min-height: 0;
 }
 
 .search-row {
@@ -436,8 +319,8 @@ body {
 }
 
 .result-list {
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
+  border: 1px solid var(--color-border-muted);
+  border-radius: var(--radius-md);
   overflow-y: auto;
   max-height: 48vh;
 }
@@ -445,15 +328,15 @@ body {
 .result-item {
   display: grid;
   grid-template-columns: 140px 80px 120px 1fr;
-  gap: 10px;
-  padding: 8px 10px;
-  border-bottom: 1px solid #f0f0f0;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-divider-subtle);
   font-size: 12px;
   cursor: pointer;
 }
 
 .result-item.header {
-  background: #f7f7f7;
+  background: var(--color-bg-subtle);
   font-weight: 600;
   cursor: default;
 }
@@ -463,5 +346,88 @@ body {
 }
 
 .result-item:hover {
-  background: #eef5fb;
+  background: var(--color-bg-hover);
 }
+
+@media (max-width: 1180px) {
+  body {
+    overflow: auto;
+  }
+
+  .dialog-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: calc(100vh - 24px);
+  }
+
+  .panel,
+  .preview,
+  .craft-panel {
+    min-height: 0;
+  }
+
+  .preview {
+    min-height: 320px;
+  }
+}
+
+@media (max-width: 720px) {
+  body {
+    padding: 8px;
+  }
+
+  .dialog-shell {
+    gap: 8px;
+    min-height: calc(100vh - 16px);
+  }
+
+  .panel,
+  .preview,
+  .craft-panel {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .actions {
+    grid-template-columns: 1fr;
+  }
+
+  .craft-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  .craft-row.header {
+    display: none;
+  }
+
+  .craft-cell.total {
+    text-align: left;
+  }
+
+  .preview {
+    min-height: 260px;
+  }
+
+  .preview-frame {
+    max-width: min(100%, 320px);
+  }
+
+  .search-row {
+    flex-direction: column;
+  }
+
+  .result-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
+

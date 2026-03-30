@@ -85,6 +85,10 @@ function renderListContent(
   return items;
 }
 
+function detailLabelClass(required: boolean) {
+  return required ? "listbox-item-label listbox-item-label--required" : "listbox-item-label";
+}
+
 export function DialogApp({
   state,
   handlers,
@@ -129,14 +133,14 @@ export function DialogApp({
 
       <div className="left-panel">
         <h3 className="panel-title">{state.categoryTitle}</h3>
-        <div className="listbox" id="categoryList">
+        <div className="listbox ui-listbox" id="categoryList">
           {renderListContent(
             state.categoriesLoading,
             state.categoryError,
             state.categories.map((category) => (
               <div
                 key={String(category.id)}
-                className={`listbox-item ${state.selectedCategoryId == category.id ? "selected" : ""}`}
+                className={`listbox-item ui-listbox-item ${state.selectedCategoryId == category.id ? "selected is-selected" : ""}`}
                 onClick={() => handlers.onCategoryClick(category.id, category.name)}
               >
                 {category.name}
@@ -150,14 +154,14 @@ export function DialogApp({
       <div className="middle-panel">
         <div className="middle-left">
           <h3 className="panel-title">{state.projectTitle}</h3>
-          <div className="listbox" id="projectList">
+          <div className="listbox ui-listbox" id="projectList">
             {renderListContent(
               state.projectsLoading,
               state.projectError,
               state.projects.map((project) => (
                 <div
                   key={String(project.id)}
-                  className={`listbox-item ${state.selectedProjectId == project.id ? "selected" : ""}`}
+                  className={`listbox-item ui-listbox-item ${state.selectedProjectId == project.id ? "selected is-selected" : ""}`}
                   onClick={() => handlers.onProjectClick(project.id, project.name)}
                 >
                   {project.name}
@@ -172,14 +176,14 @@ export function DialogApp({
       <div className="middle-right">
         <div className="detail-panel">
           <h3 className="panel-title">{state.detailTitle}</h3>
-          <div className="listbox" id="detailList">
+          <div className="listbox ui-listbox" id="detailList">
             {renderListContent(
               state.detailsLoading,
               state.detailError,
-              state.details.map((detail, index) => (
+              state.details.map((detail) => (
                 <div
                   key={String(detail.id)}
-                  className={`listbox-item multi-select ${state.hoveredPreviewId === detail.previewId ? "preview-hovered" : ""}`}
+                  className={`listbox-item ui-listbox-item multi-select ${state.hoveredPreviewId === detail.previewId ? "preview-hovered is-hovered" : ""}`}
                   onMouseEnter={() => handlers.onPreviewHoverChange(detail.previewId)}
                   onMouseLeave={() => handlers.onPreviewHoverChange(null)}
                   onClick={(e) => {
@@ -193,7 +197,7 @@ export function DialogApp({
                     disabled={detail.required}
                     onChange={(e) => handlers.onDetailToggle(detail.id, e.target.checked)}
                   />
-                  <label style={{ cursor: detail.required ? "default" : "pointer", flex: 1, fontWeight: detail.required ? "bold" : undefined, color: detail.required ? "#0078d4" : undefined }}>
+                  <label className={`${detailLabelClass(detail.required)} ui-listbox-item-label${detail.required ? " ui-listbox-item-label--required" : ""}`}>
                     {detail.name}{detail.required ? " [必选]" : ""}
                   </label>
                 </div>
@@ -209,14 +213,14 @@ export function DialogApp({
 
         <div>
           <h3 className="panel-title">{state.annotationTitle}</h3>
-          <div className="listbox" id="annotationList">
+          <div className="listbox ui-listbox" id="annotationList">
             {renderListContent(
               state.annotationsLoading,
               state.annotationError,
               state.annotations.map((annotation) => (
                 <div
                   key={annotation.key}
-                  className={`listbox-item multi-select ${state.hoveredPreviewId === annotation.previewId ? "preview-hovered" : ""}`}
+                  className={`listbox-item ui-listbox-item multi-select ${state.hoveredPreviewId === annotation.previewId ? "preview-hovered is-hovered" : ""}`}
                   title={`组件信息：${annotation.name || ""}`}
                   onMouseEnter={() => handlers.onPreviewHoverChange(annotation.previewId)}
                   onMouseLeave={() => handlers.onPreviewHoverChange(null)}
@@ -230,7 +234,7 @@ export function DialogApp({
                     checked={annotation.checked}
                     onChange={(e) => handlers.onAnnotationToggle(annotation.key, e.target.checked)}
                   />
-                  <label style={{ cursor: "pointer", flex: 1 }}>{annotation.name}</label>
+                  <label className="listbox-item-label ui-listbox-item-label">{annotation.name}</label>
                 </div>
               )),
               "暂无可选配件"
@@ -241,13 +245,13 @@ export function DialogApp({
 
       <div className="right-panel">
         <h3 className="panel-title">{state.previewTitle}</h3>
-        <div className="image-container" id="imageContainer">
-          <div className="image-stage-plane" aria-hidden="true"></div>
+        <div className="image-container ui-preview-surface" id="imageContainer">
+          <div className="image-stage-plane ui-preview-stage-plane" aria-hidden="true"></div>
           <div id="previewStageMount"></div>
         </div>
         <div className="action-buttons">
-          <button className="btn btn-secondary" onClick={handlers.onClearAll}>{state.clearAllText}</button>
-          <button className="btn btn-primary" onClick={handlers.onConfirmSubmit}>{state.confirmSubmitText}</button>
+          <button className="btn ui-btn ui-btn--secondary" onClick={handlers.onClearAll}>{state.clearAllText}</button>
+          <button className="btn ui-btn ui-btn--primary" onClick={handlers.onConfirmSubmit}>{state.confirmSubmitText}</button>
         </div>
       </div>
     </div>

@@ -1,3 +1,6 @@
+@import "../styles/tokens.css";
+@import "../styles/components.css";
+
 /* 
  * Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
  * See LICENSE in the project root for license information.
@@ -22,16 +25,13 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
-    font-family: "Segoe UI", "Microsoft YaHei UI", Tahoma, Arial, sans-serif;
-    background:
-        radial-gradient(circle at top right, rgba(14, 165, 233, 0.12), transparent 45%),
-        linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
-    color: #1f2937;
+    font-family: var(--font-family-base);
+    color: var(--color-text-body);
 }
 
 .app-header {
     background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.82));
-    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    border-bottom: 1px solid var(--color-border-overlay);
     backdrop-filter: blur(6px);
 }
 
@@ -56,7 +56,7 @@ ul {
 }
 
 .ms-welcome__header {
-    padding: 20px;
+    padding: 24px;
     padding-bottom: 18px;
     padding-top: 36px;
     display: -webkit-flex;
@@ -86,7 +86,7 @@ ul {
     align-items: center;
     -webkit-flex: 1 0 0;
     flex: 1 0 0;
-    padding: 10px 16px 18px;
+    padding: 12px 16px 16px;
 }
 
 .app-main {
@@ -99,7 +99,7 @@ ul {
     width: 100%;
     margin: 0;
     min-height: 12px;
-    color: #64748b;
+    color: var(--color-text-muted);
     font-size: 12px;
     text-align: left;
 }
@@ -107,11 +107,11 @@ ul {
 .panel {
     width: 100%;
     box-sizing: border-box;
-    border-radius: 16px;
-    padding: 15px;
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+    border-radius: var(--radius-xl);
+    padding: 16px;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border-overlay);
+    box-shadow: var(--shadow-md);
 }
 
 .is-hidden {
@@ -121,7 +121,7 @@ ul {
 .panel-auth {
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
-        #ffffff;
+        var(--color-bg-card-solid);
     padding: 16px;
 }
 
@@ -155,7 +155,7 @@ ul {
 }
 
 .panel-actions {
-    background: #ffffff;
+    background: var(--color-bg-card-solid);
     padding-top: 12px;
 }
 
@@ -163,16 +163,16 @@ ul {
     margin: 0;
     font-size: 16px;
     font-weight: 700;
-    color: #0f172a;
+    color: var(--color-text-primary);
 }
 
 .auth-hero {
     margin-bottom: 12px;
     padding: 12px 13px;
-    border-radius: 14px;
+    border-radius: var(--radius-lg);
     background:
         radial-gradient(circle at top right, rgba(14, 165, 233, 0.16), transparent 42%),
-        linear-gradient(135deg, #f0f9ff 0%, #ecfeff 100%);
+        linear-gradient(135deg, var(--color-bg-accent-pale) 0%, var(--color-bg-accent-mist) 100%);
     border: 1px solid rgba(125, 211, 252, 0.45);
 }
 
@@ -184,8 +184,8 @@ ul {
 .auth-subtitle {
     margin: 6px 0 0;
     font-size: 12px;
-    line-height: 1.55;
-    color: #475569;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
 }
 
 .panel-badge {
@@ -196,22 +196,22 @@ ul {
     border-radius: 999px;
     font-size: 11px;
     font-weight: 700;
-    color: #0f766e;
-    background: #ccfbf1;
-    border: 1px solid #99f6e4;
+    color: var(--color-teal);
+    background: var(--color-teal-bg);
+    border: 1px solid var(--color-teal-border);
 }
 
 .panel-badge-accent {
-    color: #166534;
-    background: #dcfce7;
-    border-color: #bbf7d0;
+    color: var(--color-success);
+    background: var(--color-success-bg);
+    border-color: var(--color-success-border);
 }
 
 .auth-feedback {
     margin: 10px 0 0;
     min-height: 0;
     font-size: 12px;
-    color: #64748b;
+    color: var(--color-text-muted);
     text-align: left;
     line-height: 1.5;
 }
@@ -221,35 +221,35 @@ ul {
 }
 
 .auth-feedback.error {
-    color: #b91c1c;
+    color: var(--color-danger);
 }
 
 .auth-feedback.success {
-    color: #166534;
+    color: var(--color-success);
 }
 
 .auth-feedback.pending {
-    color: #075985;
+    color: var(--color-info);
 }
 
 .action-feedback {
     margin: 0 0 10px;
     min-height: 18px;
     font-size: 12px;
-    color: #64748b;
+    color: var(--color-text-muted);
     text-align: left;
 }
 
 .action-feedback.error {
-    color: #b91c1c;
+    color: var(--color-danger);
 }
 
 .action-feedback.success {
-    color: #166534;
+    color: var(--color-success);
 }
 
 .action-feedback.pending {
-    color: #075985;
+    color: var(--color-info);
 }
 
 .field-list {
@@ -261,10 +261,10 @@ ul {
 .reset-password-tip {
     margin: 0 0 10px;
     padding: 9px 10px;
-    border-radius: 10px;
-    border: 1px solid #fed7aa;
-    background: #fff7ed;
-    color: #9a3412;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-warning-border);
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
     font-size: 12px;
     line-height: 1.45;
     font-weight: 600;
@@ -275,23 +275,23 @@ ul {
     margin: 0;
     padding: 12px 13px;
     box-sizing: border-box;
-    border: 1px solid #cbd5e1;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-card-strong);
     font-size: 13px;
-    color: #0f172a;
+    color: var(--color-text-primary);
     transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
 .login-input:focus {
     outline: none;
-    border-color: #0284c7;
-    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+    border-color: var(--color-brand-primary);
+    box-shadow: var(--shadow-focus-brand);
 }
 
 .login-input:disabled {
-    background: #f1f5f9;
-    color: #94a3b8;
+    background: var(--color-bg-page-alt);
+    color: var(--color-neutral-300);
 }
 
 .btn-grid {
@@ -300,30 +300,35 @@ ul {
     grid-template-columns: 1fr;
 }
 
+.btn-grid .ui-btn,
+.confirm-modal-actions .ui-btn {
+    width: 100%;
+}
+
 .template-action-drawer {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0;
-    padding: 6px;
-    border: 1px solid #dbe3ee;
-    border-radius: 12px;
-    background: #f7f9fc;
+    padding: 8px;
+    border: 1px solid var(--color-border-muted);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-subtle);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
     overflow: hidden;
 }
 
-.template-action-drawer .dialog-btn {
+.template-action-drawer .ui-btn {
     border-radius: 0;
-    border-color: #dbe3ee;
+    border-color: var(--color-border-muted);
     box-shadow: none;
 }
 
-.template-action-drawer .dialog-btn:first-child {
+.template-action-drawer .ui-btn:first-child {
     border-radius: 8px 0 0 8px;
     border-right-width: 0.5px;
 }
 
-.template-action-drawer .dialog-btn:last-child {
+.template-action-drawer .ui-btn:last-child {
     border-radius: 0 8px 8px 0;
     border-left-width: 0.5px;
 }
@@ -332,102 +337,21 @@ ul {
     grid-template-columns: 1fr 1fr;
 }
 
-.dialog-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    margin: 0;
-    padding: 12px 12px;
-    border-radius: 12px;
-    border: 1px solid transparent;
-    cursor: pointer;
-    text-align: center;
-    font-size: 13px;
-    font-weight: 600;
-    transition: transform 0.08s ease, box-shadow 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.dialog-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.7;
-    transform: none;
-}
-
-.dialog-btn:hover {
-    transform: translateY(-1px);
-}
-
-.dialog-btn:active {
-    transform: translateY(0);
-}
-
-.dialog-btn:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);
-    color: #ffffff;
-    border-color: #0284c7;
-    box-shadow: 0 10px 22px rgba(2, 132, 199, 0.24);
-}
-
-.btn-secondary {
-    background: #ffffff;
-    color: #0f172a;
-    border-color: #dbe3ee;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-}
-
-.dialog-btn:hover {
-    transform: translateY(-1px);
-    background: #0284c7;
-    color: #ffffff;
-    border-color: #0284c7;
-    box-shadow: 0 8px 18px rgba(2, 132, 199, 0.2);
-}
-
-.dialog-btn.active {
-    background: #0284c7;
-    color: #ffffff;
-    border-color: #0284c7;
-    box-shadow: 0 8px 18px rgba(2, 132, 199, 0.2);
-}
-
 .confirm-modal {
-    position: fixed;
-    inset: 0;
     z-index: 2000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-    background: rgba(15, 23, 42, 0.36);
 }
 
 .confirm-modal-card {
-    width: min(360px, calc(100vw - 32px));
-    border-radius: 12px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.24);
-    padding: 14px;
+    border-radius: var(--radius-lg);
 }
 
 .confirm-modal-title {
-    margin: 0;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 700;
-    color: #0f172a;
 }
 
 .confirm-modal-message {
-    margin: 10px 0 0;
-    font-size: 13px;
-    line-height: 1.5;
-    color: #334155;
+    color: var(--color-neutral-700);
 }
 
 .confirm-modal-actions {
@@ -447,7 +371,7 @@ ul {
     }
 
     .app-title {
-        font-size: 22px;
+        font-size: 24px;
     }
 
     .btn-grid.two-cols {
@@ -463,11 +387,8 @@ ul {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 6px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+    padding: 8px;
+    border-radius: var(--radius-md);
 }
 
 .account-dock-toggle {
@@ -480,12 +401,12 @@ ul {
 }
 
 .account-dock-toggle:hover .account-dock-label {
-    color: #0369a1;
+    color: var(--color-brand-primary-hover);
 }
 
 .account-dock-label {
     font-size: 12px;
-    color: #334155;
+    color: var(--color-neutral-700);
     font-weight: 600;
     white-space: nowrap;
     display: inline-flex;
@@ -495,9 +416,9 @@ ul {
 }
 
 .account-dock-btn {
-    border: 1px solid #cbd5e1;
-    background: #fff;
-    color: #334155;
+    border: 1px solid var(--color-border-default);
+    background: var(--color-bg-card-solid);
+    color: var(--color-neutral-700);
     border-radius: 8px;
     padding: 4px 8px;
     font-size: 12px;
@@ -509,7 +430,9 @@ ul {
 }
 
 .account-dock-btn:hover {
-    background: #0284c7;
-    border-color: #0284c7;
-    color: #fff;
+    background: var(--color-brand-primary);
+    border-color: var(--color-brand-primary);
+    color: var(--color-text-inverse);
 }
+
+

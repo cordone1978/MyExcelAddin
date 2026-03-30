@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import "./graphEditor.css";
 import { Circle, Group, Image as KonvaImage, Label, Layer, Line, Rect, Stage, Tag, Text } from "react-konva";
 import Konva from "konva";
 import { getPortDisplayName, getPortUsageSummary, isConnectionAllowed } from "./connectionRules";

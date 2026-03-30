@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import "./infoReference.css";
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
 
 /* global Office */
@@ -144,9 +145,9 @@ function InfoReferenceApp() {
         <section className="panel grow">
           <div className="left-group">
             <h3>报价配置表设备</h3>
-            <div className="listbox" onWheel={(e) => { e.preventDefault(); handleDeviceWheel(e.deltaY); }}>
+            <div className="listbox ui-listbox" onWheel={(e) => { e.preventDefault(); handleDeviceWheel(e.deltaY); }}>
               {deviceItems.length ? deviceItems.map((item, idx) => (
-                <div key={item.id} className={`listbox-item ${idx === selectedDeviceIndex ? "selected" : ""}`} onClick={() => setSelectedDeviceIndex(idx)}>
+                <div key={item.id} className={`listbox-item ui-listbox-item ${idx === selectedDeviceIndex ? "selected is-selected" : ""}`} onClick={() => setSelectedDeviceIndex(idx)}>
                   {item.deviceName}
                 </div>
               )) : <div className="listbox-placeholder">暂无设备</div>}
@@ -156,9 +157,9 @@ function InfoReferenceApp() {
         <section className="panel grow">
           <div className="left-group">
             <h3>历史相关产品</h3>
-            <div className="listbox" onWheel={(e) => { e.preventDefault(); handleWarehouseWheel(e.deltaY); }}>
+            <div className="listbox ui-listbox" onWheel={(e) => { e.preventDefault(); handleWarehouseWheel(e.deltaY); }}>
               {warehouseKeys.length ? warehouseKeys.map((key) => (
-                <div key={key} className={`listbox-item ${selectedWarehouseKey === key ? "selected" : ""}`} onClick={() => setSelectedWarehouseKey(key)}>
+                <div key={key} className={`listbox-item ui-listbox-item ${selectedWarehouseKey === key ? "selected is-selected" : ""}`} onClick={() => setSelectedWarehouseKey(key)}>
                   {buildWarehouseGroupLabel(key, warehouseMetaBySheet)}
                 </div>
               )) : <div className="listbox-placeholder">暂无历史相关产品</div>}
@@ -239,7 +240,7 @@ function InfoReferenceApp() {
                       <td>
                         <span className="cost-with-delta">
                           <span className="cost-value">{formatNumericText(row.costTotal)}</span>
-                          {delta ? <span className={`delta-chip ${delta.kind}`}>{delta.label}</span> : null}
+                          {delta ? <span className={`delta-chip ui-chip ui-chip--${delta.kind === "flat" ? "warning" : delta.kind === "up" ? "danger" : "success"} ${delta.kind}`}>{delta.label}</span> : null}
                         </span>
                       </td>
                     </tr>

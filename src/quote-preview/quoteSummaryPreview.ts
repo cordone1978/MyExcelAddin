@@ -1,5 +1,6 @@
 /* global console, document, window, localStorage, URL, fetch, FileReader, Blob, HTMLTableElement, HTMLDivElement, HTMLButtonElement, HTMLElement, HTMLLinkElement */
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
+import "./quoteSummaryPreview.css";
 import logoLargeUrl from "../../assets/logo-large.png";
 
 const STORAGE_KEY = "quotation_addin_quote_preview_payload";

@@ -1,4 +1,5 @@
 ﻿/* global Office, document, console, HTMLInputElement, HTMLSelectElement, HTMLDivElement, HTMLButtonElement, HTMLOptionElement */
+import "./craftmodify.css";
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
 import { CRAFTING_CONSTANTS } from "../shared/appConstants";
 import { CRAFTMODIFY_TEXT } from "../shared/businessTextConstants";

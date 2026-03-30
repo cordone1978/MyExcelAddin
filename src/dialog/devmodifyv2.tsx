@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import "./devmodifyv2.css";
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
 import { API_PATHS, APP_URLS, CRAFTING_CONSTANTS } from "../shared/appConstants";
 
@@ -132,7 +133,7 @@ function DevModifyV2App() {
 
   return (
     <div className="dialog-shell">
-      <div className="panel">
+      <div className="panel ui-surface">
         <div className="panel-header">
           <h2 className="title">{String(initData.deviceName || "").trim() || "主体"}</h2>
         </div>
@@ -142,7 +143,7 @@ function DevModifyV2App() {
           <div className="value">{formatPrice(basePrice)}</div>
 
           <div className="label">材质变更</div>
-          <select className="input" value={currentMaterial} onChange={(e) => { setCurrentMaterial(e.target.value); setCurrentMaterialValue(materialMap.get(e.target.value) ?? null); }}>
+          <select className="input ui-input" value={currentMaterial} onChange={(e) => { setCurrentMaterial(e.target.value); setCurrentMaterialValue(materialMap.get(e.target.value) ?? null); }}>
             <option value="">请选择...</option>
             {materialOptions.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
           </select>
@@ -155,14 +156,14 @@ function DevModifyV2App() {
         </div>
 
         <div className="actions">
-          <button className="btn btn-primary" onClick={submit}>更新价格</button>
-          <button className="btn btn-secondary" onClick={() => Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.DEVMODIFY_CANCEL }))}>取消</button>
+          <button className="btn ui-btn ui-btn--primary" onClick={submit}>更新价格</button>
+          <button className="btn ui-btn ui-btn--secondary" onClick={() => Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.DEVMODIFY_CANCEL }))}>取消</button>
         </div>
       </div>
 
-      <div className="preview">
-        <div className="preview-frame">
-          <div className="stage-plane" aria-hidden="true"></div>
+      <div className="preview ui-surface">
+        <div className="preview-frame ui-preview-surface">
+          <div className="stage-plane ui-preview-stage-plane" aria-hidden="true"></div>
           <div className="preview-layers">
             {(initData.previewLayers || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)).map((layer) => (
               <img key={layer.id} src={layer.imageUrl} alt={layer.name || ""} className={`preview-layer${layer.highlighted ? " highlighted" : " muted"}`} />
@@ -172,7 +173,7 @@ function DevModifyV2App() {
         </div>
       </div>
 
-      <div className="craft-panel">
+      <div className="craft-panel ui-surface">
         <div className="craft-title">新版工艺映射</div>
         {!isOutsourced ? (
           <div className="craft-table">
@@ -189,7 +190,7 @@ function DevModifyV2App() {
                 <div className="craft-row dynamic" key={`${item.id}-${index}`}>
                   <div className="craft-cell label">{item.name}<div className="craft-cell unit">{item.unit}</div></div>
                   <div className="craft-cell">
-                    <input className="input" type="text" value={item.quantity} onChange={(e) => {
+                    <input className="input ui-input" type="text" value={item.quantity} onChange={(e) => {
                       const value = e.target.value;
                       setCraftItems((prev) => prev.map((row, i) => i === index ? { ...row, quantity: value } : row));
                     }} />
@@ -203,8 +204,8 @@ function DevModifyV2App() {
         ) : (
           <div className="craft-empty">
             当前为外购件，仍按查询价格方式处理。
-            <div style={{ marginTop: 10 }}>
-              <button className="btn btn-secondary" onClick={() => { setPriceModalOpen(true); void searchPriceList(); }}>查询价格</button>
+            <div className="craft-empty-action">
+              <button className="btn ui-btn ui-btn--secondary" onClick={() => { setPriceModalOpen(true); void searchPriceList(); }}>查询价格</button>
             </div>
           </div>
         )}
@@ -216,16 +217,16 @@ function DevModifyV2App() {
         ) : null}
       </div>
 
-      <div className={`modal-mask ${priceModalOpen ? "" : "hidden"}`}>
-        <div className="modal">
-          <div className="modal-header">
-            <div className="modal-title">外购件价格查询</div>
-            <button className="icon-btn" onClick={() => setPriceModalOpen(false)}>x</button>
+      <div className={`modal-mask ui-modal-backdrop ${priceModalOpen ? "" : "hidden"}`}>
+        <div className="modal ui-modal-card ui-modal-card--wide">
+          <div className="modal-header ui-modal-header">
+            <div className="modal-title ui-modal-title">外购件价格查询</div>
+            <button className="icon-btn ui-icon-btn" onClick={() => setPriceModalOpen(false)}>x</button>
           </div>
-          <div className="modal-body">
+          <div className="modal-body ui-modal-body">
             <div className="search-row">
-              <input className="input" type="text" value={priceKeyword} placeholder="输入关键词..." onChange={(e) => setPriceKeyword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void searchPriceList(); }} />
-              <button className="btn btn-primary" onClick={() => void searchPriceList()}>查询</button>
+              <input className="input ui-input" type="text" value={priceKeyword} placeholder="输入关键词..." onChange={(e) => setPriceKeyword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void searchPriceList(); }} />
+              <button className="btn ui-btn ui-btn--primary" onClick={() => void searchPriceList()}>查询</button>
             </div>
             <div className="result-list">
               {priceRows.map((row, index) => (

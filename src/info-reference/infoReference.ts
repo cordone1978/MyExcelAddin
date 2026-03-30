@@ -591,12 +591,12 @@ function buildDeltaChipHtml(base: number | undefined, current: number) {
   const ratio = (current - base) / base;
   const pct = Math.round(Math.abs(ratio) * 100);
   if (pct === 0) {
-    return `<span class="delta-chip flat">--</span>`;
+    return `<span class="delta-chip ui-chip ui-chip--warning flat">--</span>`;
   }
   if (ratio > 0) {
-    return `<span class="delta-chip up">上涨${pct}%</span>`;
+    return `<span class="delta-chip ui-chip ui-chip--danger up">上涨${pct}%</span>`;
   }
-  return `<span class="delta-chip down">下降${pct}%</span>`;
+  return `<span class="delta-chip ui-chip ui-chip--success down">下降${pct}%</span>`;
 }
 
 function resolveMetaForRows(rows: WarehouseStatRow[]) {

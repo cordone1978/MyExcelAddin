@@ -5,6 +5,7 @@ const path = require("path");
 const devCerts = require("office-addin-dev-certs");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
+const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 
 const urlDev = "https://localhost:3000/";
 const urlProd = "https://www.hnhtft.com.cn/";
@@ -96,6 +97,10 @@ module.exports = async (env, options) => {
           use: "html-loader",
         },
         {
+          test: /\.css$/,
+          use: [MiniCssExtractPlugin.loader, "css-loader"],
+        },
+        {
           test: /\.(png|jpg|jpeg|gif|ico)$/,
           type: "asset/resource",
           generator: {
@@ -105,6 +110,10 @@ module.exports = async (env, options) => {
       ],
     },
     plugins: [
+      new MiniCssExtractPlugin({
+        filename: "[name].css",
+        chunkFilename: "[name].css",
+      }),
       new HtmlWebpackPlugin({
         filename: "taskpane.html",
         template: "./src/taskpane/taskpane.html",
@@ -165,38 +174,6 @@ module.exports = async (env, options) => {
           {
             from: "assets/equipment",
             to: "assets/equipment",
-          },
-          {
-            from: "src/dialog/dialog.css",
-            to: "dialog.css",
-          },
-          {
-            from: "src/dialog/devmodify.css",
-            to: "devmodify.css",
-          },
-          {
-            from: "src/dialog/devmodifyv2.css",
-            to: "devmodifyv2.css",
-          },
-          {
-            from: "src/dialog/craftmodify.css",
-            to: "craftmodify.css",
-          },
-          {
-            from: "src/dialog/queryprice.css",
-            to: "queryprice.css",
-          },
-          {
-            from: "src/graph-editor/graphEditor.css",
-            to: "graphEditor.css",
-          },
-          {
-            from: "src/info-reference/infoReference.css",
-            to: "infoReference.css",
-          },
-          {
-            from: "src/quote-preview/quoteSummaryPreview.css",
-            to: "quoteSummaryPreview.css",
           },
           {
             from: "manifest*.xml",

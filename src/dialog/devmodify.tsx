@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import "./devmodify.css";
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
 import { API_PATHS, APP_URLS, CRAFTING_CONSTANTS } from "../shared/appConstants";
 import { CRAFTMODIFY_TEXT, DEVMODIFY_TEXT } from "../shared/businessTextConstants";
@@ -160,10 +161,10 @@ function DevModifyApp() {
 
   return (
     <div className="dialog-shell">
-      <div className="panel">
+      <div className="panel ui-surface">
         <div className="panel-header">
           <h2 className="title">{String(initData.deviceName || "").trim() || DEVMODIFY_HTML_TEXT.panelTitle}</h2>
-          <div className="device-name" style={{ display: "none" }}>{initData.deviceName || "-"}</div>
+          <div className="device-name">{initData.deviceName || "-"}</div>
         </div>
 
         <div className="form-grid">
@@ -173,7 +174,7 @@ function DevModifyApp() {
           {!isOutsourced ? (
             <>
               <div className="label">{DEVMODIFY_HTML_TEXT.materialLabel}</div>
-              <select className="input" value={currentMaterial} onChange={(e) => { setCurrentMaterial(e.target.value); setCurrentMaterialValue(materialMap.get(e.target.value) ?? null); }}>
+              <select className="input ui-input" value={currentMaterial} onChange={(e) => { setCurrentMaterial(e.target.value); setCurrentMaterialValue(materialMap.get(e.target.value) ?? null); }}>
                 <option value="">{DEVMODIFY_TEXT.selectPlaceholder}</option>
                 {materialOptions.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
               </select>
@@ -196,14 +197,14 @@ function DevModifyApp() {
         </div>
 
         <div className="actions">
-          <button className="btn btn-primary" onClick={submit}>{DEVMODIFY_HTML_TEXT.submitBtn}</button>
-          <button className="btn btn-secondary" onClick={() => Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.DEVMODIFY_CANCEL }))}>{DEVMODIFY_HTML_TEXT.cancelBtn}</button>
+          <button className="btn ui-btn ui-btn--primary" onClick={submit}>{DEVMODIFY_HTML_TEXT.submitBtn}</button>
+          <button className="btn ui-btn ui-btn--secondary" onClick={() => Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.DEVMODIFY_CANCEL }))}>{DEVMODIFY_HTML_TEXT.cancelBtn}</button>
         </div>
       </div>
 
-      <div className="preview">
-        <div className="preview-frame">
-          <div className="stage-plane" aria-hidden="true"></div>
+      <div className="preview ui-surface">
+        <div className="preview-frame ui-preview-surface">
+          <div className="stage-plane ui-preview-stage-plane" aria-hidden="true"></div>
           <div className="preview-layers">
             {(initData.previewLayers || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)).map((layer) => (
               <img key={layer.id} src={layer.imageUrl} alt={layer.name || ""} className={`preview-layer${layer.highlighted ? " highlighted" : " muted"}`} />
@@ -213,7 +214,7 @@ function DevModifyApp() {
         </div>
       </div>
 
-      <div className="craft-panel" style={{ display: isOutsourced ? "none" : "flex" }}>
+      <div className={`craft-panel ui-surface ${isOutsourced ? "is-hidden" : ""}`}>
         <div className="craft-title">{DEVMODIFY_HTML_TEXT.craftTitle}</div>
         <div className="craft-table">
           <div className="craft-row header">
@@ -233,10 +234,10 @@ function DevModifyApp() {
             <div className="craft-row" key={label}>
               <div className="craft-cell label">{label}</div>
               <div className="craft-cell">
-                <input className="input" type="text" value={craftAreas[index]?.area || ""} onChange={(e) => setCraftAreas((prev) => prev.map((item, i) => i === index ? { ...item, area: e.target.value } : item))} />
+                <input className="input ui-input" type="text" value={craftAreas[index]?.area || ""} onChange={(e) => setCraftAreas((prev) => prev.map((item, i) => i === index ? { ...item, area: e.target.value } : item))} />
               </div>
               <div className="craft-cell">
-                <select className="input" value={craftAreas[index]?.type || ""} onChange={(e) => setCraftAreas((prev) => prev.map((item, i) => i === index ? { ...item, type: e.target.value } : item))}>
+                <select className="input ui-input" value={craftAreas[index]?.type || ""} onChange={(e) => setCraftAreas((prev) => prev.map((item, i) => i === index ? { ...item, type: e.target.value } : item))}>
                   <option value="">{DEVMODIFY_TEXT.selectPlaceholder}</option>
                   {craftUnitOptions.map((item) => <option key={item.label} value={item.label}>{item.label}</option>)}
                 </select>
@@ -252,16 +253,16 @@ function DevModifyApp() {
         </div>
       </div>
 
-      <div className={`modal-mask ${priceModalOpen ? "" : "hidden"}`}>
-        <div className="modal">
-          <div className="modal-header">
-            <div className="modal-title">{DEVMODIFY_HTML_TEXT.priceModalTitle}</div>
-            <button className="icon-btn" onClick={() => setPriceModalOpen(false)}>x</button>
+      <div className={`modal-mask ui-modal-backdrop ${priceModalOpen ? "" : "hidden"}`}>
+        <div className="modal ui-modal-card ui-modal-card--wide">
+          <div className="modal-header ui-modal-header">
+            <div className="modal-title ui-modal-title">{DEVMODIFY_HTML_TEXT.priceModalTitle}</div>
+            <button className="icon-btn ui-icon-btn" onClick={() => setPriceModalOpen(false)}>x</button>
           </div>
-          <div className="modal-body">
+          <div className="modal-body ui-modal-body">
             <div className="search-row">
-              <input className="input" type="text" value={priceKeyword} placeholder={DEVMODIFY_HTML_TEXT.priceKeywordPlaceholder} onChange={(e) => setPriceKeyword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void searchPriceList(); }} />
-              <button className="btn btn-primary" onClick={() => void searchPriceList()}>{DEVMODIFY_HTML_TEXT.searchPriceBtn}</button>
+              <input className="input ui-input" type="text" value={priceKeyword} placeholder={DEVMODIFY_HTML_TEXT.priceKeywordPlaceholder} onChange={(e) => setPriceKeyword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void searchPriceList(); }} />
+              <button className="btn ui-btn ui-btn--primary" onClick={() => void searchPriceList()}>{DEVMODIFY_HTML_TEXT.searchPriceBtn}</button>
             </div>
             <div className="result-list">
               <div className="result-item header">

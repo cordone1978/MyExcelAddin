@@ -5,14 +5,18 @@
 }
 
 .craft-cell.unit {
-  color: #475569;
+  color: var(--color-neutral-600);
   font-size: 12px;
 }
 
 .craft-empty {
   padding: 12px;
-  border: 1px dashed #cbd5e1;
+  border: 1px dashed var(--color-border-default);
   border-radius: 8px;
-  color: #64748b;
-  background: #f8fafc;
+  color: var(--color-neutral-500);
+  background: var(--color-bg-page);
+}
+
+.craft-empty-action {
+  margin-top: 10px;
 }

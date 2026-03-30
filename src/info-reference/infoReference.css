@@ -1,3 +1,6 @@
+@import "../styles/tokens.css";
+@import "../styles/components.css";
+
 html,
 body {
   margin: 0;
@@ -5,9 +8,9 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
-  color: #0f172a;
-  background: #f8fafc;
+  font-family: var(--font-family-base);
+  color: var(--color-text-primary);
+  background: var(--color-bg-page);
 }
 
 #root {
@@ -19,10 +22,10 @@ body {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
-  gap: 10px;
+  gap: 12px;
   height: 100%;
   box-sizing: border-box;
-  padding: 10px;
+  padding: 12px;
 }
 
 .left,
@@ -31,19 +34,20 @@ body {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  gap: 10px;
+  gap: 12px;
 }
 
 .panel {
-  background: #fff;
-  border: 1px solid #dbe3ee;
-  border-radius: 8px;
-  padding: 8px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border-muted);
+  border-radius: var(--radius-lg);
+  padding: 12px;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   min-height: 0;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .left .panel,
@@ -69,48 +73,18 @@ body {
 }
 
 .listbox {
-  width: 100%;
   height: calc(100% - 30px);
-  min-height: 0;
-  border: 1px solid #d1d1d1;
-  border-radius: 4px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  background: #fafafa;
-  box-sizing: border-box;
 }
 
 .listbox-item {
-  padding: 2px 10px;
-  cursor: pointer;
-  border-bottom: 1px solid #e8e8e8;
-  transition: all 0.15s ease;
-  font-size: 14px;
-  color: #333;
-  display: flex;
-  align-items: center;
-  min-height: 24px;
+  font-size: 13px;
   line-height: 1;
 }
 
-.listbox-item:last-child {
-  border-bottom: none;
-}
-
-.listbox-item:hover {
-  background: #e8f4fd;
-}
-
-.listbox-item.selected {
-  background: #0078d4;
-  color: #fff;
-  font-weight: 500;
-}
-
 .listbox-placeholder {
-  padding: 10px 12px;
+  padding: 12px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--color-neutral-500);
 }
 
 .grow {
@@ -128,13 +102,13 @@ body {
 
 .meta-box {
   margin-top: 8px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: #f8fbff;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-info-bg);
   padding: 8px 10px;
   font-size: 12px;
-  color: #334155;
-  line-height: 1.5;
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
 }
 
 .meta-grid {
@@ -144,7 +118,7 @@ body {
 }
 
 .meta-item b {
-  color: #0f172a;
+  color: var(--color-text-primary);
   margin-right: 4px;
 }
 
@@ -159,19 +133,19 @@ body {
 #quoteTable tbody td:nth-child(odd),
 #dbDetailTable thead th:nth-child(odd),
 #dbDetailTable tbody td:nth-child(odd) {
-  background: #ffffff;
+  background: var(--color-bg-card-solid);
 }
 
 #quoteTable thead th:nth-child(even),
 #quoteTable tbody td:nth-child(even),
 #dbDetailTable thead th:nth-child(even),
 #dbDetailTable tbody td:nth-child(even) {
-  background: #eef6ff;
+  background: var(--color-bg-accent-soft);
 }
 
 .grid th,
 .grid td {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border-subtle);
   padding: 5px 6px;
   font-size: 12px;
   vertical-align: top;
@@ -188,8 +162,8 @@ body {
 }
 
 .sum-row td {
-  background: #2f6fa6 !important;
-  color: #ffffff;
+  background: var(--color-brand-primary) !important;
+  color: var(--color-text-inverse);
   font-weight: 600;
 }
 
@@ -220,18 +194,18 @@ body {
 }
 
 .delta-chip.up {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 
 .delta-chip.down {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-bg);
+  color: var(--color-success);
 }
 
 .delta-chip.flat {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-soft);
+  color: var(--color-warning-strong);
 }
 
 .db-summary {
@@ -248,9 +222,9 @@ body {
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  color: #334155;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-page);
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 
@@ -260,3 +234,31 @@ body {
     grid-template-rows: none;
   }
 }
+
+@media (max-width: 720px) {
+  body {
+    overflow: auto;
+  }
+
+  .shell {
+    gap: 8px;
+    padding: 8px;
+    height: auto;
+    min-height: 100%;
+  }
+
+  .left,
+  .right {
+    gap: 8px;
+  }
+
+  .panel {
+    padding: 8px;
+  }
+
+  .meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+

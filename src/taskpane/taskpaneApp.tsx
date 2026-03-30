@@ -67,7 +67,7 @@ export function TaskpaneApp({
   const showActionPanel = !!state.currentUser;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell ui-page-shell">
       <header className="ms-welcome__header app-header">
         <img src="../../assets/logo-large.png" alt="报价系统" title="报价系统" />
         <h1 className="app-title">报价系统</h1>
@@ -161,24 +161,24 @@ export function TaskpaneApp({
                 {!state.isResetPasswordMode ? (
                   <>
                     <button
-                      className="dialog-btn btn-primary"
+                      className="ui-btn ui-btn--primary"
                       id="loginBtn"
                       disabled={!!state.buttonDisabled.loginBtn}
                       onClick={handlers.onLoginClick}
                     >
                       {loginText}
                     </button>
-                    <button className="dialog-btn btn-secondary" id="resetPasswordBtn" onClick={handlers.onResetPasswordClick}>
+                    <button className="ui-btn ui-btn--secondary" id="resetPasswordBtn" onClick={handlers.onResetPasswordClick}>
                       {state.texts.resetPasswordBtn}
                     </button>
                   </>
                 ) : (
                   <>
-                    <button className="dialog-btn btn-secondary" id="cancelResetPasswordBtn" onClick={handlers.onCancelResetPasswordClick}>
+                    <button className="ui-btn ui-btn--secondary" id="cancelResetPasswordBtn" onClick={handlers.onCancelResetPasswordClick}>
                       {state.texts.cancelResetPasswordBtn}
                     </button>
                     <button
-                      className="dialog-btn btn-primary"
+                      className="ui-btn ui-btn--primary"
                       id="confirmResetPasswordBtn"
                       disabled={!!state.buttonDisabled.confirmResetPasswordBtn}
                       onClick={handlers.onConfirmResetPasswordClick}
@@ -201,40 +201,40 @@ export function TaskpaneApp({
                 {state.actionFeedback}
               </p>
               <div className="btn-grid">
-                <button className="dialog-btn btn-secondary" id="addDeviceBtn" onClick={handlers.onAddDeviceClick}>
+                <button className="ui-btn ui-btn--secondary" id="addDeviceBtn" onClick={handlers.onAddDeviceClick}>
                   {state.texts.addDeviceBtn}
                 </button>
-                <button className="dialog-btn btn-secondary" id="modifyDeviceBtn" onClick={handlers.onModifyDeviceClick}>
+                <button className="ui-btn ui-btn--secondary" id="modifyDeviceBtn" onClick={handlers.onModifyDeviceClick}>
                   {state.texts.modifyDeviceBtn}
                 </button>
                 <div id="modifyDeviceDrawer" className={`template-action-drawer ${state.isModifyDeviceDrawerOpen ? "" : "is-hidden"}`}>
-                  <button className="dialog-btn btn-secondary" id="modifyDeviceLegacyBtn" onClick={handlers.onModifyDeviceLegacyClick}>
+                  <button className="ui-btn ui-btn--secondary" id="modifyDeviceLegacyBtn" onClick={handlers.onModifyDeviceLegacyClick}>
                     {state.texts.modifyDeviceLegacyBtn}
                   </button>
-                  <button className="dialog-btn btn-secondary" id="modifyDeviceNewBtn" onClick={handlers.onModifyDeviceNewClick}>
+                  <button className="ui-btn ui-btn--secondary" id="modifyDeviceNewBtn" onClick={handlers.onModifyDeviceNewClick}>
                     {state.texts.modifyDeviceNewBtn}
                   </button>
                 </div>
-                <button className="dialog-btn btn-secondary" id="generateSheetBtn" onClick={handlers.onGenerateSheetClick}>
+                <button className="ui-btn ui-btn--secondary" id="generateSheetBtn" onClick={handlers.onGenerateSheetClick}>
                   {state.texts.generateSheetBtn}
                 </button>
-                <button className="dialog-btn btn-secondary" id="queryPriceBtn" onClick={handlers.onQueryPriceClick}>
+                <button className="ui-btn ui-btn--secondary" id="queryPriceBtn" onClick={handlers.onQueryPriceClick}>
                   {state.texts.queryPriceBtn}
                 </button>
-                <button className="dialog-btn btn-secondary" id="graphEditorBtn" onClick={handlers.onGraphEditorClick}>
+                <button className="ui-btn ui-btn--secondary" id="graphEditorBtn" onClick={handlers.onGraphEditorClick}>
                   {state.texts.graphEditorBtn}
                 </button>
-                <button className="dialog-btn btn-secondary" id="infoReferenceBtn" onClick={handlers.onInfoReferenceClick}>
+                <button className="ui-btn ui-btn--secondary" id="infoReferenceBtn" onClick={handlers.onInfoReferenceClick}>
                   {state.texts.infoReferenceBtn}
                 </button>
-                <button className="dialog-btn btn-secondary" id="generateQuoteBtn" onClick={handlers.onGenerateQuoteClick}>
+                <button className="ui-btn ui-btn--secondary" id="generateQuoteBtn" onClick={handlers.onGenerateQuoteClick}>
                   {state.texts.generateQuoteBtn}
                 </button>
                 <div id="generateTemplateDrawer" className={`template-action-drawer ${state.isGenerateTemplateDrawerOpen ? "" : "is-hidden"}`}>
-                  <button className="dialog-btn btn-secondary" id="generateSimpleQuoteBtn" onClick={handlers.onGenerateSimpleQuoteClick}>
+                  <button className="ui-btn ui-btn--secondary" id="generateSimpleQuoteBtn" onClick={handlers.onGenerateSimpleQuoteClick}>
                     {state.texts.generateSimpleQuoteBtn}
                   </button>
-                  <button className="dialog-btn btn-secondary" id="generateDetailQuoteBtn" onClick={handlers.onGenerateDetailQuoteClick}>
+                  <button className="ui-btn ui-btn--secondary" id="generateDetailQuoteBtn" onClick={handlers.onGenerateDetailQuoteClick}>
                     {state.texts.generateDetailQuoteBtn}
                   </button>
                 </div>
@@ -243,7 +243,7 @@ export function TaskpaneApp({
           ) : null}
 
           {state.currentUser ? (
-            <div className={`account-dock ${state.isAccountDockExpanded ? "is-expanded" : ""}`} id="accountDock">
+            <div className={`account-dock ui-surface ui-surface--compact ${state.isAccountDockExpanded ? "is-expanded" : ""}`} id="accountDock">
               <button className="account-dock-toggle" id="accountDockToggle" onClick={handlers.onAccountDockToggle}>
                 <span className="account-dock-label" id="accountDockLabel">
                   {accountDockLabel}
@@ -256,22 +256,22 @@ export function TaskpaneApp({
           ) : null}
 
           <div
-            className={`confirm-modal ${state.generateTemplateConfirmOpen ? "" : "is-hidden"}`}
+            className={`confirm-modal ui-modal-backdrop ${state.generateTemplateConfirmOpen ? "" : "is-hidden"}`}
             id="generateTemplateConfirmModal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="generateTemplateConfirmTitle"
           >
-            <div className="confirm-modal-card">
-              <h3 className="confirm-modal-title" id="generateTemplateConfirmTitle">
+            <div className="confirm-modal-card ui-modal-card">
+              <h3 className="confirm-modal-title ui-modal-title" id="generateTemplateConfirmTitle">
                 确认生成模板
               </h3>
-              <p className="confirm-modal-message">生成新模板会清除掉原有模板及所有数据，是否确定继续。</p>
-              <div className="confirm-modal-actions">
-                <button className="dialog-btn btn-secondary" id="confirmGenerateTemplateCancel" type="button" onClick={handlers.onConfirmGenerateTemplateCancel}>
+              <p className="confirm-modal-message ui-modal-message">生成新模板会清除掉原有模板及所有数据，是否确定继续。</p>
+              <div className="confirm-modal-actions ui-modal-actions">
+                <button className="ui-btn ui-btn--secondary" id="confirmGenerateTemplateCancel" type="button" onClick={handlers.onConfirmGenerateTemplateCancel}>
                   取消
                 </button>
-                <button className="dialog-btn btn-primary" id="confirmGenerateTemplateOk" type="button" onClick={handlers.onConfirmGenerateTemplateOk}>
+                <button className="ui-btn ui-btn--primary" id="confirmGenerateTemplateOk" type="button" onClick={handlers.onConfirmGenerateTemplateOk}>
                   确定
                 </button>
               </div>
@@ -279,21 +279,21 @@ export function TaskpaneApp({
           </div>
 
           <div
-            className={`confirm-modal ${state.operationErrorOpen ? "" : "is-hidden"}`}
+            className={`confirm-modal ui-modal-backdrop ${state.operationErrorOpen ? "" : "is-hidden"}`}
             id="operationErrorModal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="operationErrorTitle"
           >
-            <div className="confirm-modal-card">
-              <h3 className="confirm-modal-title" id="operationErrorTitle">
+            <div className="confirm-modal-card ui-modal-card">
+              <h3 className="confirm-modal-title ui-modal-title" id="operationErrorTitle">
                 操作失败
               </h3>
-              <p className="confirm-modal-message" id="operationErrorMessage">
+              <p className="confirm-modal-message ui-modal-message" id="operationErrorMessage">
                 {state.operationErrorMessage || "请稍后重试。"}
               </p>
-              <div className="confirm-modal-actions single">
-                <button className="dialog-btn btn-primary" id="operationErrorOk" type="button" onClick={handlers.onOperationErrorOk}>
+              <div className="confirm-modal-actions ui-modal-actions ui-modal-actions--single single">
+                <button className="ui-btn ui-btn--primary" id="operationErrorOk" type="button" onClick={handlers.onOperationErrorOk}>
                   确定
                 </button>
               </div>

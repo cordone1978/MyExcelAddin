@@ -1,0 +1,107 @@
+:root {
+  --font-family-base: "Segoe UI", "Microsoft YaHei UI", Tahoma, Arial, sans-serif;
+
+  --color-brand-primary: #0284c7;
+  --color-brand-primary-hover: #0369a1;
+  --color-brand-gradient-end: #0ea5e9;
+  --color-brand-soft: #e0f2fe;
+
+  --color-text-primary: #0f172a;
+  --color-text-body: #1f2937;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-inverse: #ffffff;
+
+  --color-bg-page: #f8fafc;
+  --color-bg-page-alt: #f1f5f9;
+  --color-bg-page-muted: #eef2f7;
+  --color-bg-page-soft: #f3f6fa;
+  --color-bg-card: rgba(255, 255, 255, 0.92);
+  --color-bg-card-strong: rgba(255, 255, 255, 0.96);
+  --color-bg-card-solid: #ffffff;
+  --color-bg-subtle: #f7f9fc;
+  --color-bg-subtle-strong: #f4f7fb;
+  --color-bg-hover: #e0f2fe;
+  --color-bg-selected: #0284c7;
+  --color-bg-selected-soft: #dbeeff;
+  --color-bg-accent-soft: #eef6ff;
+  --color-bg-accent-pale: #f0f9ff;
+  --color-bg-accent-mist: #ecfeff;
+  --color-bg-accent-track: rgba(2, 132, 199, 0.08);
+  --color-bg-overlay: rgba(15, 23, 42, 0.36);
+  --color-bg-overlay-strong: rgba(18, 29, 45, 0.9);
+
+  --color-border-default: #cbd5e1;
+  --color-border-muted: #dbe3ee;
+  --color-border-subtle: #e2e8f0;
+  --color-border-strong: #d7e3f2;
+  --color-border-accent-soft: rgba(2, 132, 199, 0.18);
+  --color-border-overlay: rgba(148, 163, 184, 0.24);
+  --color-border-overlay-strong: rgba(148, 163, 184, 0.28);
+  --color-border-inverse-soft: rgba(255, 255, 255, 0.36);
+  --color-border-inverse: rgba(255, 255, 255, 0.5);
+
+  --color-success: #166534;
+  --color-success-bg: #dcfce7;
+  --color-success-border: #bbf7d0;
+  --color-teal: #0f766e;
+  --color-teal-bg: #ccfbf1;
+  --color-teal-border: #99f6e4;
+  --color-warning: #9a3412;
+  --color-warning-bg: #fff7ed;
+  --color-warning-border: #fed7aa;
+  --color-warning-strong: #92400e;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #b91c1c;
+  --color-danger-bg: #fee2e2;
+  --color-danger-soft: #fff1ef;
+  --color-danger-soft-strong: #ffe5e1;
+  --color-danger-border: #edb8af;
+  --color-info: #075985;
+  --color-info-bg: #e0f2fe;
+  --color-info-soft: #93c5fd;
+  --color-neutral-300: #94a3b8;
+  --color-neutral-500: #64748b;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #2f3a48;
+  --color-neutral-900: #245279;
+  --color-divider-soft: #e6e0e2;
+  --color-divider-muted: #ececec;
+  --color-divider-subtle: #f0f0f0;
+  --color-scrollbar-track: #f1f1f1;
+  --color-scrollbar-thumb: #c1c1c1;
+  --color-scrollbar-thumb-hover: #a8a8a8;
+  --color-doc-page: #f5f5f5;
+  --color-doc-border: #000000;
+  --color-doc-section: #16a6dc;
+  --color-doc-row: #f3f3f3;
+  --color-doc-header: #eef3f7;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+
+  --line-height-tight: 1.2;
+  --line-height-body: 1.45;
+  --line-height-relaxed: 1.5;
+
+  --shadow-sm: 0 4px 12px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 12px 28px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 18px 40px rgba(15, 23, 42, 0.18);
+  --shadow-brand-md: 0 8px 18px rgba(2, 132, 199, 0.2);
+  --shadow-brand-lg: 0 10px 22px rgba(2, 132, 199, 0.24);
+  --shadow-focus-brand: 0 0 0 3px rgba(2, 132, 199, 0.15);
+  --shadow-focus-brand-strong: 0 0 0 3px rgba(59, 130, 246, 0.18);
+  --shadow-overlay: 0 18px 40px rgba(15, 23, 42, 0.24);
+
+  --motion-fast: 120ms;
+  --motion-base: 150ms;
+}
