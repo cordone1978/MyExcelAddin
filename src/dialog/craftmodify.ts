@@ -1,6 +1,7 @@
 ﻿/* global Office, document, console, HTMLInputElement, HTMLSelectElement, HTMLDivElement, HTMLButtonElement, HTMLOptionElement */
 import "./craftmodify.css";
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
+import { sendToParent, onParentMessage } from "../shared/dialogBridge";
 import { CRAFTING_CONSTANTS } from "../shared/appConstants";
 import { CRAFTMODIFY_TEXT } from "../shared/businessTextConstants";
 import { CRAFTMODIFY_HTML_TEXT } from "../shared/dialogHtmlTextConstants";
@@ -59,10 +60,9 @@ Office.onReady(() => {
   updateTotals();
 
   try {
-    Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.CRAFTMODIFY_READY }));
-    Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (args) => {
+    sendToParent({ action: DIALOG_ACTIONS.CRAFTMODIFY_READY });
+    onParentMessage((payload: any) => {
       try {
-        const payload = JSON.parse(args.message);
         if (payload?.action === DIALOG_ACTIONS.INIT && payload.data) {
           applyInit(payload.data as CraftModifyInit);
         }
@@ -113,20 +113,18 @@ function bindEvents() {
   });
 
   submitBtn.addEventListener("click", () => {
-    Office.context.ui.messageParent(
-      JSON.stringify({
-        action: DIALOG_ACTIONS.CRAFTMODIFY_SUBMIT,
-        data: {
-          items: collectData(),
-          craftPrice: parseNumber(grandTotalLabel.textContent) || 0,
-          desc: buildCraftingDescription(),
-        },
-      })
-    );
+    sendToParent({
+      action: DIALOG_ACTIONS.CRAFTMODIFY_SUBMIT,
+      data: {
+        items: collectData(),
+        craftPrice: parseNumber(grandTotalLabel.textContent) || 0,
+        desc: buildCraftingDescription(),
+      },
+    });
   });
 
   cancelBtn.addEventListener("click", () => {
-    Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.CRAFTMODIFY_CANCEL }));
+    sendToParent({ action: DIALOG_ACTIONS.CRAFTMODIFY_CANCEL });
   });
 }
 

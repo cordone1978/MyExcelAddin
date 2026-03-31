@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./queryprice.css";
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
+import { sendToParent, onParentMessage } from "../shared/dialogBridge";
 import { API_PATHS, APP_URLS, UI_DEFAULTS } from "../shared/appConstants";
 import { DIALOG_TEXT, QUERYPRICE_HTML_TEXT } from "../shared/businessTextConstants";
 
@@ -28,9 +29,8 @@ function QueryPriceApp() {
 
   useEffect(() => {
     document.title = QUERYPRICE_HTML_TEXT.title;
-    Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: Office.DialogParentMessageReceivedEventArgs) => {
+    onParentMessage((payload: any) => {
       try {
-        const payload = JSON.parse(arg?.message || "{}");
         if (payload?.action === DIALOG_ACTIONS.QUERYPRICE_WARNING) {
           setWarning(String(payload.message || UI_DEFAULTS.defaultWarningMessage));
         }
@@ -76,20 +76,18 @@ function QueryPriceApp() {
     }
     const brand = extractBrand(selectedItem.ItemDesc || "");
     const material = extractMaterial(selectedItem.ItemDesc || "");
-    Office.context.ui.messageParent(
-      JSON.stringify({
-        action: DIALOG_ACTIONS.QUERYPRICE_REPLACE,
-        data: {
-          name: selectedItem.ItemName || "",
-          desc: (selectedItem.ItemDesc || "").trim(),
-          type: selectedItem.ItemType || "",
-          brand,
-          material,
-          unit: selectedItem.ItemUnit || "",
-          price: selectedItem.ItemPrice || 0,
-        },
-      })
-    );
+    sendToParent({
+      action: DIALOG_ACTIONS.QUERYPRICE_REPLACE,
+      data: {
+        name: selectedItem.ItemName || "",
+        desc: (selectedItem.ItemDesc || "").trim(),
+        type: selectedItem.ItemType || "",
+        brand,
+        material,
+        unit: selectedItem.ItemUnit || "",
+        price: selectedItem.ItemPrice || 0,
+      },
+    });
   }
 
   return (
@@ -158,7 +156,7 @@ function QueryPriceApp() {
           />
         </div>
         <div className="actions">
-          <button className="btn ui-btn ui-btn--secondary" onClick={() => Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.QUERYPRICE_CANCEL }))}>
+          <button className="btn ui-btn ui-btn--secondary" onClick={() => sendToParent({ action: DIALOG_ACTIONS.QUERYPRICE_CANCEL })}>
             {QUERYPRICE_HTML_TEXT.btnCancel}
           </button>
           <button className="btn ui-btn ui-btn--primary" onClick={() => void handleSearch()}>

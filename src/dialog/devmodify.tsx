@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./devmodify.css";
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
+import { sendToParent, onParentMessage } from "../shared/dialogBridge";
 import { API_PATHS, APP_URLS, CRAFTING_CONSTANTS } from "../shared/appConstants";
 import { CRAFTMODIFY_TEXT, DEVMODIFY_TEXT } from "../shared/businessTextConstants";
 import { DEVMODIFY_HTML_TEXT } from "../shared/dialogHtmlTextConstants";
@@ -64,10 +65,9 @@ function DevModifyApp() {
 
   useEffect(() => {
     document.title = DEVMODIFY_HTML_TEXT.title;
-    Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.DEVMODIFY_READY }));
-    Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (args) => {
+    sendToParent({ action: DIALOG_ACTIONS.DEVMODIFY_READY });
+    onParentMessage((payload: any) => {
       try {
-        const payload = JSON.parse(args.message);
         if (payload?.action === DIALOG_ACTIONS.INIT && payload.data) {
           const data = payload.data as DevModifyInit;
           setInitData(data);
@@ -156,7 +156,7 @@ function DevModifyApp() {
       refreshedPrice,
       isPriceChanged,
     };
-    Office.context.ui.messageParent(JSON.stringify(payload));
+    sendToParent(payload);
   }
 
   return (
@@ -183,7 +183,7 @@ function DevModifyApp() {
               <div className="value">{formatPrice(currentMaterialValue)}</div>
 
               <div className="label">{DEVMODIFY_TEXT.craftProcessLabel}</div>
-              <button className="text-btn readonly" aria-disabled="true">{formatPrice(craftPrice)}</button>
+              <div className="value">{formatPrice(craftPrice)}</div>
 
               <div className="label">{DEVMODIFY_HTML_TEXT.refreshedLabel}</div>
               <div className="value emphasis">{formatPrice(refreshedPrice)}</div>
@@ -198,7 +198,7 @@ function DevModifyApp() {
 
         <div className="actions">
           <button className="btn ui-btn ui-btn--primary" onClick={submit}>{DEVMODIFY_HTML_TEXT.submitBtn}</button>
-          <button className="btn ui-btn ui-btn--secondary" onClick={() => Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.DEVMODIFY_CANCEL }))}>{DEVMODIFY_HTML_TEXT.cancelBtn}</button>
+          <button className="btn ui-btn ui-btn--secondary" onClick={() => sendToParent({ action: DIALOG_ACTIONS.DEVMODIFY_CANCEL })}>{DEVMODIFY_HTML_TEXT.cancelBtn}</button>
         </div>
       </div>
 

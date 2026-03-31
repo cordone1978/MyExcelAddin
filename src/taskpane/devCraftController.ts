@@ -42,10 +42,12 @@ type SelectedComponentContext = {
   component: ComponentRecord;
 };
 
+import type { DialogHandle } from "../shared/dialogBridge";
+
 type DisplayDialogFn = (
   path: string,
   size?: { width: number; height: number }
-) => Promise<Office.Dialog>;
+) => Promise<DialogHandle>;
 
 function getDialogMessage(args: { message: string; origin: string } | { error: number }) {
   return "message" in args ? args.message : "";
@@ -112,11 +114,9 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
   ) {
     const dialog = await displayDialog(dialogPath, dialogSize);
 
-    dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
-      const payload = JSON.parse(getDialogMessage(args) || "{}");
-
+    dialog.onMessage(async (payload: any) => {
       if (payload?.action === DIALOG_ACTIONS.DEVMODIFY_READY) {
-        dialog.messageChild(JSON.stringify({ action: DIALOG_ACTIONS.INIT, data: initData }));
+        dialog.send({ action: DIALOG_ACTIONS.INIT, data: initData });
         return;
       }
 
@@ -145,11 +145,9 @@ export function createDevCraftController(displayDialog: DisplayDialogFn) {
       const dialog = await displayDialog(DIALOG_PATHS.craftModify);
       craftModifyState = initData.state;
 
-      dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
-        const payload = JSON.parse(getDialogMessage(args) || "{}");
-
+      dialog.onMessage(async (payload: any) => {
         if (payload?.action === DIALOG_ACTIONS.CRAFTMODIFY_READY) {
-          dialog.messageChild(JSON.stringify({ action: DIALOG_ACTIONS.INIT, data: initData.data }));
+          dialog.send({ action: DIALOG_ACTIONS.INIT, data: initData.data });
           return;
         }
 

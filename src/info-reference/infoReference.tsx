@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./infoReference.css";
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
+import { sendToParent, onParentMessage } from "../shared/dialogBridge";
 
 /* global Office */
 
@@ -62,9 +63,8 @@ function InfoReferenceApp() {
   const [selectedWarehouseKey, setSelectedWarehouseKey] = useState("");
 
   useEffect(() => {
-    Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: any) => {
+    onParentMessage((payload: any) => {
       try {
-        const payload = JSON.parse(String(arg?.message || "{}"));
         if (payload?.type === INFO_REF_DEVICES_MSG) {
           const data = payload?.data;
           const normalized: DevicesPayload = Array.isArray(data)
@@ -86,7 +86,7 @@ function InfoReferenceApp() {
       }
     });
 
-    Office.context.ui.messageParent(JSON.stringify({ type: INFO_REF_REQUEST_DEVICES_MSG }));
+    sendToParent({ type: INFO_REF_REQUEST_DEVICES_MSG });
   }, []);
 
   useEffect(() => {

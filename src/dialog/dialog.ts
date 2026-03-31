@@ -3,6 +3,7 @@ import React from "react";
 import { createRoot, Root } from "react-dom/client";
 import "./dialog.css";
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
+import { sendToParent } from "../shared/dialogBridge";
 import { DIALOG_HTML_TEXT, DIALOG_TEXT } from "../shared/businessTextConstants";
 import { buildEquipmentImageUrl } from "../shared/equipmentImagePath";
 import type { DialogPreviewController, PreviewItem } from "../dialog-preview/types";
@@ -75,7 +76,7 @@ function renderDialogApp() {
         },
         onProjectClick: (id: number | string, name: string) => {
           const project = dialogViewState.projects.find((item) => String(item.id) === String(id));
-          void selectProject(id, name, project?.imageUrl || "", project?.baseDescription || "");
+          void selectProject(id, name, project?.imageUrl || "", project?.baseDescription || "", project?.standardPrice ?? null);
         },
         onDetailToggle: (id: number | string, checked: boolean) => {
           const item = dialogViewState.details.find((x) => String(x.id) === String(id));
@@ -168,6 +169,7 @@ let currentCategoryName: string | null = null;
 let currentProjectId: number | string | null = null;
 let currentProjectName: string | null = null;
 let currentProjectBaseDescription = "";
+let currentProjectStandardPrice: number | null = null;
 let currentMaterialPreset = "";
 let selectedDetails = new Map<number | string, PreviewSelectionData>(); // key=id, value={name, imageUrl, layer}
 let selectedAnnotations = new Map<string, PreviewSelectionData>(); // key=id, value={name, pic_level, imageUrl, assemblyGroup}
@@ -521,18 +523,20 @@ function displayProjects(projects: Array<Record<string, unknown>>) {
     name: project.name,
     imageUrl: project.image_url,
     baseDescription: project.base_description,
+    standardPrice: project.standard_price != null ? Number(project.standard_price) : null,
   })) as DialogProjectItem[];
 
   renderDialogApp();
 }
 
 // 5. 选择产品型号 → 加载组件详情
-async function selectProject(projectId: number | string, projectName: string, imageUrl: string, baseDescription: string) {
+async function selectProject(projectId: number | string, projectName: string, imageUrl: string, baseDescription: string, standardPrice?: number | null) {
   if (!currentCategoryId) return;
 
   currentProjectId = projectId;
   currentProjectName = projectName;
   currentProjectBaseDescription = String(baseDescription || "");
+  currentProjectStandardPrice = standardPrice != null ? Number(standardPrice) : null;
   selectedDetails.clear();
   selectedAnnotations.clear();
   setDetailBaseDescription(currentProjectBaseDescription);
@@ -995,6 +999,7 @@ async function confirmData() {
     projectId: currentProjectId,
     project: currentProjectName,
     materialPreset: currentMaterialPreset,
+    standardPrice: currentProjectStandardPrice,
     details: Array.from(selectedDetails.entries()).map(([id, data]) => ({ id, name: data.name })),
     annotations: Array.from(selectedAnnotations.entries()).map(([id, data]) => ({
       id,
@@ -1016,7 +1021,7 @@ async function confirmData() {
   });
 
   // 发送给父窗口
-  Office.context.ui.messageParent(JSON.stringify(result));
+  sendToParent(result);
 }
 
 // 暴露函数到全局作用域，供 HTML onclick 使用

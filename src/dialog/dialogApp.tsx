@@ -17,6 +17,7 @@ export type DialogProjectItem = {
   name: string;
   imageUrl?: string;
   baseDescription?: string;
+  standardPrice?: number | null;
 };
 
 export type DialogDetailItem = {

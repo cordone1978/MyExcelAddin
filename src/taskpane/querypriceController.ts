@@ -17,7 +17,7 @@ type QueryPriceSelectionCheck = {
 type DisplayDialogFn = (
   path: string,
   size?: { width: number; height: number }
-) => Promise<Office.Dialog>;
+) => Promise<import("../shared/dialogBridge").DialogHandle>;
 
 function getDialogMessage(args: { message: string; origin: string } | { error: number }) {
   return "message" in args ? args.message : "";
@@ -35,18 +35,11 @@ export async function openQueryPriceDialogControllerWithOptions(
     const path = buildQueryPriceDialogPath(options?.initialKeyword);
     const dialog = await displayDialog(path, DIALOG_SIZES.queryPrice);
 
-    dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
-      const payload = JSON.parse(getDialogMessage(args) || "{}");
-
+    dialog.onMessage(async (payload: any) => {
       if (payload?.action === DIALOG_ACTIONS.QUERYPRICE_REPLACE) {
         const check = await validateSelectionForQueryPrice();
         if (!check.valid) {
-          dialog.messageChild(
-            JSON.stringify({
-              action: DIALOG_ACTIONS.QUERYPRICE_WARNING,
-              message: check.message,
-            })
-          );
+          dialog.send({ action: DIALOG_ACTIONS.QUERYPRICE_WARNING, message: check.message });
           return;
         }
 
@@ -54,13 +47,11 @@ export async function openQueryPriceDialogControllerWithOptions(
           await handleQueryPriceReplace(payload.data as QueryPriceSelectedData, check);
           dialog.close();
         } catch (error) {
-          console.error("鏌ヨ浠锋牸鏇挎崲澶辫触:", error);
-          dialog.messageChild(
-            JSON.stringify({
-              action: DIALOG_ACTIONS.QUERYPRICE_WARNING,
-              message: (error as Error).message || FLOW_MESSAGES.requestFailed,
-            })
-          );
+          console.error("查询价格替换失败:", error);
+          dialog.send({
+            action: DIALOG_ACTIONS.QUERYPRICE_WARNING,
+            message: (error as Error).message || FLOW_MESSAGES.requestFailed,
+          });
         }
         return;
       }

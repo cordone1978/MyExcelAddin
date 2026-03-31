@@ -39,7 +39,8 @@ export async function insertComponentsToConfigSheet(
   categoryName: string,
   projectName: string,
   components: any[],
-  systemName?: string
+  systemName?: string,
+  deviceTotalPrice?: number
 ) {
   if (!components || components.length === 0) {
     return;
@@ -168,7 +169,11 @@ export async function insertComponentsToConfigSheet(
       sheet.getRange(`M${dataStartRow}:M${dataEndRow}`).formulas = mFormulas;
       groups.forEach((group) => {
         try {
-          sheet.getRange(`N${group.start}`).formulas = [[`=SUM(M${group.start}:M${group.end})`]];
+          if (deviceTotalPrice != null && deviceTotalPrice > 0) {
+            sheet.getRange(`N${group.start}`).values = [[deviceTotalPrice]];
+          } else {
+            sheet.getRange(`N${group.start}`).formulas = [[`=SUM(M${group.start}:M${group.end})`]];
+          }
           sheet.getRange(`O${group.start}`).formulas = [[`=N${group.start}*Q${group.start}`]];
           sheet.getRange(`P${group.start}`).formulas = [[`=O${group.start}*J${group.start}`]];
         } catch (error) {

@@ -147,7 +147,8 @@ router.get(API_ROUTES.projects, requireAuth, async (req, res) => {
           p.product_id as id,
           p.product_model as name,
           COALESCE(p.base_description, '') as base_description,
-          '' as image_url
+          '' as image_url,
+          p.standard_price
         FROM ht_sales_products p
         INNER JOIN ht_sales_product_industry_config pi
           ON pi.product_id = p.product_id
@@ -168,7 +169,8 @@ router.get(API_ROUTES.projects, requireAuth, async (req, res) => {
           product_id as id,
           product_model as name,
           COALESCE(base_description, '') as base_description,
-          '' as image_url
+          '' as image_url,
+          standard_price
         FROM ht_sales_products
         WHERE product_type_id = ? AND is_active = 1
         ORDER BY (sort_by IS NULL) ASC, sort_by ASC, product_model ASC

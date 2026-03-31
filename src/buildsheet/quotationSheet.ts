@@ -275,7 +275,7 @@ async function buildConfigSheet(context: Excel.RequestContext) {
     sheet.getRange(`M${row}`).format.font.bold = true;
 
     sheet.getRange(`N${row}`).formulas = [
-      [buildConfigSectionTotalFormula(row, "M", "M", "成本总价")],
+      [buildConfigSectionTotalFormula(row, "M", "N", "成本总价")],
     ];
     sheet.getRange(`N${row}`).format.horizontalAlignment = "Center";
     sheet.getRange(`N${row}`).format.font.bold = true;

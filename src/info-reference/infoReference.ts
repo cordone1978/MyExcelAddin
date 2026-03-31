@@ -1,6 +1,7 @@
 /* global Office, console, document, window, URL, fetch, HTMLDivElement, HTMLTableSectionElement, HTMLTableElement */
 
 import { API_PATHS, APP_URLS } from "../shared/appConstants";
+import { sendToParent, onParentMessage } from "../shared/dialogBridge";
 
 type DeviceRow = {
   cToP: string[];
@@ -114,11 +115,7 @@ async function loadDevices() {
   debugLog("loadDevices start");
   setStatus("正在读取报价配置表...");
   try {
-    Office.context.ui.messageParent(
-      JSON.stringify({
-        type: INFO_REF_REQUEST_DEVICES_MSG,
-      })
-    );
+    sendToParent({ type: INFO_REF_REQUEST_DEVICES_MSG });
     debugLog("request devices message sent to parent");
   } catch (error) {
     debugLog("failed to send request_devices message", error);
@@ -127,9 +124,8 @@ async function loadDevices() {
 }
 
 function bindParentMessageEvents() {
-  Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: Office.DialogParentMessageReceivedEventArgs) => {
+  onParentMessage((payload: any) => {
     try {
-      const payload = JSON.parse(String(arg?.message || "{}"));
       debugLog("received parent message", payload?.type);
       if (payload?.type === INFO_REF_DEVICES_MSG) {
         const data = payload?.data;
@@ -156,7 +152,7 @@ function bindParentMessageEvents() {
         setStatus(`读取设备失败：${String(payload?.message || "未知错误")}`, true);
       }
     } catch (error) {
-      debugLog("failed to parse parent message", error);
+      debugLog("failed to handle parent message", error);
       setStatus(`读取设备失败：${String((error as Error)?.message || error)}`, true);
     }
   });

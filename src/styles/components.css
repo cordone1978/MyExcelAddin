@@ -300,8 +300,8 @@
 .ui-listbox-item {
   display: flex;
   align-items: center;
-  min-height: 32px;
-  padding: 8px 12px;
+  min-height: 28px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--color-border-subtle);
   color: var(--color-text-body);
   font-size: 13px;

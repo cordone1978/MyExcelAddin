@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./devmodifyv2.css";
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
+import { sendToParent, onParentMessage } from "../shared/dialogBridge";
 import { API_PATHS, APP_URLS, CRAFTING_CONSTANTS } from "../shared/appConstants";
 
 /* global Office */
@@ -56,10 +57,9 @@ function DevModifyV2App() {
   useEffect(() => {
     document.title = "更改设备-新版";
     waitForOfficeReady(() => {
-      Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.DEVMODIFY_READY }));
-      Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (args) => {
+      sendToParent({ action: DIALOG_ACTIONS.DEVMODIFY_READY });
+      onParentMessage((payload: any) => {
         try {
-          const payload = JSON.parse(args.message);
           if (payload?.action !== DIALOG_ACTIONS.INIT || !payload.data) return;
           const data = payload.data as DevModifyV2Init;
           setInitData(data);
@@ -116,19 +116,17 @@ function DevModifyV2App() {
   }
 
   function submit() {
-    Office.context.ui.messageParent(
-      JSON.stringify({
-        action: DIALOG_ACTIONS.DEVMODIFY_SUBMIT,
-        whatKind: currentWhatKind,
-        currentPrice: basePrice,
-        refreshedPrice: isOutsourced ? basePrice : refreshedPrice,
-        desc: isOutsourced ? currentDesc : buildCraftDescription(baseDesc, craftItems),
-        type: currentType,
-        material: currentMaterial,
-        brand: currentBrand,
-        unit: currentUnit,
-      })
-    );
+    sendToParent({
+      action: DIALOG_ACTIONS.DEVMODIFY_SUBMIT,
+      whatKind: currentWhatKind,
+      currentPrice: basePrice,
+      refreshedPrice: isOutsourced ? basePrice : refreshedPrice,
+      desc: isOutsourced ? currentDesc : buildCraftDescription(baseDesc, craftItems),
+      type: currentType,
+      material: currentMaterial,
+      brand: currentBrand,
+      unit: currentUnit,
+    });
   }
 
   return (
@@ -157,7 +155,7 @@ function DevModifyV2App() {
 
         <div className="actions">
           <button className="btn ui-btn ui-btn--primary" onClick={submit}>更新价格</button>
-          <button className="btn ui-btn ui-btn--secondary" onClick={() => Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.DEVMODIFY_CANCEL }))}>取消</button>
+          <button className="btn ui-btn ui-btn--secondary" onClick={() => sendToParent({ action: DIALOG_ACTIONS.DEVMODIFY_CANCEL })}>取消</button>
         </div>
       </div>
 

@@ -17,6 +17,12 @@ import type {
   WorkbookGraphPayload,
 } from "../graph-editor/workbookStore";
 import type { TaskpaneViewState } from "./taskpaneApp";
+import { openDialog as _openDialogBridge } from "../shared/dialogBridge";
+import type { DialogHandle } from "../shared/dialogBridge";
+import {
+  createWorkbookStorageAdapter,
+} from "../shared/storageAdapter";
+import type { GraphStorageAdapter } from "../shared/storageAdapter";
 
 /* global console, document, Excel, Office */
 
@@ -85,6 +91,14 @@ async function getWorkbookStoreModule() {
     /* webpackChunkName: "graph-workbook-store" */
     "../graph-editor/workbookStore"
   );
+}
+
+let graphStorageAdapterPromise: Promise<GraphStorageAdapter> | null = null;
+function getGraphStorageAdapter(): Promise<GraphStorageAdapter> {
+  if (!graphStorageAdapterPromise) {
+    graphStorageAdapterPromise = createWorkbookStorageAdapter();
+  }
+  return graphStorageAdapterPromise;
 }
 
 async function getDialogDataModule() {
@@ -192,7 +206,7 @@ function renderTaskpane() {
         onResetPasswordClick: (): void => void handleResetPasswordClick(),
         onCancelResetPasswordClick: handleCancelResetPasswordClick,
         onConfirmResetPasswordClick: (): void => void handleConfirmResetPasswordClick(),
-        onAddDeviceClick: (): void => void runGuarded(() => withLoginGuard(() => openDialog())),
+        onAddDeviceClick: (): void => void runGuarded(() => withLoginGuard(() => openMainDialog())),
         onModifyDeviceClick: (): void => toggleModifyDeviceDrawer(),
         onModifyDeviceLegacyClick: (): void =>
           void runGuardedWithModal(async () => {
@@ -406,63 +420,51 @@ export async function run() {
   }
 }
 
-function openDialog(url?: string) {
+async function openMainDialog(url?: string) {
   const dialogPath = url || DIALOG_PATHS.main;
-  const dialogUrl = new URL(dialogPath, window.location.origin).toString();
-  const start = performance.now();
-  const isOfficeOnline = Office.context.platform === Office.PlatformType.OfficeOnline;
   const dialogSize =
     dialogPath === DIALOG_PATHS.generateQuote ? DIALOG_SIZES.generateQuote : DIALOG_SIZES.main;
-  Office.context.ui.displayDialogAsync(
-    dialogUrl,
-    { ...dialogSize, displayInIframe: isOfficeOnline },
-    (result) => {
-      const elapsedMs = Math.round(performance.now() - start);
-      if (result.status === Office.AsyncResultStatus.Succeeded) {
-        console.log(
-          `${TASKPANE_LOG_TEXT.dialogOpenedPrefix} ${elapsedMs}${TASKPANE_LOG_TEXT.dialogOpenedSuffix}`
-        );
-        const dialog = result.value;
-        dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (args) => {
-          dialog.close();
-          let data: any = null;
-          try {
-            const dialogMessage = "message" in args ? args.message : "";
-            data = JSON.parse(dialogMessage);
-          } catch (error: any) {
-            console.error("解析对话框返回数据失败", error);
-            setAuthFeedback(error?.message || "解析对话框返回数据失败", "error");
-            return;
-          }
+  const start = performance.now();
 
-          try {
-            await retryExcelInternalError(() => saveDialogCompositeToDevSheetWithFallback(data));
-          } catch (error: any) {
-            const message = error?.message || String(error);
-            console.error("保存模板图片失败", error);
-            setAuthFeedback(`保存模板图片失败：${message}`, "error");
-            // 不阻断主流程：即使图片写入失败，也继续插入报价配置表数据。
-          }
+  let dialog: DialogHandle;
+  try {
+    dialog = await displayDialog(dialogPath, dialogSize);
+    const elapsedMs = Math.round(performance.now() - start);
+    console.log(
+      `${TASKPANE_LOG_TEXT.dialogOpenedPrefix} ${elapsedMs}${TASKPANE_LOG_TEXT.dialogOpenedSuffix}`
+    );
+  } catch (error: any) {
+    const elapsedMs = Math.round(performance.now() - start);
+    const errorMessage = error?.message || "打开窗口失败";
+    notifyVisibleError(errorMessage);
+    console.error(
+      `${TASKPANE_LOG_TEXT.dialogOpenFailedPrefix} ${elapsedMs}${TASKPANE_LOG_TEXT.dialogOpenFailedSuffix}`,
+      errorMessage
+    );
+    return;
+  }
 
-          try {
-            const dialogDataModule = await getDialogDataModule();
-            await retryExcelInternalError(() => dialogDataModule.handleDialogData(data));
-          } catch (error: any) {
-            const message = error?.message || String(error);
-            console.error("写入报价配置表失败", error);
-            setAuthFeedback(`写入报价配置表失败：${message}`, "error");
-          }
-        });
-      } else {
-        const errorMessage = result.error?.message || "打开窗口失败";
-        notifyVisibleError(errorMessage);
-        console.error(
-          `${TASKPANE_LOG_TEXT.dialogOpenFailedPrefix} ${elapsedMs}${TASKPANE_LOG_TEXT.dialogOpenFailedSuffix}`,
-          errorMessage
-        );
-      }
+  dialog.onMessage(async (data: any) => {
+    dialog.close();
+
+    try {
+      await retryExcelInternalError(() => saveDialogCompositeToDevSheetWithFallback(data));
+    } catch (error: any) {
+      const message = error?.message || String(error);
+      console.error("保存模板图片失败", error);
+      setAuthFeedback(`保存模板图片失败：${message}`, "error");
+      // 不阻断主流程：即使图片写入失败，也继续插入报价配置表数据。
     }
-  );
+
+    try {
+      const dialogDataModule = await getDialogDataModule();
+      await retryExcelInternalError(() => dialogDataModule.handleDialogData(data));
+    } catch (error: any) {
+      const message = error?.message || String(error);
+      console.error("写入报价配置表失败", error);
+      setAuthFeedback(`写入报价配置表失败：${message}`, "error");
+    }
+  });
 }
 
 function isExcelInternalError(error: any) {
@@ -567,8 +569,8 @@ async function openInfoReferenceDialog() {
   try {
     const dialog = await displayDialog(DIALOG_PATHS.infoReference, DIALOG_SIZES.infoReference);
     console.log("[InfoReferenceDebug] infoReference dialog opened");
-    dialog.addEventHandler(Office.EventType.DialogMessageReceived, (args) => {
-      void handleInfoReferenceDialogMessage(dialog, args);
+    dialog.onMessage((msg) => {
+      void handleInfoReferenceDialogMessage(dialog, msg);
     });
     // Fallback: proactively push once in case request message is lost/racing.
     await pushInfoReferenceDevicesToDialog(dialog);
@@ -578,41 +580,29 @@ async function openInfoReferenceDialog() {
   }
 }
 
-async function handleInfoReferenceDialogMessage(dialog: Office.Dialog, args: any) {
+async function handleInfoReferenceDialogMessage(dialog: DialogHandle, payload: any) {
   try {
-    const payload = JSON.parse(String(args?.message || "{}"));
     console.log("[InfoReferenceDebug] taskpane received dialog message", payload?.type);
     if (payload?.type !== INFO_REF_REQUEST_DEVICES_MSG) {
       return;
     }
     await pushInfoReferenceDevicesToDialog(dialog);
   } catch (error: any) {
-    try {
-      (dialog as any).messageChild(
-        JSON.stringify({
-          type: INFO_REF_ERROR_MSG,
-          message: String(error?.message || error),
-        })
-      );
-    } catch {
-      // ignore send failures
-    }
+    dialog.send({
+      type: INFO_REF_ERROR_MSG,
+      message: String(error?.message || error),
+    });
   }
 }
 
-async function pushInfoReferenceDevicesToDialog(dialog: Office.Dialog) {
+async function pushInfoReferenceDevicesToDialog(dialog: DialogHandle) {
   const payload = await readInfoReferenceDevicesFromWorkbook();
   console.log("[InfoReferenceDebug] taskpane push devices", {
     count: payload.devices.length,
     sample: payload.devices.slice(0, 5).map((d) => d.deviceName),
     columnWidths: payload.columnWidths,
   });
-  (dialog as any).messageChild(
-    JSON.stringify({
-      type: INFO_REF_DEVICES_MSG,
-      data: payload,
-    })
-  );
+  dialog.send({ type: INFO_REF_DEVICES_MSG, data: payload });
 }
 
 async function readInfoReferenceDevicesFromWorkbook(): Promise<InfoRefPayload> {
@@ -697,15 +687,14 @@ async function readInfoReferenceDevicesFromWorkbook(): Promise<InfoRefPayload> {
 
 async function openGraphEditorDialog() {
   const dialog = await displayDialog(DIALOG_PATHS.graphEditor, DIALOG_SIZES.graphEditor);
-  dialog.addEventHandler(Office.EventType.DialogMessageReceived, (args) => {
-    void handleGraphEditorDialogMessage(dialog, args);
+  dialog.onMessage((msg) => {
+    void handleGraphEditorDialogMessage(dialog, msg);
   });
   await pushGraphEditorPayloadToDialog(dialog);
 }
 
-async function handleGraphEditorDialogMessage(dialog: Office.Dialog, args: any) {
+async function handleGraphEditorDialogMessage(dialog: DialogHandle, payload: any) {
   try {
-    const payload = JSON.parse(String(args?.message || "{}"));
     if (payload?.type === GRAPH_EDITOR_REQUEST_MSG) {
       await pushGraphEditorPayloadToDialog(dialog);
       return;
@@ -719,7 +708,7 @@ async function handleGraphEditorDialogMessage(dialog: Office.Dialog, args: any) 
 }
 
 async function buildGraphEditorDialogPayload(): Promise<GraphEditorDialogPayload> {
-  const workbookStore = await getWorkbookStoreModule();
+  const storage = await getGraphStorageAdapter();
   let cache: unknown = null;
   try {
     const raw = localStorage.getItem(GRAPH_STORE_DEV_CACHE_KEY);
@@ -727,9 +716,9 @@ async function buildGraphEditorDialogPayload(): Promise<GraphEditorDialogPayload
   } catch {
     // ignore storage read or parse failure
   }
-  const graph = await workbookStore.loadGraphFromWorkbook().catch((): null => null);
-  const quoteProductNames = await workbookStore.loadQuoteConfigProductsFromWorkbook().catch((): string[] => []);
-  const libraryEntries = await workbookStore.loadGraphProductLibraryEntries().catch((): import("../graph-editor/workbookStore").GraphProductLibraryEntry[] => []);
+  const graph = await storage.loadGraph().catch((): null => null);
+  const quoteProductNames = await storage.loadQuoteConfigProducts().catch((): string[] => []);
+  const libraryEntries = await storage.loadProductLibraryEntries().catch((): GraphProductLibraryEntry[] => []);
   return {
     cache,
     graph,
@@ -738,24 +727,19 @@ async function buildGraphEditorDialogPayload(): Promise<GraphEditorDialogPayload
   };
 }
 
-async function pushGraphEditorPayloadToDialog(dialog: Office.Dialog) {
+async function pushGraphEditorPayloadToDialog(dialog: DialogHandle) {
   const payload = await buildGraphEditorDialogPayload();
-  (dialog as any).messageChild(
-    JSON.stringify({
-      type: GRAPH_EDITOR_TEMPLATES_MSG,
-      data: payload,
-    })
-  );
+  dialog.send({ type: GRAPH_EDITOR_TEMPLATES_MSG, data: payload });
 }
 
-async function handleGraphEditorSaveRequest(dialog: Office.Dialog, payload: any) {
+async function handleGraphEditorSaveRequest(dialog: DialogHandle, payload: any) {
   const requestId = String(payload?.requestId || "").trim();
   let ok = false;
   let message = "";
   try {
     const workbookPayload = (payload?.payload || {}) as WorkbookGraphPayload;
-    const workbookStore = await getWorkbookStoreModule();
-    await workbookStore.saveGraphToWorkbook(workbookPayload);
+    const storage = await getGraphStorageAdapter();
+    await storage.saveGraph(workbookPayload);
     ok = true;
     message = "ok";
   } catch (error: any) {
@@ -763,18 +747,7 @@ async function handleGraphEditorSaveRequest(dialog: Office.Dialog, payload: any)
     message = String(error?.message || "保存失败");
   }
 
-  try {
-    (dialog as any).messageChild(
-      JSON.stringify({
-        type: GRAPH_EDITOR_SAVE_RESULT_MSG,
-        requestId,
-        ok,
-        message,
-      })
-    );
-  } catch {
-    // ignore send failures
-  }
+  dialog.send({ type: GRAPH_EDITOR_SAVE_RESULT_MSG, requestId, ok, message });
 }
 
 async function handleGenerateQuoteClick() {
@@ -784,7 +757,7 @@ async function handleGenerateQuoteClick() {
 async function executeGenerateQuoteFlow(mode: "detail" | "preliminary" = "detail") {
   try {
     await syncQuoteSummaryAndCachePreview(mode);
-    openDialog(DIALOG_PATHS.generateQuote);
+    void openMainDialog(DIALOG_PATHS.generateQuote);
   } catch (error: any) {
     const message = String(error?.message || error || "生成报价失败");
     await showOperationErrorModal(message);
@@ -2019,23 +1992,8 @@ function warmUpDialogResources() {
 function displayDialog(
   path: string,
   size?: { width: number; height: number }
-): Promise<Office.Dialog> {
-  const dialogUrl = new URL(path, window.location.origin).toString();
-  const isOfficeOnline = Office.context.platform === Office.PlatformType.OfficeOnline;
+): Promise<DialogHandle> {
   const width = size?.width ?? DIALOG_SIZES.default.width;
   const height = size?.height ?? DIALOG_SIZES.default.height;
-
-  return new Promise((resolve, reject) => {
-    Office.context.ui.displayDialogAsync(
-      dialogUrl,
-      { height, width, displayInIframe: isOfficeOnline },
-      (result) => {
-        if (result.status === Office.AsyncResultStatus.Succeeded) {
-          resolve(result.value);
-        } else {
-          reject(result.error);
-        }
-      }
-    );
-  });
+  return _openDialogBridge(path, { width, height });
 }

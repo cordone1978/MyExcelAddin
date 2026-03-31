@@ -1,5 +1,6 @@
 ﻿/* global Office, console, document, window, URL, URLSearchParams, fetch, HTMLDivElement, HTMLInputElement, HTMLButtonElement, KeyboardEvent */
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
+import { sendToParent } from "../shared/dialogBridge";
 import { API_PATHS, APP_URLS, UI_DEFAULTS } from "../shared/appConstants";
 import { DIALOG_TEXT, QUERYPRICE_HTML_TEXT } from "../shared/businessTextConstants";
 
@@ -181,20 +182,18 @@ function sendSelectedToParent() {
   const material = extractMaterial(item.ItemDesc || "");
   const cleanedDesc = cleanDescription(item.ItemDesc || "");
 
-  Office.context.ui.messageParent(
-    JSON.stringify({
-      action: DIALOG_ACTIONS.QUERYPRICE_REPLACE,
-      data: {
-        name: item.ItemName || "",
-        desc: cleanedDesc,
-        type: item.ItemType || "",
-        brand,
-        material,
-        unit: item.ItemUnit || "",
-        price: item.ItemPrice || 0,
-      },
-    })
-  );
+  sendToParent({
+    action: DIALOG_ACTIONS.QUERYPRICE_REPLACE,
+    data: {
+      name: item.ItemName || "",
+      desc: cleanedDesc,
+      type: item.ItemType || "",
+      brand,
+      material,
+      unit: item.ItemUnit || "",
+      price: item.ItemPrice || 0,
+    },
+  });
 }
 
 function cleanDescription(fullDesc: string): string {
@@ -266,7 +265,7 @@ function setActionButtonsEnabled(enabled: boolean) {
 }
 
 function handleCancel() {
-  Office.context.ui.messageParent(JSON.stringify({ action: DIALOG_ACTIONS.QUERYPRICE_CANCEL }));
+  sendToParent({ action: DIALOG_ACTIONS.QUERYPRICE_CANCEL });
 }
 
 function showWarningModal(message: string) {
