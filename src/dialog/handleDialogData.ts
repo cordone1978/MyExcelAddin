@@ -1,6 +1,7 @@
 ﻿/* global fetch, URL, window, console */
 import { insertComponentsToConfigSheet } from "../buildsheet/insertRows";
 import {
+  resolveProductPictureSet,
   resolveTemplateFromProductName,
   resolveTemplateThumbnail,
 } from "../graph-editor/productLibraryLookup";
@@ -28,7 +29,7 @@ export async function handleDialogData(data: any) {
   const systemName = await getSystemNameForType(data.category);
   const categoryForInsert = data.category;
 
-  await insertComponentsToConfigSheet(categoryForInsert, data.project, allComponents, systemName);
+  await insertComponentsToConfigSheet(categoryForInsert, data.project, allComponents, systemName, data.standardPrice ?? undefined);
   await saveGraphLibraryMapping(data.projectId, data.project);
 }
 
@@ -134,15 +135,21 @@ async function saveGraphLibraryMapping(projectId: number, deviceName: string) {
   if (!projectId || !normalizedDeviceName) return;
 
   const template = resolveTemplateFromProductName(normalizedDeviceName);
-  if (!template) return;
-
-  const thumbnailUrl = resolveTemplateThumbnail(template);
-  if (!thumbnailUrl) return;
+  const pictureSet = await resolveProductPictureSet(
+    normalizedDeviceName,
+    template ? resolveTemplateThumbnail(template) : "",
+    template ? resolveTemplateThumbnail(template) : ""
+  );
+  const thumbnailUrl = String(pictureSet?.thumbnailUrl || "").trim();
+  const templateId = String(pictureSet?.templateId || template?.templateId || "").trim();
+  if (!thumbnailUrl || !templateId) return;
 
   await upsertGraphProductLibraryEntry({
     deviceName: normalizedDeviceName,
-    templateId: template.templateId,
+    templateId,
     thumbnailUrl,
+    overallUrl: String(pictureSet?.overallUrl || thumbnailUrl),
+    assetFamily: String(pictureSet?.assetFamily || ""),
     productId: Number(projectId),
     productName: normalizedDeviceName,
     updatedAt: new Date().toISOString(),

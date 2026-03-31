@@ -8,14 +8,75 @@ export type QuoteLibraryResolvedItem = {
   deviceName: string;
   templateId: string;
   thumbnailUrl: string;
+  overallUrl: string;
+  assetFamily?: string;
 };
 
-const TEMPLATE_FAMILY_RULES: Array<{ templateId: string; keywords: string[] }> = [
-  { templateId: "template_silo", keywords: ["暂存仓", "料仓", "仓"] },
-  { templateId: "template_pipe", keywords: ["输送管", "管道", "管"] },
-  { templateId: "template_cyclone", keywords: ["旋风", "分离器"] },
-  { templateId: "template_diechamoji", keywords: ["碟巢磨机", "磨机", "DCM", "DCM", "dcm", "DCM500", "dcm500"] },
+type ProductPictureManifest = {
+  product_code?: string;
+  asset_family?: string;
+  product_name?: string;
+  template_type?: string;
+  default_thumbnail?: string;
+  default_overall?: string;
+  pictures?: Array<{
+    picture_code?: string;
+    file_name?: string;
+    label?: string;
+  }>;
+};
+
+type ProductPictureResolution = {
+  templateId: string;
+  assetFamily: string;
+  thumbnailUrl: string;
+  overallUrl: string;
+};
+
+const TEMPLATE_FAMILY_RULES: Array<{
+  templateId: string;
+  assetFamily?: string;
+  keywords: string[];
+}> = [
+  {
+    templateId: "template_silo",
+    assetFamily: "silo-2000l",
+    keywords: ["暂存仓", "料仓", "仓", "SILO", "silo", "2000L", "2000l"],
+  },
+  {
+    templateId: "template_pipe",
+    keywords: ["输送管", "管道", "管"],
+  },
+  {
+    templateId: "template_cyclone",
+    assetFamily: "pre-dryer",
+    keywords: ["旋风", "分离器", "预烘干机", "PRE-DRYER", "predryer", "pre dryer"],
+  },
+  {
+    templateId: "template_diechamoji",
+    assetFamily: "ddm6a",
+    keywords: [
+      "钉碟磨机",
+      "钉碟",
+      "碟巢磨机",
+      "磨机",
+      "DDM",
+      "ddm",
+      "DDM6A",
+      "ddm6a",
+      "DCM",
+      "dcm",
+      "DCM500",
+      "dcm500",
+      "FJM",
+      "fjm",
+      "FJM-1250",
+      "fjm-1250",
+    ],
+  },
 ];
+
+const manifestCache = new Map<string, Promise<ProductPictureManifest | null>>();
 
 export function normalizeLibraryName(value: string) {
   return String(value || "")
@@ -36,13 +97,91 @@ export function resolveTemplateThumbnail(template: ProductTemplate) {
   return firstLayer?.imageUrl || firstLayer?.fallbackImageUrl || firstComponent?.imageUrl || "";
 }
 
+export function resolveTemplateOverall(template: ProductTemplate) {
+  return resolveTemplateThumbnail(template);
+}
+
+function resolveTemplateRule(productName: string) {
+  const source = String(productName || "").trim();
+  return (
+    TEMPLATE_FAMILY_RULES.find((rule) =>
+      rule.keywords.some((keyword) => source.includes(keyword))
+    ) || null
+  );
+}
+
+function buildProductPictureUrl(assetFamily: string, fileName: string) {
+  const family = String(assetFamily || "").trim().replace(/^\/+|\/+$/g, "");
+  const file = String(fileName || "").trim().replace(/^\/+/, "");
+  if (!family || !file) return "";
+  return `/assets/equipment/${family}/${file}`;
+}
+
+function findManifestFile(manifest: ProductPictureManifest | null, pictureCode: string) {
+  return (
+    (manifest?.pictures || []).find(
+      (item) => String(item?.picture_code || "").trim().toLowerCase() === pictureCode
+    )?.file_name || ""
+  );
+}
+
+async function fetchProductPictureManifest(assetFamily: string): Promise<ProductPictureManifest | null> {
+  const key = String(assetFamily || "").trim().toLowerCase();
+  if (!key) return null;
+  if (!manifestCache.has(key)) {
+    manifestCache.set(
+      key,
+      (async () => {
+        try {
+          const response = await fetch(buildProductPictureUrl(key, "picture.json"), {
+            cache: "no-cache",
+          });
+          if (!response.ok) return null;
+          return (await response.json()) as ProductPictureManifest;
+        } catch {
+          return null;
+        }
+      })()
+    );
+  }
+  return (await manifestCache.get(key)) || null;
+}
+
+export function resolveAssetFamilyFromProductName(productName: string) {
+  const source = String(productName || "").trim();
+  if (!source) return "";
+
+  const explicitRule = resolveTemplateRule(source);
+  if (explicitRule?.assetFamily) {
+    const normalizedSource = normalizeLibraryName(source);
+    if (normalizedSource.includes("fjm1250") || normalizedSource.includes("fjm")) {
+      return "fjm-1250";
+    }
+    return explicitRule.assetFamily;
+  }
+
+  const normalizedSource = normalizeLibraryName(source);
+  if (normalizedSource.includes("ddm6a") || normalizedSource.includes("ddm")) {
+    return "ddm6a";
+  }
+  if (normalizedSource.includes("fjm1250") || normalizedSource.includes("fjm")) {
+    return "fjm-1250";
+  }
+  if (normalizedSource.includes("silo2000l") || normalizedSource.includes("silo")) {
+    return "silo-2000l";
+  }
+  if (normalizedSource.includes("predryer")) {
+    return "pre-dryer";
+  }
+
+  return "";
+}
+
 export function resolveTemplateFromProductName(productName: string) {
   const source = String(productName || "").trim();
   if (!source) return null;
 
-  const familyRule = TEMPLATE_FAMILY_RULES.find((rule) =>
-    rule.keywords.some((keyword) => source.includes(keyword))
-  );
+  const familyRule = resolveTemplateRule(source);
   if (familyRule) {
     return (
       PRODUCT_LIBRARY.find((template) => template.templateId === familyRule.templateId) || null
@@ -62,6 +201,57 @@ export function resolveTemplateFromProductName(productName: string) {
       );
     }) || null
   );
+}
+
+export async function resolveProductPictureSet(
+  productName: string,
+  fallbackThumbnailUrl = "",
+  fallbackOverallUrl = ""
+): Promise<ProductPictureResolution | null> {
+  const template = resolveTemplateFromProductName(productName);
+  const templateId = String(template?.templateId || "").trim();
+  const assetFamily = resolveAssetFamilyFromProductName(productName);
+  const templateThumb = template ? resolveTemplateThumbnail(template) : "";
+  const templateOverall = template ? resolveTemplateOverall(template) : templateThumb;
+  const fallbackThumb = String(fallbackThumbnailUrl || templateThumb || "").trim();
+  const fallbackOverall = String(fallbackOverallUrl || templateOverall || fallbackThumb).trim();
+
+  if (!templateId && !assetFamily) {
+    return null;
+  }
+
+  if (!assetFamily) {
+    return {
+      templateId: templateId || "template_diechamoji",
+      assetFamily: "",
+      thumbnailUrl: fallbackThumb,
+      overallUrl: fallbackOverall,
+    };
+  }
+
+  const manifest = await fetchProductPictureManifest(assetFamily);
+  const thumbnailFile =
+    String(manifest?.default_thumbnail || "").trim() ||
+    String(findManifestFile(manifest, "thumbnail") || "").trim() ||
+    String(manifest?.default_overall || "").trim() ||
+    String(findManifestFile(manifest, "overall") || "").trim() ||
+    "overall.png";
+  const overallFile =
+    String(manifest?.default_overall || "").trim() ||
+    String(findManifestFile(manifest, "overall") || "").trim() ||
+    thumbnailFile ||
+    "overall.png";
+
+  const thumbnailUrl = buildProductPictureUrl(assetFamily, thumbnailFile) || fallbackThumb;
+  const overallUrl =
+    buildProductPictureUrl(assetFamily, overallFile) || thumbnailUrl || fallbackOverall;
+
+  return {
+    templateId: templateId || "template_diechamoji",
+    assetFamily,
+    thumbnailUrl: thumbnailUrl || fallbackThumb,
+    overallUrl: overallUrl || fallbackOverall || thumbnailUrl || fallbackThumb,
+  };
 }
 
 function normalizeGraphImageUrl(rawUrl: unknown) {
@@ -129,5 +319,6 @@ export function buildFallbackLibraryItems(): QuoteLibraryResolvedItem[] {
     deviceName: template.name,
     templateId: template.templateId,
     thumbnailUrl: resolveTemplateThumbnail(template),
+    overallUrl: resolveTemplateOverall(template),
   }));
 }

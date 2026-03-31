@@ -17,6 +17,8 @@ export type GraphProductLibraryEntry = {
   deviceName: string;
   templateId: string;
   thumbnailUrl: string;
+  overallUrl?: string;
+  assetFamily?: string;
   productId?: number | null;
   productName?: string | null;
   updatedAt: string;
@@ -204,6 +206,8 @@ export async function upsertGraphProductLibraryEntry(
   const deviceName = String(entry.deviceName || "").trim();
   const templateId = String(entry.templateId || "").trim();
   const thumbnailUrl = String(entry.thumbnailUrl || "").trim();
+  const overallUrl = String(entry.overallUrl || entry.thumbnailUrl || "").trim();
+  const assetFamily = String(entry.assetFamily || "").trim();
   if (!deviceName || !templateId || !thumbnailUrl) {
     return;
   }
@@ -218,9 +222,18 @@ export async function upsertGraphProductLibraryEntry(
     }
 
     sheet.visibility = Excel.SheetVisibility.hidden;
-    sheet.getRange("A1:F1").values = [[PRODUCT_LIBRARY_MARK, "", "", "", "", ""]];
-    sheet.getRange(`A${PRODUCT_LIBRARY_HEADER_ROW}:F${PRODUCT_LIBRARY_HEADER_ROW}`).values = [
-      ["device_name", "template_id", "thumbnail_url", "product_id", "product_name", "updated_at"],
+    sheet.getRange("A1:H1").values = [[PRODUCT_LIBRARY_MARK, "", "", "", "", "", "", ""]];
+    sheet.getRange(`A${PRODUCT_LIBRARY_HEADER_ROW}:H${PRODUCT_LIBRARY_HEADER_ROW}`).values = [
+      [
+        "device_name",
+        "template_id",
+        "thumbnail_url",
+        "product_id",
+        "product_name",
+        "updated_at",
+        "overall_url",
+        "asset_family",
+      ],
     ];
 
     const used = sheet.getUsedRangeOrNullObject(true);
@@ -230,7 +243,7 @@ export async function upsertGraphProductLibraryEntry(
     let targetRow = PRODUCT_LIBRARY_DATA_START_ROW;
     if (!used.isNullObject && (used.rowCount || 0) >= PRODUCT_LIBRARY_DATA_START_ROW) {
       const dataEndRow = Math.max(PRODUCT_LIBRARY_DATA_START_ROW, used.rowCount);
-      const dataRange = sheet.getRange(`A${PRODUCT_LIBRARY_DATA_START_ROW}:F${dataEndRow}`);
+      const dataRange = sheet.getRange(`A${PRODUCT_LIBRARY_DATA_START_ROW}:H${dataEndRow}`);
       dataRange.load("values");
       await context.sync();
       const rows = dataRange.values || [];
@@ -244,7 +257,7 @@ export async function upsertGraphProductLibraryEntry(
       }
     }
 
-    sheet.getRange(`A${targetRow}:F${targetRow}`).values = [
+    sheet.getRange(`A${targetRow}:H${targetRow}`).values = [
       [
         deviceName,
         templateId,
@@ -252,6 +265,8 @@ export async function upsertGraphProductLibraryEntry(
         entry.productId == null ? "" : Number(entry.productId),
         String(entry.productName || "").trim(),
         String(entry.updatedAt || new Date().toISOString()),
+        overallUrl,
+        assetFamily,
       ],
     ];
 
@@ -284,7 +299,7 @@ export async function loadGraphProductLibraryEntries(): Promise<GraphProductLibr
     }
 
     const dataEndRow = Math.max(PRODUCT_LIBRARY_DATA_START_ROW, used.rowCount);
-    const dataRange = sheet.getRange(`A${PRODUCT_LIBRARY_DATA_START_ROW}:F${dataEndRow}`);
+    const dataRange = sheet.getRange(`A${PRODUCT_LIBRARY_DATA_START_ROW}:H${dataEndRow}`);
     dataRange.load("values");
     await context.sync();
 
@@ -296,6 +311,8 @@ export async function loadGraphProductLibraryEntries(): Promise<GraphProductLibr
         productId: row?.[3] === "" ? null : Number(row?.[3] || 0),
         productName: String(row?.[4] || "").trim(),
         updatedAt: String(row?.[5] || "").trim(),
+        overallUrl: String(row?.[6] || "").trim(),
+        assetFamily: String(row?.[7] || "").trim(),
       }))
       .filter((item) => item.deviceName && item.templateId && item.thumbnailUrl);
   });

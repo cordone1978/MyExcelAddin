@@ -2,10 +2,13 @@
 
 ## 文档列表
 
+- [UI 开发规范](./ui-development-standards.md)
+- [UI 独立风格定义](./ui-style-foundation.md)
 - [产品标准（统一口径）](./product-standards.md)
 - [devmodify 说明](./devmodify.md)
 - [QueryPrice 需求](./queryprice-requirements.md)
 - [Graph Editor MVP](./graph-editor-mvp.md)
+- [产品图片管理开发文档](./product-picture-management.md)
 - [客户端一键部署指南](./client-oneclick-deploy-guide.md)
 - [客户端测试指南](./client-test-guide.md)
 - [Linux 部署指南](./linux-deployment.md)

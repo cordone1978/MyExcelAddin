@@ -1,0 +1,16 @@
+{
+  "product_code": "PRE-DRYER",
+  "asset_family": "pre-dryer",
+  "product_name": "预烘干机",
+  "template_type": "cyclone",
+  "default_thumbnail": "overall.PNG",
+  "default_overall": "overall.PNG",
+  "pictures": [
+    { "picture_code": "thumbnail", "file_name": "overall.PNG", "label": "产品库缩略图" },
+    { "picture_code": "overall", "file_name": "overall.PNG", "label": "整机主图" },
+    { "picture_code": "body", "file_name": "main-body.PNG", "label": "主体" },
+    { "picture_code": "motor", "file_name": "motor.PNG", "label": "电机" },
+    { "picture_code": "support-frame", "file_name": "support-frame.PNG", "label": "支撑架" },
+    { "picture_code": "inlet-outlet", "file_name": "inlet-outlet.PNG", "label": "进出口" }
+  ]
+}

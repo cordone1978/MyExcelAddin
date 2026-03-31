@@ -6,8 +6,14 @@ import "./graphEditor.css";
 import { Circle, Group, Image as KonvaImage, Label, Layer, Line, Rect, Stage, Tag, Text } from "react-konva";
 import Konva from "konva";
 import { getPortDisplayName, getPortUsageSummary, isConnectionAllowed } from "./connectionRules";
+import { sendToParent, onParentMessage } from "../shared/dialogBridge";
 import { buildDefaultScene, createProductFromTemplate, PRODUCT_LIBRARY } from "./productLibrary";
-import { QuoteLibraryResolvedItem, resolveTemplateFromProductName, resolveTemplateThumbnail } from "./productLibraryLookup";
+import {
+  QuoteLibraryResolvedItem,
+  resolveProductPictureSet,
+  resolveTemplateFromProductName,
+  resolveTemplateThumbnail,
+} from "./productLibraryLookup";
 import { GraphScene, MaterialFlowLink, PipeEndpointKey, PortEndpointRef, ProductComponent, ProductModel, SelectedTarget, ViewMode } from "./sceneTypes";
 import { GraphProductLibraryEntry, WorkbookGraphPayload } from "./workbookStore";
 import { useContainerSize, useLoadedImage } from "../shared/konvaHooks";
@@ -625,6 +631,7 @@ const ComponentShape = React.memo(function ComponentShape({
 function PipeProductNode({
   scene,
   product,
+  editable,
   selected,
   hoveredPort,
   connectSource,
@@ -640,6 +647,7 @@ function PipeProductNode({
 }: {
   scene: GraphScene;
   product: ProductModel;
+  editable: boolean;
   selected: SelectedTarget;
   hoveredPort: { productId: string; componentId: string; portId: string } | null;
   connectSource: SelectedTarget;
@@ -756,7 +764,13 @@ function PipeProductNode({
     <Group
       x={product.x}
       y={product.y}
-      draggable={!shiftPressed && !activePipeEndpoint && !product.pipeState?.startBinding && !product.pipeState?.endBinding}
+      draggable={
+        editable &&
+        !shiftPressed &&
+        !activePipeEndpoint &&
+        !product.pipeState?.startBinding &&
+        !product.pipeState?.endBinding
+      }
       onDragMove={(evt) => {
         evt.cancelBubble = true;
         onMove(product.id, evt.target.x(), evt.target.y());
@@ -809,6 +823,7 @@ function PipeProductNode({
 function ProductNode({
   scene,
   product,
+  editable,
   selected,
   hoveredComponentId,
   hoveredPort,
@@ -826,6 +841,7 @@ function ProductNode({
 }: {
   scene: GraphScene;
   product: ProductModel;
+  editable: boolean;
   selected: SelectedTarget;
   hoveredComponentId: string;
   hoveredPort: { productId: string; componentId: string; portId: string } | null;
@@ -846,6 +862,7 @@ function ProductNode({
       <PipeProductNode
         scene={scene}
         product={product}
+        editable={editable}
         selected={selected}
         hoveredPort={hoveredPort}
         connectSource={connectSource}
@@ -870,7 +887,7 @@ function ProductNode({
     <Group
       x={product.x}
       y={product.y}
-      draggable
+      draggable={editable}
       onMouseDown={(evt) => {
         evt.cancelBubble = true;
       }}
@@ -1191,36 +1208,31 @@ const PreviewLink = React.memo(function PreviewLink({
 });
 
 function registerParentMessageHandler() {
-  try {
-    Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg: Office.DialogParentMessageReceivedEventArgs) => {
-      try {
-        const payload = JSON.parse(String(arg?.message || "{}"));
-        if (payload?.type === GRAPH_EDITOR_TEMPLATES_MSG) {
-          const data = (payload?.data || {}) as GraphEditorDialogPayload;
-          pendingDialogPayloadResolver?.(data);
-          pendingDialogPayloadResolver = null;
-          return;
-        }
-        if (payload?.type === GRAPH_EDITOR_SAVE_RESULT_MSG) {
-          const requestId = String(payload?.requestId || "").trim();
-          if (!requestId) return;
-          const pending = pendingSaveRequests.get(requestId);
-          if (!pending) return;
-          window.clearTimeout(pending.timer);
-          pendingSaveRequests.delete(requestId);
-          if (payload?.ok) {
-            pending.resolve();
-          } else {
-            pending.reject(new Error(String(payload?.message || "父窗口保存失败")));
-          }
-        }
-      } catch {
-        // ignore malformed parent messages
+  onParentMessage((payload: any) => {
+    try {
+      if (payload?.type === GRAPH_EDITOR_TEMPLATES_MSG) {
+        const data = (payload?.data || {}) as GraphEditorDialogPayload;
+        pendingDialogPayloadResolver?.(data);
+        pendingDialogPayloadResolver = null;
+        return;
       }
-    });
-  } catch {
-    // ignore handler registration failures
-  }
+      if (payload?.type === GRAPH_EDITOR_SAVE_RESULT_MSG) {
+        const requestId = String(payload?.requestId || "").trim();
+        if (!requestId) return;
+        const pending = pendingSaveRequests.get(requestId);
+        if (!pending) return;
+        window.clearTimeout(pending.timer);
+        pendingSaveRequests.delete(requestId);
+        if (payload?.ok) {
+          pending.resolve();
+        } else {
+          pending.reject(new Error(String(payload?.message || "父窗口保存失败")));
+        }
+      }
+    } catch {
+      // ignore malformed parent messages
+    }
+  });
 }
 
 function requestDialogPayload(): Promise<GraphEditorDialogPayload> {
@@ -1237,7 +1249,7 @@ function requestDialogPayload(): Promise<GraphEditorDialogPayload> {
     };
     pendingDialogPayloadResolver = resolveWrapped;
     try {
-      Office.context.ui.messageParent(JSON.stringify({ type: GRAPH_EDITOR_REQUEST_MSG }));
+      sendToParent({ type: GRAPH_EDITOR_REQUEST_MSG });
     } catch (error) {
       pendingDialogPayloadResolver = null;
       window.clearTimeout(timer);
@@ -1255,13 +1267,7 @@ function requestParentSave(payload: WorkbookGraphPayload): Promise<void> {
     }, 8000);
     pendingSaveRequests.set(requestId, { resolve, reject, timer });
     try {
-      Office.context.ui.messageParent(
-        JSON.stringify({
-          type: GRAPH_EDITOR_SAVE_REQUEST_MSG,
-          requestId,
-          payload,
-        })
-      );
+      sendToParent({ type: GRAPH_EDITOR_SAVE_REQUEST_MSG, requestId, payload });
     } catch (error) {
       window.clearTimeout(timer);
       pendingSaveRequests.delete(requestId);
@@ -1270,7 +1276,10 @@ function requestParentSave(payload: WorkbookGraphPayload): Promise<void> {
   });
 }
 
-function buildQuoteLibraryItems(productNames: string[], mappingRows: GraphProductLibraryEntry[]): QuoteLibraryItem[] {
+async function buildQuoteLibraryItems(
+  productNames: string[],
+  mappingRows: GraphProductLibraryEntry[]
+): Promise<QuoteLibraryItem[]> {
   const productNameList = (productNames || []).map((item) => String(item || "").trim()).filter(Boolean);
   const mappingByName = new Map(
     mappingRows.map((item) => [String(item.deviceName || "").trim(), item] as const).filter(([key]) => key)
@@ -1279,8 +1288,8 @@ function buildQuoteLibraryItems(productNames: string[], mappingRows: GraphProduc
   console.log("[graphEditor] 报价配置表设备名称列表:", productNameList);
   console.log("[graphEditor] 隐藏表产品映射列表:", mappingRows);
 
-  const items = productNameList
-    .map((deviceName, index) => {
+  const resolvedItems = await Promise.all(
+    productNameList.map(async (deviceName, index) => {
       const mapped = mappingByName.get(deviceName);
       if (mapped) {
         return {
@@ -1288,22 +1297,63 @@ function buildQuoteLibraryItems(productNames: string[], mappingRows: GraphProduc
           deviceName,
           templateId: mapped.templateId,
           thumbnailUrl: mapped.thumbnailUrl,
+          overallUrl: String(mapped.overallUrl || mapped.thumbnailUrl || "").trim(),
+          assetFamily: String(mapped.assetFamily || "").trim(),
         } satisfies QuoteLibraryItem;
       }
       const template = resolveTemplateFromProductName(deviceName);
-      if (!template) return null;
-      return {
-        key: `${template.templateId}:${deviceName}:${index}`,
+      const pictureSet = await resolveProductPictureSet(
         deviceName,
-        templateId: template.templateId,
-        thumbnailUrl: resolveTemplateThumbnail(template),
+        template ? resolveTemplateThumbnail(template) : "",
+        template ? resolveTemplateThumbnail(template) : ""
+      );
+      const templateId = String(pictureSet?.templateId || template?.templateId || "").trim();
+      if (!templateId) return null;
+      return {
+        key: `${templateId}:${deviceName}:${index}`,
+        deviceName,
+        templateId,
+        thumbnailUrl: String(
+          pictureSet?.thumbnailUrl || (template ? resolveTemplateThumbnail(template) : "")
+        ),
+        overallUrl: String(
+          pictureSet?.overallUrl ||
+          pictureSet?.thumbnailUrl ||
+            (template ? resolveTemplateThumbnail(template) : "")
+        ),
+        assetFamily: String(pictureSet?.assetFamily || ""),
       } satisfies QuoteLibraryItem;
     })
-    .filter((item): item is QuoteLibraryItem => !!item);
+  );
+  const items = resolvedItems.filter((item): item is QuoteLibraryItem => !!item);
 
   console.log("[graphEditor] 产品库抽屉最终列表:", items);
 
   return items;
+}
+
+function applyProductOverallImage(product: ProductModel, overallUrl: string) {
+  const nextUrl = String(overallUrl || "").trim();
+  if (!nextUrl) return product;
+  return {
+    ...product,
+    components: product.components.map((component, componentIndex) => {
+      if (componentIndex !== 0 || !component.layers?.length) {
+        return component;
+      }
+      let replaced = false;
+      const layers = component.layers.map((layer, layerIndex) => {
+        if (replaced) return layer;
+        const isBaseLayer = (layer.role || "base") === "base";
+        if (!isBaseLayer && layerIndex !== 0) {
+          return layer;
+        }
+        replaced = true;
+        return { ...layer, imageUrl: nextUrl };
+      });
+      return replaced ? { ...component, layers } : component;
+    }),
+  };
 }
 
 function App() {
@@ -1315,6 +1365,7 @@ function App() {
   const [ready, setReady] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("bird");
   const [drawerMode, setDrawerMode] = useState<DrawerMode>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [quoteLibraryItems, setQuoteLibraryItems] = useState<QuoteLibraryItem[]>([]);
   const [isRefreshingQuoteLibrary, setIsRefreshingQuoteLibrary] = useState(false);
   const [connectMode, setConnectMode] = useState(false);
@@ -1330,6 +1381,7 @@ function App() {
   const [blankPanning, setBlankPanning] = useState(false);
   const firstSaveSkipped = useRef(false);
   const blankPanStart = useRef<{ pointerX: number; pointerY: number; viewportX: number; viewportY: number } | null>(null);
+  const editModeIndex = isEditMode ? 1 : 0;
 
   useEffect(() => {
     let disposed = false;
@@ -1340,7 +1392,12 @@ function App() {
           if (disposed) return;
           const restoredScene = asScene(payload.graph);
           setScene(restoredScene);
-          setQuoteLibraryItems(buildQuoteLibraryItems(payload.quoteProductNames, payload.libraryEntries || []));
+          const items = await buildQuoteLibraryItems(
+            payload.quoteProductNames,
+            payload.libraryEntries || []
+          );
+          if (disposed) return;
+          setQuoteLibraryItems(items);
           setStatus(
             payload.graph
               ? `已从工作簿恢复场景。设备数=${restoredScene.products.length}，组件数=${restoredScene.products.reduce((sum, product) => sum + (product.components?.length || 0), 0)}`
@@ -1585,11 +1642,20 @@ function App() {
   const updateScene = (next: (current: GraphScene) => GraphScene) =>
     setScene((current) => ({ ...next(current), updatedAt: new Date().toISOString() }));
 
+  const ensureEditMode = (actionText: string) => {
+    if (isEditMode) return true;
+    setStatus(`当前为浏览模式，切换到“编辑”后才能${actionText}。`);
+    return false;
+  };
+
   const refreshQuoteLibrary = async () => {
     setIsRefreshingQuoteLibrary(true);
     try {
       const payload = await requestDialogPayload();
-      const items = buildQuoteLibraryItems(payload.quoteProductNames, payload.libraryEntries || []);
+      const items = await buildQuoteLibraryItems(
+        payload.quoteProductNames,
+        payload.libraryEntries || []
+      );
       setQuoteLibraryItems(items);
     } catch (error) {
       setQuoteLibraryItems([]);
@@ -1643,6 +1709,7 @@ function App() {
   };
 
   const onBeginPipeEndpointDrag = (evt: any, productId: string, endpoint: PipeEndpointKey) => {
+    if (!ensureEditMode("调整管道端口")) return;
     const nativeEvent = evt?.evt as MouseEvent | TouchEvent | undefined;
     const shiftHeld = nativeEvent instanceof MouseEvent ? nativeEvent.shiftKey : shiftPressed;
     if (!shiftHeld) return;
@@ -1718,6 +1785,7 @@ function App() {
   };
 
   const handleMoveProduct = (productId: string, x: number, y: number) => {
+    if (!isEditMode) return;
     updateScene((current) => ({
       ...current,
       products: current.products.map((item) => {
@@ -1746,6 +1814,7 @@ function App() {
   };
 
   const onDeleteSelected = () => {
+    if (!ensureEditMode("删除对象")) return;
     setContextMenu(null);
     if (!selected) {
       setStatus("请先选中一个设备、端口或连接线。");
@@ -1800,6 +1869,7 @@ function App() {
   };
 
   const openDeleteMenu = (evt: any, target: SelectedTarget) => {
+    if (!ensureEditMode("删除对象")) return;
     evt.evt.preventDefault();
     evt.cancelBubble = true;
     setSelected(target);
@@ -1810,6 +1880,7 @@ function App() {
   };
 
   const onToggleFlow = () => {
+    if (!ensureEditMode("切换流动状态")) return;
     if (!selectedLink) {
       setStatus("请先选中一条连接线。");
       return;
@@ -1828,6 +1899,7 @@ function App() {
       setStatus("已取消连接模式。");
       return;
     }
+    if (!ensureEditMode("建立连接")) return;
     setConnectMode(true);
     setConnectSource(null);
     setPointerWorld(null);
@@ -1835,6 +1907,7 @@ function App() {
   };
 
   const onAddProduct = (item: QuoteLibraryItem) => {
+    if (!ensureEditMode("新增设备")) return;
     const template = PRODUCT_LIBRARY.find((templateItem) => templateItem.templateId === item.templateId) || PRODUCT_LIBRARY[0];
     if (!template) return;
     const nextIndex = scene.products.length + 1;
@@ -1842,7 +1915,8 @@ function App() {
       x: 260 + ((nextIndex - 1) % 3) * 280,
       y: 280 + Math.floor((nextIndex - 1) / 3) * 220,
     };
-    const product = createProductFromTemplate(template.templateId, placement, nextIndex);
+    const baseProduct = createProductFromTemplate(template.templateId, placement, nextIndex);
+    const product = applyProductOverallImage(baseProduct, item.overallUrl || item.thumbnailUrl);
     product.name = item.deviceName;
     updateScene((current) => ({
       ...current,
@@ -1860,6 +1934,7 @@ function App() {
         deviceName: template.name,
         templateId: template.templateId,
         thumbnailUrl: resolveTemplateThumbnail(template),
+        overallUrl: resolveTemplateThumbnail(template),
       })),
     []
   );
@@ -1923,6 +1998,7 @@ function App() {
             }}
             onDrop={(evt) => {
               evt.preventDefault();
+              if (!ensureEditMode("拖入产品")) return;
               const raw =
                 evt.dataTransfer.getData("application/quotation-graph-item") ||
                 evt.dataTransfer.getData("text/plain") ||
@@ -1944,10 +2020,19 @@ function App() {
               const worldX = (evt.clientX - rect.left - viewport.x) / viewport.scale;
               const worldY = (evt.clientY - rect.top - viewport.y) / viewport.scale;
               const nextIndex = scene.products.length + 1;
-              const product = createProductFromTemplate(
+              const baseProduct = createProductFromTemplate(
                 template.templateId,
                 { x: worldX - 120, y: worldY - 80 },
                 nextIndex
+              );
+              const libraryItem = quoteLibraryItems.find(
+                (item) =>
+                  item.templateId === payload?.templateId &&
+                  item.deviceName === (payload.deviceName || template.name)
+              );
+              const product = applyProductOverallImage(
+                baseProduct,
+                libraryItem?.overallUrl || libraryItem?.thumbnailUrl || ""
               );
               product.name = payload.deviceName || template.name;
               updateScene((current) => ({
@@ -2068,6 +2153,7 @@ function App() {
                     key={product.id}
                     scene={scene}
                     product={product}
+                    editable={isEditMode}
                     selected={selected}
                     hoveredComponentId={hoveredComponent?.productId === product.id ? hoveredComponent.componentId : ""}
                     hoveredPort={hoveredPort}
@@ -2194,8 +2280,13 @@ function App() {
                   className="template-item"
                   onClick={() => onAddProduct(item)}
                   title={item.deviceName}
-                  draggable
+                  draggable={isEditMode}
                   onDragStart={(evt) => {
+                    if (!isEditMode) {
+                      evt.preventDefault();
+                      activeDragLibraryPayload = null;
+                      return;
+                    }
                     const payload: DragLibraryPayload = {
                       source: drawerMode === "tools" ? "tools" : "products",
                       templateId: item.templateId,
@@ -2225,7 +2316,8 @@ function App() {
           </div>
         </section>
         <footer className="graph-toolbar">
-          <div className="graph-toolbar-row">
+          <div className="graph-toolbar-main">
+            <div className="graph-toolbar-row">
             <button
               type="button"
               className={`toolbar-btn${drawerMode === "products" ? " active" : ""}`}
@@ -2256,11 +2348,12 @@ function App() {
               type="button"
               className={`toolbar-btn${connectMode ? " primary active" : ""}`}
               onClick={onBeginConnect}
+              disabled={!isEditMode && !connectMode}
             >
               {connectMode ? "取消" : "建立连接"}
             </button>
-            <button type="button" className="toolbar-btn" onClick={onToggleFlow}>切换流动</button>
-            <button type="button" className="toolbar-btn danger" onClick={onDeleteSelected}>删除选中</button>
+            <button type="button" className="toolbar-btn" onClick={onToggleFlow} disabled={!isEditMode}>切换流动</button>
+            <button type="button" className="toolbar-btn danger" onClick={onDeleteSelected} disabled={!isEditMode}>删除选中</button>
             <button
               type="button"
               className="toolbar-btn primary"
@@ -2276,6 +2369,41 @@ function App() {
             >
               保存
             </button>
+            </div>
+            <div className="edit-mode-panel" aria-label="编辑状态">
+              <div className="edit-mode-track">
+                <div
+                  className="edit-mode-thumb"
+                  style={{ transform: `translateX(${editModeIndex * 100}%)` }}
+                />
+                <button
+                  type="button"
+                  className={`edit-mode-option ${!isEditMode ? "active" : ""}`}
+                  onClick={() => {
+                    setIsEditMode(false);
+                    setConnectMode(false);
+                    setConnectSource(null);
+                    setPointerWorld(null);
+                    setPipeDragState(null);
+                    setPipeSnapTarget(null);
+                    setContextMenu(null);
+                    setStatus("已切换到浏览模式。");
+                  }}
+                >
+                  浏览
+                </button>
+                <button
+                  type="button"
+                  className={`edit-mode-option ${isEditMode ? "active" : ""}`}
+                  onClick={() => {
+                    setIsEditMode(true);
+                    setStatus("已切换到编辑模式。");
+                  }}
+                >
+                  编辑
+                </button>
+              </div>
+            </div>
           </div>
         </footer>
       </section>
