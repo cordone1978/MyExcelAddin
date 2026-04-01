@@ -1,16 +1,131 @@
 {
-  "product_code": "SILO-2000L",
+  "product_code": "1000L暂存仓",
   "asset_family": "silo-2000l",
-  "product_name": "暂存仓（2000L）",
-  "template_type": "silo",
-  "default_thumbnail": "overall.png",
+  "product_name": "暂存仓 1000L暂存仓",
+  "template_type": "",
+  "default_thumbnail": "",
   "default_overall": "overall.png",
   "pictures": [
-    { "picture_code": "thumbnail", "file_name": "overall.png", "label": "产品库缩略图" },
-    { "picture_code": "overall", "file_name": "overall.png", "label": "整机主图" },
-    { "picture_code": "body", "file_name": "body.png", "label": "仓体" },
-    { "picture_code": "frame", "file_name": "frame.png", "label": "支架" },
-    { "picture_code": "rotary-valve", "file_name": "rotary-valve.png", "label": "旋转阀" },
-    { "picture_code": "slide-gate", "file_name": "slide-gate.png", "label": "插板阀" }
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    }
   ]
 }

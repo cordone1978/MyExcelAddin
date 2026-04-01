@@ -1,17 +1,109 @@
 {
-  "product_code": "FJM-1250",
+  "product_code": "DCM1000",
   "asset_family": "fjm-1250",
-  "product_name": "碟巢磨机",
-  "template_type": "mill",
-  "default_thumbnail": "overall.png",
-  "default_overall": "overall.png",
+  "product_name": "碟巢磨机 DCM1000",
+  "template_type": "",
+  "default_thumbnail": "",
+  "default_overall": "overall-fjm.png",
   "pictures": [
-    { "picture_code": "thumbnail", "file_name": "overall.png", "label": "产品库缩略图" },
-    { "picture_code": "overall", "file_name": "overall.png", "label": "整机主图" },
-    { "picture_code": "body", "file_name": "body.png", "label": "主体" },
-    { "picture_code": "motor", "file_name": "motor.png", "label": "电机" },
-    { "picture_code": "inlet-outlet", "file_name": "inlet-outlet.png", "label": "进出口" },
-    { "picture_code": "disc-clamp", "file_name": "disc-clamp.png", "label": "碟盘夹具" },
-    { "picture_code": "wear-ring", "file_name": "wear-ring.png", "label": "耐磨环" }
+    {
+      "picture_code": "overall",
+      "file_name": "overall-fjm.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/fjm-1250/overall-fjm.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall-fjm.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/fjm-1250/overall-fjm.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall-fjm.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/fjm-1250/overall-fjm.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall-fjm.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/fjm-1250/overall-fjm.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall-fjm.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/fjm-1250/overall-fjm.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall-fjm.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/fjm-1250/overall-fjm.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall-fjm.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/fjm-1250/overall-fjm.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall-fjm.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/fjm-1250/overall-fjm.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall-fjm.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/fjm-1250/overall-fjm.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    }
   ]
 }

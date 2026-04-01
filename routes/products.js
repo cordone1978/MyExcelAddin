@@ -33,6 +33,26 @@ function buildEquipmentImageUrl(componentPic) {
   return `/${normalized}`;
 }
 
+function normalizePublicAssetPath(rawPath) {
+  const source = String(rawPath || "").trim();
+  if (!source) return "";
+  if (/^https?:\/\//i.test(source) || source.startsWith("data:") || source.startsWith("blob:")) {
+    return source;
+  }
+  const normalized = source.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (normalized.startsWith("assets/equipment/")) {
+    return `/${normalized}`;
+  }
+  return normalized ? `/${normalized}` : "";
+}
+
+function buildProductPictureAssetPath(assetFamily, fileName) {
+  const family = String(assetFamily || "").trim().replace(/^\/+|\/+$/g, "");
+  const file = String(fileName || "").trim().replace(/^\/+/, "");
+  if (!family || !file) return "";
+  return `/assets/equipment/${family}/${file}`;
+}
+
 async function resolveIndustryRecord(industryValue) {
   const industryCode = normalizeIndustryCode(industryValue);
   if (!industryCode) return null;
@@ -182,6 +202,83 @@ router.get(API_ROUTES.projects, requireAuth, async (req, res) => {
   } catch (error) {
     console.error(`${SERVER_LOGS.fetchProjectsFailed}:`, error);
     res.status(500).json({ success: false, error: buildSafeErrorMessage(error, "获取产品列表失败") });
+  }
+});
+
+router.get(API_ROUTES.productPictures, requireAuth, async (req, res) => {
+  try {
+    const productCode = String(req.params.productCode || "").trim();
+    if (!productCode) {
+      res.json({ success: true, data: null });
+      return;
+    }
+
+    const [rows] = await pool.query(
+      `
+      SELECT
+        product_code,
+        product_name,
+        asset_family,
+        picture_code,
+        file_name,
+        relative_path,
+        CAST(is_default AS SIGNED) as is_default,
+        CAST(is_enabled AS SIGNED) as is_enabled,
+        sort_order,
+        version_no
+      FROM ht_sales_product_picture
+      WHERE product_code = ?
+        AND CAST(is_enabled AS SIGNED) = 1
+      ORDER BY
+        picture_code ASC,
+        CAST(is_default AS SIGNED) DESC,
+        (sort_order IS NULL) ASC,
+        sort_order ASC,
+        version_no DESC,
+        id ASC
+      `,
+      [productCode]
+    );
+
+    if (!rows.length) {
+      res.json({ success: true, data: null });
+      return;
+    }
+
+    const pickPicture = (pictureCode) =>
+      rows.find((row) => String(row?.picture_code || "").trim().toLowerCase() === pictureCode) || null;
+    const resolvePicturePath = (row, fallbackAssetFamily) =>
+      normalizePublicAssetPath(row?.relative_path) ||
+      buildProductPictureAssetPath(row?.asset_family || fallbackAssetFamily, row?.file_name);
+
+    const firstRow = rows[0] || {};
+    const thumbnailRow = pickPicture("thumbnail");
+    const overallRow = pickPicture("overall");
+    const assetFamily = String(
+      firstRow.asset_family || thumbnailRow?.asset_family || overallRow?.asset_family || ""
+    ).trim();
+
+    res.json({
+      success: true,
+      data: {
+        productCode: String(firstRow.product_code || productCode).trim(),
+        productName: String(firstRow.product_name || "").trim(),
+        assetFamily,
+        thumbnailPath: resolvePicturePath(thumbnailRow || overallRow, assetFamily),
+        overallPath: resolvePicturePath(overallRow || thumbnailRow, assetFamily),
+        pictures: rows.map((row) => ({
+          pictureCode: String(row?.picture_code || "").trim(),
+          fileName: String(row?.file_name || "").trim(),
+          relativePath: resolvePicturePath(row, assetFamily),
+          isDefault: Number(row?.is_default || 0) === 1,
+          sortOrder: row?.sort_order == null ? null : Number(row.sort_order),
+          versionNo: row?.version_no == null ? null : Number(row.version_no),
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("Fetch product pictures failed:", error);
+    res.status(500).json({ success: false, error: buildSafeErrorMessage(error, "获取产品图片失败") });
   }
 });
 

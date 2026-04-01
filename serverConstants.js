@@ -105,6 +105,7 @@ const API_ROUTES = {
   systems: "/api/systems",
   craftPrices: "/api/craft-prices",
   projectByModel: "/api/project-by-model/:productModel",
+  productPictures: "/api/product-pictures/:productCode",
   priceSearch: "/api/price-search",
   systemMapping: "/api/system-mapping/:typeName",
   authLogin: "/api/auth/login",

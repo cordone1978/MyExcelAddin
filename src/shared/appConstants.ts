@@ -80,6 +80,7 @@ export const API_PATHS = {
   systems: "/systems",
   craftPrices: "/craft-prices",
   projectByModel: "/project-by-model",
+  productPictures: "/product-pictures",
   priceSearch: "/price-search",
   warehouseCleanSearch: "/warehouse-clean-search",
   systemMapping: "/system-mapping",

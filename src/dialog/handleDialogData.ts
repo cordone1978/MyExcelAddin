@@ -2,7 +2,7 @@
 import { insertComponentsToConfigSheet } from "../buildsheet/insertRows";
 import {
   resolveProductPictureSet,
-  resolveTemplateFromProductName,
+  resolveTemplateById,
   resolveTemplateThumbnail,
 } from "../graph-editor/productLibraryLookup";
 import { upsertGraphProductLibraryEntry } from "../graph-editor/workbookStore";
@@ -134,13 +134,11 @@ async function saveGraphLibraryMapping(projectId: number, deviceName: string) {
   const normalizedDeviceName = String(deviceName || "").trim();
   if (!projectId || !normalizedDeviceName) return;
 
-  const template = resolveTemplateFromProductName(normalizedDeviceName);
-  const pictureSet = await resolveProductPictureSet(
-    normalizedDeviceName,
-    template ? resolveTemplateThumbnail(template) : "",
-    template ? resolveTemplateThumbnail(template) : ""
-  );
-  const thumbnailUrl = String(pictureSet?.thumbnailUrl || "").trim();
+  const pictureSet = await resolveProductPictureSet(normalizedDeviceName);
+  const template = resolveTemplateById(String(pictureSet?.templateId || "").trim());
+  const thumbnailUrl = String(
+    pictureSet?.thumbnailUrl || (template ? resolveTemplateThumbnail(template) : "")
+  ).trim();
   const templateId = String(pictureSet?.templateId || template?.templateId || "").trim();
   if (!thumbnailUrl || !templateId) return;
 

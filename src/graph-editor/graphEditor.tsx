@@ -11,7 +11,7 @@ import { buildDefaultScene, createProductFromTemplate, PRODUCT_LIBRARY } from ".
 import {
   QuoteLibraryResolvedItem,
   resolveProductPictureSet,
-  resolveTemplateFromProductName,
+  resolveTemplateById,
   resolveTemplateThumbnail,
 } from "./productLibraryLookup";
 import { GraphScene, MaterialFlowLink, PipeEndpointKey, PortEndpointRef, ProductComponent, ProductModel, SelectedTarget, ViewMode } from "./sceneTypes";
@@ -1291,6 +1291,31 @@ async function buildQuoteLibraryItems(
   const resolvedItems = await Promise.all(
     productNameList.map(async (deviceName, index) => {
       const mapped = mappingByName.get(deviceName);
+      const pictureSet = await resolveProductPictureSet(deviceName);
+      const template = resolveTemplateById(
+        String(pictureSet?.templateId || mapped?.templateId || "").trim()
+      );
+      const templateId = String(
+        pictureSet?.templateId || mapped?.templateId || template?.templateId || ""
+      ).trim();
+      if (pictureSet && templateId) {
+        return {
+          key: `${templateId}:${deviceName}:${index}`,
+          deviceName,
+          templateId,
+          thumbnailUrl: String(
+            pictureSet.thumbnailUrl || mapped?.thumbnailUrl || (template ? resolveTemplateThumbnail(template) : "")
+          ).trim(),
+          overallUrl: String(
+            pictureSet.overallUrl ||
+              pictureSet.thumbnailUrl ||
+              mapped?.overallUrl ||
+              mapped?.thumbnailUrl ||
+              (template ? resolveTemplateThumbnail(template) : "")
+          ).trim(),
+          assetFamily: String(pictureSet.assetFamily || mapped?.assetFamily || "").trim(),
+        } satisfies QuoteLibraryItem;
+      }
       if (mapped) {
         return {
           key: `${mapped.templateId}:${deviceName}:${index}`,
@@ -1301,28 +1326,7 @@ async function buildQuoteLibraryItems(
           assetFamily: String(mapped.assetFamily || "").trim(),
         } satisfies QuoteLibraryItem;
       }
-      const template = resolveTemplateFromProductName(deviceName);
-      const pictureSet = await resolveProductPictureSet(
-        deviceName,
-        template ? resolveTemplateThumbnail(template) : "",
-        template ? resolveTemplateThumbnail(template) : ""
-      );
-      const templateId = String(pictureSet?.templateId || template?.templateId || "").trim();
-      if (!templateId) return null;
-      return {
-        key: `${templateId}:${deviceName}:${index}`,
-        deviceName,
-        templateId,
-        thumbnailUrl: String(
-          pictureSet?.thumbnailUrl || (template ? resolveTemplateThumbnail(template) : "")
-        ),
-        overallUrl: String(
-          pictureSet?.overallUrl ||
-          pictureSet?.thumbnailUrl ||
-            (template ? resolveTemplateThumbnail(template) : "")
-        ),
-        assetFamily: String(pictureSet?.assetFamily || ""),
-      } satisfies QuoteLibraryItem;
+      return null;
     })
   );
   const items = resolvedItems.filter((item): item is QuoteLibraryItem => !!item);
