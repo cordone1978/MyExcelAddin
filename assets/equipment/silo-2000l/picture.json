@@ -126,6 +126,72 @@
       "version_no": 1,
       "source_type": "manual",
       "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
+    },
+    {
+      "picture_code": "overall",
+      "file_name": "overall.png",
+      "label": "整机主图",
+      "relative_path": "assets/equipment/silo-2000l/overall.png",
+      "is_default": false,
+      "sort_order": 0,
+      "version_no": 1,
+      "source_type": "manual",
+      "remark": ""
     }
   ]
 }

@@ -6,6 +6,7 @@ import { sendToParent, onParentMessage } from "../shared/dialogBridge";
 import { API_PATHS, APP_URLS, CRAFTING_CONSTANTS } from "../shared/appConstants";
 import { CRAFTMODIFY_TEXT, DEVMODIFY_TEXT } from "../shared/businessTextConstants";
 import { DEVMODIFY_HTML_TEXT } from "../shared/dialogHtmlTextConstants";
+import { extractBrand, extractMaterial, parseNumber, formatPriceInteger } from "../shared/dialogTextUtils";
 
 /* global Office */
 
@@ -66,7 +67,7 @@ function DevModifyApp() {
   useEffect(() => {
     document.title = DEVMODIFY_HTML_TEXT.title;
     sendToParent({ action: DIALOG_ACTIONS.DEVMODIFY_READY });
-    onParentMessage((payload: any) => {
+    const unsubscribe = onParentMessage((payload: any) => {
       try {
         if (payload?.action === DIALOG_ACTIONS.INIT && payload.data) {
           const data = payload.data as DevModifyInit;
@@ -97,6 +98,7 @@ function DevModifyApp() {
         console.error(DEVMODIFY_TEXT.initDataHandleFailed, error);
       }
     });
+    return unsubscribe;
   }, []);
 
   const isOutsourced = currentWhatKind === CRAFTING_CONSTANTS.outsourcedKind;
@@ -169,7 +171,7 @@ function DevModifyApp() {
 
         <div className="form-grid">
           <div className="label">{DEVMODIFY_HTML_TEXT.currentPriceLabel}</div>
-          <div className="value">{formatPrice(basePrice)}</div>
+          <div className="value">{formatPriceInteger(basePrice)}</div>
 
           {!isOutsourced ? (
             <>
@@ -180,13 +182,13 @@ function DevModifyApp() {
               </select>
 
               <div className="label">{DEVMODIFY_HTML_TEXT.materialPriceLabel}</div>
-              <div className="value">{formatPrice(currentMaterialValue)}</div>
+              <div className="value">{formatPriceInteger(currentMaterialValue)}</div>
 
               <div className="label">{DEVMODIFY_TEXT.craftProcessLabel}</div>
-              <div className="value">{formatPrice(craftPrice)}</div>
+              <div className="value">{formatPriceInteger(craftPrice)}</div>
 
               <div className="label">{DEVMODIFY_HTML_TEXT.refreshedLabel}</div>
-              <div className="value emphasis">{formatPrice(refreshedPrice)}</div>
+              <div className="value emphasis">{formatPriceInteger(refreshedPrice)}</div>
             </>
           ) : (
             <>
@@ -278,8 +280,8 @@ function DevModifyApp() {
                     setCurrentDesc(row.ItemDesc || "");
                     setCurrentType(row.ItemType || "");
                     setCurrentUnit(row.ItemUnit || "");
-                    setCurrentBrand(extractBrand(row.ItemDesc || ""));
-                    setCurrentMaterial(extractMaterial(row.ItemDesc || ""));
+                    setCurrentBrand(extractBrand(row.ItemDesc || "", DEVMODIFY_TEXT.brandKeywords));
+                    setCurrentMaterial(extractMaterial(row.ItemDesc || "", DEVMODIFY_TEXT.materialKeywords));
                     setBasePrice(parseNumber(row.ItemPrice));
                     setCraftPrice(null);
                     setIsPriceChanged(true);
@@ -298,38 +300,6 @@ function DevModifyApp() {
       </div>
     </div>
   );
-}
-
-function formatPrice(value: number | null): string {
-  if (value === null || Number.isNaN(value)) return "-";
-  return String(Math.round(value));
-}
-
-function parseNumber(value: any): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = Number(String(value).replace(/[^\d.]/g, ""));
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function extractBrand(text: string): string {
-  return extractInfo(text, DEVMODIFY_TEXT.brandKeywords);
-}
-
-function extractMaterial(text: string): string {
-  return extractInfo(text, DEVMODIFY_TEXT.materialKeywords);
-}
-
-function extractInfo(text: string, keywords: string[]): string {
-  if (!text) return "";
-  for (const keyword of keywords) {
-    const pos = text.indexOf(keyword);
-    if (pos >= 0) {
-      const remaining = text.substring(pos + keyword.length).replace(/^[:：\s]+/, "");
-      const match = remaining.match(/^[^;；，,。\s]+/);
-      if (match) return match[0].trim();
-    }
-  }
-  return "";
 }
 
 function buildCraftingDescription(baseDesc: string, craftAreas: Array<{ area: string; type: string }>, rowTotals: number[]) {

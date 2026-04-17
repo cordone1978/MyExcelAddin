@@ -124,6 +124,7 @@ const URLS = {
 const DOMAIN_TERMS = {
   craftingKind: "工艺",
   standardPartKind: "标准件",
+  outsourcedKind: "外购件",
   unknownCrafting: "未知工艺",
   craftLabelSeparator: " -- ",
   rmbSymbol: "¥",

@@ -920,7 +920,8 @@ function toggleAnnotation(
 }
 
 function setDetailBaseDescription(text: string) {
-  const normalized = String(text || "").trim();
+  const raw = String(text || "").trim();
+  const normalized = raw.split("|")[0].trim();
   dialogViewState.detailBaseDescription = normalized || "-";
   renderDialogApp();
 }

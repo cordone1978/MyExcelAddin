@@ -334,11 +334,12 @@ async function renderGrid() {
   const colWidths = (layout.colWidths || []).slice(0, colCount);
   let html = "";
   if (colWidths.length) {
+    const total = colWidths.reduce((sum, w) => sum + Number(w || 0), 0);
     html += "<colgroup>";
     for (let c = 0; c < colCount; c++) {
       const width = Number(colWidths[c] || 0);
-      const px = width > 0 ? Math.max(20, Math.round(width)) : 80;
-      html += `<col style="width:${px}px" />`;
+      const pct = total > 0 && width > 0 ? ((width / total) * 100).toFixed(2) : `${((1 / colCount) * 100).toFixed(2)}`;
+      html += `<col style="width:${pct}%" />`;
     }
     html += "</colgroup>";
   }

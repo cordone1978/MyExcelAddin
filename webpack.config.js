@@ -40,10 +40,15 @@ async function getHttpsOptions() {
 module.exports = async (env, options) => {
   const dev = options.mode === "development";
   const config = {
-    devtool: "source-map",
+    cache: {
+      type: "filesystem",
+      buildDependencies: {
+        config: [__filename],
+      },
+    },
+    devtool: dev ? "eval-cheap-module-source-map" : "source-map",
     stats: "errors-warnings",
     entry: {
-      polyfill: ["core-js/stable", "regenerator-runtime/runtime"],
       taskpane: ["./src/taskpane/taskpane.ts", "./src/taskpane/taskpane.html"],
       dialog: ["./src/dialog/dialog.ts", "./src/dialog/dialog.html"],
       devmodify: ["./src/dialog/devmodify.tsx", "./src/dialog/devmodify.html"],
@@ -88,7 +93,11 @@ module.exports = async (env, options) => {
           test: /\.tsx?$/,
           exclude: /node_modules/,
           use: {
-            loader: "babel-loader"
+            loader: "babel-loader",
+            options: {
+              cacheDirectory: true,
+              cacheCompression: false,
+            },
           },
         },
         {
@@ -117,52 +126,52 @@ module.exports = async (env, options) => {
       new HtmlWebpackPlugin({
         filename: "taskpane.html",
         template: "./src/taskpane/taskpane.html",
-        chunks: ["polyfill", "taskpane"],
+        chunks: ["taskpane"],
       }),
       new HtmlWebpackPlugin({
         filename: "dialog.html",
         template: "./src/dialog/dialog.html",
-        chunks: ["polyfill", "dialog"],
+        chunks: ["dialog"],
       }),
       new HtmlWebpackPlugin({
         filename: "devmodify.html",
         template: "./src/dialog/devmodify.html",
-        chunks: ["polyfill", "devmodify"],
+        chunks: ["devmodify"],
       }),
       new HtmlWebpackPlugin({
         filename: "devmodifyv2.html",
         template: "./src/dialog/devmodifyv2.html",
-        chunks: ["polyfill", "devmodifyv2"],
+        chunks: ["devmodifyv2"],
       }),
       new HtmlWebpackPlugin({
         filename: "craftmodify.html",
         template: "./src/dialog/craftmodify.html",
-        chunks: ["polyfill", "craftmodify"],
+        chunks: ["craftmodify"],
       }),
       new HtmlWebpackPlugin({
         filename: "queryprice.html",
         template: "./src/dialog/queryprice.html",
-        chunks: ["polyfill", "queryprice"],
+        chunks: ["queryprice"],
       }),
       new HtmlWebpackPlugin({
         filename: "graphEditor.html",
         template: "./src/graph-editor/graphEditor.html",
-        chunks: ["polyfill", "graphEditor"],
+        chunks: ["graphEditor"],
       }),
       new HtmlWebpackPlugin({
         filename: "infoReference.html",
         template: "./src/info-reference/infoReference.html",
-        chunks: ["polyfill", "infoReference"],
+        chunks: ["infoReference"],
       }),
       new HtmlWebpackPlugin({
         filename: "quoteSummaryPreview.html",
         template: "./src/quote-preview/quoteSummaryPreview.html",
-        chunks: ["polyfill", "quoteSummaryPreview"],
+        chunks: ["quoteSummaryPreview"],
       }),
       new HtmlWebpackPlugin({
         filename: "commands.html",
         template: "./src/commands/commands.html",
-        chunks: ["polyfill", "commands"],
+        chunks: ["commands"],
         scriptLoading: "blocking",  // 添加这行
       }),
       new CopyWebpackPlugin({

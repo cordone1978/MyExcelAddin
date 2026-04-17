@@ -1,3 +1,13 @@
+process.env.APPLICATION_INSIGHTS_NO_DIAGNOSTIC_CHANNEL = "1";
+process.env.APPLICATION_INSIGHTS_NO_STATSBEAT = "1";
+
+const _origWarn = console.warn;
+console.warn = function (...args) {
+    const msg = args.map(a => typeof a === 'string' ? a : '').join(' ');
+    if (msg.includes('ApplicationInsights')) return;
+    _origWarn.apply(console, args);
+};
+
 const fs = require('fs');
 const https = require('https');
 const express = require('express');

@@ -84,6 +84,7 @@ export async function insertComponentsToConfigSheet(
       rangeToInsert.insert(Excel.InsertShiftDirection.down);
 
       const insertedRange = sheet.getRange(`A${dataStartRow}:R${dataEndRow}`);
+      const useStandardPrice = deviceTotalPrice != null && deviceTotalPrice > 0;
       const dataRows = components.map((comp) => [
         "", // A（后续整段合并写序号）
         "", // B
@@ -96,7 +97,7 @@ export async function insertComponentsToConfigSheet(
         comp.component_unit || "", // I
         "", // J
         "", // K
-        comp.component_unitprice || 0, // L
+        useStandardPrice ? "" : (comp.component_unitprice || 0), // L
         "", // M
         "", // N
         "", // O

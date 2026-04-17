@@ -5,6 +5,7 @@ import { DIALOG_ACTIONS } from "../shared/dialogActions";
 import { sendToParent, onParentMessage } from "../shared/dialogBridge";
 import { API_PATHS, APP_URLS, UI_DEFAULTS } from "../shared/appConstants";
 import { DIALOG_TEXT, QUERYPRICE_HTML_TEXT } from "../shared/businessTextConstants";
+import { extractBrand, extractMaterial, formatPriceDecimal } from "../shared/dialogTextUtils";
 
 /* global Office */
 
@@ -29,7 +30,7 @@ function QueryPriceApp() {
 
   useEffect(() => {
     document.title = QUERYPRICE_HTML_TEXT.title;
-    onParentMessage((payload: any) => {
+    const unsubscribe = onParentMessage((payload: any) => {
       try {
         if (payload?.action === DIALOG_ACTIONS.QUERYPRICE_WARNING) {
           setWarning(String(payload.message || UI_DEFAULTS.defaultWarningMessage));
@@ -44,6 +45,7 @@ function QueryPriceApp() {
       setMainKeyword(initialKeyword.trim());
       void handleSearch(initialKeyword.trim(), secondKeyword);
     }
+    return unsubscribe;
   }, []);
 
   async function handleSearch(keyword = mainKeyword, second = secondKeyword) {
@@ -74,8 +76,8 @@ function QueryPriceApp() {
       setWarning(UI_DEFAULTS.defaultSelectPriceMessage);
       return;
     }
-    const brand = extractBrand(selectedItem.ItemDesc || "");
-    const material = extractMaterial(selectedItem.ItemDesc || "");
+    const brand = extractBrand(selectedItem.ItemDesc || "", DIALOG_TEXT.brandKeywords);
+    const material = extractMaterial(selectedItem.ItemDesc || "", DIALOG_TEXT.materialKeywords);
     sendToParent({
       action: DIALOG_ACTIONS.QUERYPRICE_REPLACE,
       data: {
@@ -107,7 +109,7 @@ function QueryPriceApp() {
                   <div className="result-cell name" title={item.ItemName || ""}>{item.ItemName || "-"}</div>
                   <div className="result-cell desc" title={item.ItemDesc || ""}>{item.ItemDesc || "-"}</div>
                   <div className="result-cell type" title={item.ItemType || ""}>{item.ItemType || "-"}</div>
-                  <div className="result-cell price" title={formatPrice(item.ItemPrice)}>{formatPrice(item.ItemPrice)}</div>
+                  <div className="result-cell price" title={formatPriceDecimal(item.ItemPrice)}>{formatPriceDecimal(item.ItemPrice)}</div>
                 </div>
               ))
             ) : (
@@ -197,34 +199,6 @@ async function searchPrices(mainKeyword: string, secondKeyword: string): Promise
     data = data.filter((item) => (item.ItemDesc || "").toLowerCase().includes(secondLower));
   }
   return data;
-}
-
-function extractBrand(text: string): string {
-  return extractInfo(text, DIALOG_TEXT.brandKeywords);
-}
-
-function extractMaterial(text: string): string {
-  return extractInfo(text, DIALOG_TEXT.materialKeywords);
-}
-
-function extractInfo(text: string, keywords: string[]): string {
-  if (!text) return "";
-  for (const keyword of keywords) {
-    const pos = text.indexOf(keyword);
-    if (pos >= 0) {
-      const remaining = text.substring(pos + keyword.length).replace(/^[:：\s]+/, "");
-      const match = remaining.match(/^[^;；，,。\s]+/);
-      if (match) return match[0].trim();
-    }
-  }
-  return "";
-}
-
-function formatPrice(price: number | string | null | undefined): string {
-  if (price === null || price === undefined || price === "") return "-";
-  const num = typeof price === "number" ? price : parseFloat(String(price));
-  if (Number.isNaN(num)) return "-";
-  return num.toFixed(2);
 }
 
 Office.onReady(() => {

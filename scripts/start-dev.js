@@ -1,6 +1,16 @@
 const path = require("path");
 const { spawn, execFile } = require("child_process");
 
+process.env.APPLICATION_INSIGHTS_NO_DIAGNOSTIC_CHANNEL = "1";
+process.env.APPLICATION_INSIGHTS_NO_STATSBEAT = "1";
+
+const _origWarn = console.warn;
+console.warn = function (...args) {
+    const msg = args.map(a => typeof a === 'string' ? a : '').join(' ');
+    if (msg.includes('ApplicationInsights')) return;
+    _origWarn.apply(console, args);
+};
+
 const projectRoot = path.resolve(__dirname, "..");
 const expectedCommands = {
   3000: ["webpack", "serve"],

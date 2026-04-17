@@ -4,6 +4,7 @@ import "./devmodifyv2.css";
 import { DIALOG_ACTIONS } from "../shared/dialogActions";
 import { sendToParent, onParentMessage } from "../shared/dialogBridge";
 import { API_PATHS, APP_URLS, CRAFTING_CONSTANTS } from "../shared/appConstants";
+import { parseNumber as parseNumberShared, extractInfo } from "../shared/dialogTextUtils";
 
 /* global Office */
 
@@ -56,9 +57,10 @@ function DevModifyV2App() {
 
   useEffect(() => {
     document.title = "更改设备-新版";
+    let unsubscribe: (() => void) | undefined;
     waitForOfficeReady(() => {
       sendToParent({ action: DIALOG_ACTIONS.DEVMODIFY_READY });
-      onParentMessage((payload: any) => {
+      unsubscribe = onParentMessage((payload: any) => {
         try {
           if (payload?.action !== DIALOG_ACTIONS.INIT || !payload.data) return;
           const data = payload.data as DevModifyV2Init;
@@ -87,6 +89,7 @@ function DevModifyV2App() {
         }
       });
     });
+    return () => { unsubscribe?.(); };
   }, []);
 
   const isOutsourced = currentWhatKind === CRAFTING_CONSTANTS.outsourcedKind;
@@ -261,22 +264,7 @@ function formatPrice(value: number | null | undefined): string {
 }
 
 function parseNumber(value: any): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = Number(String(value).replace(/[^\d.-]/g, ""));
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function extractInfo(text: string, keywords: string[]): string {
-  if (!text) return "";
-  for (const keyword of keywords) {
-    const pos = text.indexOf(keyword);
-    if (pos >= 0) {
-      const remaining = text.substring(pos + keyword.length).replace(/^[:：\s]+/, "");
-      const match = remaining.match(/^[^;；，,。\s]+/);
-      if (match) return match[0].trim();
-    }
-  }
-  return "";
+  return parseNumberShared(value);
 }
 
 function buildCraftDescription(baseDesc: string, craftItems: Array<{ name: string; quantity: string }>) {

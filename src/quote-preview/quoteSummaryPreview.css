@@ -79,7 +79,7 @@ body.detail-mode .page {
   padding: 8px;
 }
 body.detail-mode .sheet {
-  table-layout: auto;
+  table-layout: fixed;
 }
 body.detail-mode .sheet td {
   padding: 4px 6px;

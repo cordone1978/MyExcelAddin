@@ -3,6 +3,7 @@ import { DIALOG_ACTIONS } from "../shared/dialogActions";
 import { sendToParent } from "../shared/dialogBridge";
 import { API_PATHS, APP_URLS, UI_DEFAULTS } from "../shared/appConstants";
 import { DIALOG_TEXT, QUERYPRICE_HTML_TEXT } from "../shared/businessTextConstants";
+import { extractBrand, extractMaterial, formatPriceDecimal } from "../shared/dialogTextUtils";
 
 const API_BASE = APP_URLS.apiBase;
 
@@ -151,7 +152,7 @@ function displayResults(results: PriceResult[]) {
     row.appendChild(createResultCell("name", item.ItemName || "-"));
     row.appendChild(createResultCell("desc", item.ItemDesc || "-"));
     row.appendChild(createResultCell("type", item.ItemType || "-"));
-    row.appendChild(createResultCell("price", formatPrice(item.ItemPrice)));
+    row.appendChild(createResultCell("price", formatPriceDecimal(item.ItemPrice)));
 
     row.addEventListener("click", () => selectRow(item, row));
     resultList.appendChild(row);
@@ -178,8 +179,8 @@ function sendSelectedToParent() {
     return;
   }
   const item = selectedItem;
-  const brand = extractBrand(item.ItemDesc || "");
-  const material = extractMaterial(item.ItemDesc || "");
+  const brand = extractBrand(item.ItemDesc || "", DIALOG_TEXT.brandKeywords);
+  const material = extractMaterial(item.ItemDesc || "", DIALOG_TEXT.materialKeywords);
   const cleanedDesc = cleanDescription(item.ItemDesc || "");
 
   sendToParent({
@@ -198,36 +199,6 @@ function sendSelectedToParent() {
 
 function cleanDescription(fullDesc: string): string {
   return fullDesc.trim();
-}
-
-function extractBrand(text: string): string {
-  return extractInfo(text, DIALOG_TEXT.brandKeywords);
-}
-
-function extractMaterial(text: string): string {
-  return extractInfo(text, DIALOG_TEXT.materialKeywords);
-}
-
-function extractInfo(text: string, keywords: string[]): string {
-  if (!text) return "";
-
-  for (const keyword of keywords) {
-    const pos = text.indexOf(keyword);
-    if (pos >= 0) {
-      const remaining = text.substring(pos + keyword.length).replace(/^[:：\s]+/, "");
-      const match = remaining.match(/^[^;；，,。\s]+/);
-      if (match) return match[0].trim();
-    }
-  }
-
-  return "";
-}
-
-function formatPrice(price: number | string | null | undefined): string {
-  if (price === null || price === undefined || price === "") return "-";
-  const num = typeof price === "number" ? price : parseFloat(String(price));
-  if (Number.isNaN(num)) return "-";
-  return num.toFixed(2);
 }
 
 function showPlaceholder(message: string) {

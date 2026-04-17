@@ -5,6 +5,7 @@ import { sendToParent, onParentMessage } from "../shared/dialogBridge";
 import { CRAFTING_CONSTANTS } from "../shared/appConstants";
 import { CRAFTMODIFY_TEXT } from "../shared/businessTextConstants";
 import { CRAFTMODIFY_HTML_TEXT } from "../shared/dialogHtmlTextConstants";
+import { parseNumber } from "../shared/dialogTextUtils";
 
 type CraftItem = {
   area: number | null;
@@ -190,12 +191,6 @@ function collectData() {
 function getUnitPrice(label?: string | null): number | null {
   if (!label) return null;
   return unitPriceMap.get(label) ?? null;
-}
-
-function parseNumber(value: string | null | undefined): number | null {
-  if (!value) return null;
-  const parsed = Number(String(value).replace(/[^\d.]/g, ""));
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function formatMoney(value: number): string {

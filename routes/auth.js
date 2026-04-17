@@ -9,6 +9,7 @@ const {
   createAuthSession,
   revokeSession,
   clearUserSessions,
+  hasQuotationAccess,
   verifyPassword,
   needsPasswordUpgrade,
   createScryptPasswordHash,
@@ -53,6 +54,12 @@ router.post(API_ROUTES.authLogin, async (req, res) => {
 
     if (!verifyPassword(password, user.password_hash)) {
       res.status(401).json({ success: false, error: SERVER_MESSAGES.authInvalidCredentials });
+      return;
+    }
+
+    const allowQuotation = await hasQuotationAccess(user.id);
+    if (!allowQuotation) {
+      res.status(403).json({ success: false, error: SERVER_MESSAGES.authNoQuotationAccess });
       return;
     }
 

@@ -2083,10 +2083,12 @@ function App() {
                     y: panStart.viewportY + deltaY,
                   }));
                 }
-                setPointerWorld({
-                  x: (pointer.x - viewport.x) / viewport.scale,
-                  y: (pointer.y - viewport.y) / viewport.scale,
-                });
+                if (connectSource || pipeDragState) {
+                  setPointerWorld({
+                    x: (pointer.x - viewport.x) / viewport.scale,
+                    y: (pointer.y - viewport.y) / viewport.scale,
+                  });
+                }
               }}
               onMouseDown={(evt) => {
                 if (evt.target === evt.target.getStage()) {

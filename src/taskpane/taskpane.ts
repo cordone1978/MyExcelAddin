@@ -9,6 +9,7 @@ import {
   DIALOG_SIZES,
   UI_DEFAULTS,
 } from "../shared/appConstants";
+import { BUILDSHEET_COLUMNS } from "../shared/buildsheetConstants";
 import { BUILDSHEET_TEXT } from "../shared/businessTextConstants";
 import { TASKPANE_HTML_TEXT, TASKPANE_LOG_TEXT } from "../shared/dialogHtmlTextConstants";
 import { SHEET_NAMES } from "../shared/sheetNames";
@@ -300,29 +301,34 @@ Office.onReady((info) => {
 });
 
 function applyStaticText() {
-  setText("loginBtn", TASKPANE_HTML_TEXT.loginBtn);
-  setText("addDeviceBtn", TASKPANE_HTML_TEXT.addDeviceBtn);
-  setText("resetPasswordBtn", TASKPANE_HTML_TEXT.resetPasswordBtn);
-  setText("cancelResetPasswordBtn", TASKPANE_HTML_TEXT.cancelResetPasswordBtn);
-  setText("confirmResetPasswordBtn", TASKPANE_HTML_TEXT.confirmResetPasswordBtn);
-  setText("modifyDeviceBtn", TASKPANE_HTML_TEXT.modifyDeviceBtn);
-  setText("modifyDeviceLegacyBtn", "旧版");
-  setText("modifyDeviceNewBtn", "新版");
-  setText("generateSheetBtn", TASKPANE_HTML_TEXT.generateSheetBtn);
-  setText("generateSimpleQuoteBtn", "初步报价");
-  setText("generateDetailQuoteBtn", "明细报价");
-  setText("generateQuoteBtn", TASKPANE_HTML_TEXT.generateQuoteBtn);
-  setText("queryPriceBtn", TASKPANE_HTML_TEXT.queryPriceBtn);
-  setText("graphEditorBtn", TASKPANE_HTML_TEXT.graphEditorBtn);
-  setText("infoReferenceBtn", TASKPANE_HTML_TEXT.infoReferenceBtn);
-  setText("loginStatusLabel", "未登录");
-  setText("userInfoLabel", "");
-  setText("accountDockLabel", "");
-  setText("logoutDockBtn", "退出");
-  setAccountDockExpanded(false);
-  setResetPasswordMode(false);
-  setAuthFeedback("");
-  setActionFeedback("");
+  const t = taskpaneViewState.texts;
+  t.loginBtn = TASKPANE_HTML_TEXT.loginBtn;
+  t.addDeviceBtn = TASKPANE_HTML_TEXT.addDeviceBtn;
+  t.resetPasswordBtn = TASKPANE_HTML_TEXT.resetPasswordBtn;
+  t.cancelResetPasswordBtn = TASKPANE_HTML_TEXT.cancelResetPasswordBtn;
+  t.confirmResetPasswordBtn = TASKPANE_HTML_TEXT.confirmResetPasswordBtn;
+  t.modifyDeviceBtn = TASKPANE_HTML_TEXT.modifyDeviceBtn;
+  t.modifyDeviceLegacyBtn = "旧版";
+  t.modifyDeviceNewBtn = "新版";
+  t.generateSheetBtn = TASKPANE_HTML_TEXT.generateSheetBtn;
+  t.generateSimpleQuoteBtn = "初步报价";
+  t.generateDetailQuoteBtn = "明细报价";
+  t.generateQuoteBtn = TASKPANE_HTML_TEXT.generateQuoteBtn;
+  t.queryPriceBtn = TASKPANE_HTML_TEXT.queryPriceBtn;
+  t.graphEditorBtn = TASKPANE_HTML_TEXT.graphEditorBtn;
+  t.infoReferenceBtn = TASKPANE_HTML_TEXT.infoReferenceBtn;
+  t.loginStatusLabel = "未登录";
+  t.userInfoLabel = "";
+  t.accountDockLabel = "";
+  t.logoutDockBtn = "退出";
+  isAccountDockExpanded = false;
+  taskpaneViewState.isAccountDockExpanded = false;
+  isResetPasswordMode = false;
+  taskpaneViewState.isResetPasswordMode = false;
+  taskpaneViewState.authFeedback = "";
+  taskpaneViewState.authFeedbackKind = "";
+  taskpaneViewState.actionFeedback = "";
+  taskpaneViewState.actionFeedbackKind = "";
   renderTaskpane();
 }
 
@@ -1211,10 +1217,6 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
       const rowHeightRange = quoteConfigSheet.getRange(`1:${rowCount}`);
       rowHeightRange.load("format/rowHeight");
 
-      // 列宽：整行列范围一次读取（A:R = 18列）
-      const colWidthRange = quoteConfigSheet.getRange("A:R");
-      colWidthRange.load("format/columnWidth");
-
       await context.sync(); // sync 2：取回所有格式数据
 
       if (detailPreviewRange.isNullObject) {
@@ -1239,11 +1241,8 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
         ? (rawRowHeight as unknown[]).slice(0, detailValues.length).map((v) => Number(v || 0))
         : Array.from({ length: detailValues.length }, () => Number(rawRowHeight || 0));
 
-      // columnWidth 同理
-      const rawColWidth = (colWidthRange.format as any).columnWidth;
-      const detailColWidths: number[] = Array.isArray(rawColWidth)
-        ? (rawColWidth as unknown[]).slice(0, 18).map((v) => Number(v || 0))
-        : Array(18).fill(Number(rawColWidth || 0));
+      const cfgColWidths = BUILDSHEET_COLUMNS.config;
+      const detailColWidths: number[] = Object.values(cfgColWidths) as number[];
 
       const detailPayload = buildDetailQuotePreviewPayload(
         detailValues,
@@ -1367,8 +1366,6 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
     fullPreviewRange.load(["values", "text"]);
     const rowHeightRange = quoteSummarySheet.getRange(`1:${notesEndRow}`);
     rowHeightRange.load("format/rowHeight");
-    const colWidthRange = quoteSummarySheet.getRange("A:H");
-    colWidthRange.load("format/columnWidth");
     await context.sync(); // sync 2：写入完成后读取预览数据
 
     // 兼容 range-level 属性返回单一值或数组两种情况
@@ -1377,10 +1374,8 @@ async function syncQuoteSummaryAndCachePreview(mode: "detail" | "preliminary" = 
       ? (rawRowHeight as unknown[]).slice(0, notesEndRow).map((v) => Number(v || 0))
       : Array.from({ length: notesEndRow }, () => Number(rawRowHeight || 0));
 
-    const rawColWidth = (colWidthRange.format as any).columnWidth;
-    const colWidths: number[] = Array.isArray(rawColWidth)
-      ? (rawColWidth as unknown[]).slice(0, 8).map((v) => Number(v || 0))
-      : Array(8).fill(Number(rawColWidth || 0));
+    const quoteColWidths = BUILDSHEET_COLUMNS.quote;
+    const colWidths: number[] = Object.values(quoteColWidths) as number[];
 
     const mergeCells = buildQuoteSummaryMergeCells(
       dataStartRow,

@@ -63,7 +63,7 @@ function InfoReferenceApp() {
   const [selectedWarehouseKey, setSelectedWarehouseKey] = useState("");
 
   useEffect(() => {
-    onParentMessage((payload: any) => {
+    const unsubscribe = onParentMessage((payload: any) => {
       try {
         if (payload?.type === INFO_REF_DEVICES_MSG) {
           const data = payload?.data;
@@ -87,6 +87,7 @@ function InfoReferenceApp() {
     });
 
     sendToParent({ type: INFO_REF_REQUEST_DEVICES_MSG });
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
@@ -187,15 +188,20 @@ function InfoReferenceApp() {
                 </tr>
               </thead>
               <tbody>
-                {quoteRows.map((row, idx) => (
-                  <tr key={`quote-${idx}`}>
-                    {DISPLAY_COLUMN_INDEXES.map((i) => <td key={i}>{formatNumericText(row.cToP[i])}</td>)}
-                  </tr>
-                ))}
+                {quoteRows.map((row, idx) => {
+                  const costTotal = parseNumber(row.cToP[10]) > 0 ? row.cToP[10] : row.cToP[11];
+                  const displayValues = [...row.cToP];
+                  displayValues[10] = costTotal || "";
+                  return (
+                    <tr key={`quote-${idx}`}>
+                      {DISPLAY_COLUMN_INDEXES.map((i) => <td key={i}>{formatNumericText(displayValues[i])}</td>)}
+                    </tr>
+                  );
+                })}
                 {quoteRows.length ? (
                   <tr className="sum-row">
                     <td colSpan={8}>成本合计汇总</td>
-                    <td className="sum-price">{formatNumericText(quoteRows.reduce((sum, row) => sum + parseNumber(row.cToP[10]), 0))}</td>
+                    <td className="sum-price">{formatNumericText(quoteRows.reduce((sum, row) => sum + (parseNumber(row.cToP[10]) > 0 ? parseNumber(row.cToP[10]) : parseNumber(row.cToP[11])), 0))}</td>
                   </tr>
                 ) : (
                   <tr><td colSpan={9}>暂无明细</td></tr>
@@ -334,7 +340,8 @@ function buildWarehouseGroupLabel(sheetName: string, metaBySheet: Record<string,
 }
 
 function normalizeWarehouseRow(row: Record<string, unknown>): DbDisplayRow {
-  const costTotal = pickText(row, ["category_amount", "sheet_total_amount"]);
+  const rawAmount = parseNumber(pickText(row, ["category_amount"]));
+  const costTotal = rawAmount > 0 ? pickText(row, ["category_amount"]) : pickText(row, ["sheet_total_amount"]);
   return {
     componentName: pickText(row, ["category_name", "component_name", "name"]),
     contentSpec: pickText(row, ["content_spec", "内容及规格"]),
@@ -406,7 +413,7 @@ function buildQuoteCostMap(rows: DeviceRow[]) {
   rows.forEach((row) => {
     const key = normalizeKey(row?.cToP?.[0] || "");
     if (!key) return;
-    const amount = parseNumber(row?.cToP?.[10]);
+    const amount = parseNumber(row?.cToP?.[10]) > 0 ? parseNumber(row?.cToP?.[10]) : parseNumber(row?.cToP?.[11]);
     map.set(key, (map.get(key) || 0) + amount);
   });
   return map;

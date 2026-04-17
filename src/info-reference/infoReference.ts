@@ -243,11 +243,14 @@ function renderQuoteRows(rows: DeviceRow[]) {
   let costTotalSum = 0;
   rows.forEach((row) => {
     const tr = document.createElement("tr");
+    const costTotal = parseNumber(row.cToP[10]) > 0 ? row.cToP[10] : row.cToP[11];
+    const displayValues = [...row.cToP];
+    displayValues[10] = costTotal || "";
     tr.innerHTML = DISPLAY_COLUMN_INDEXES.map(
-      (i) => `<td>${escapeHtml(formatNumericText(row.cToP[i]))}</td>`
+      (i) => `<td>${escapeHtml(formatNumericText(displayValues[i]))}</td>`
     ).join("");
     tbody.appendChild(tr);
-    costTotalSum += parseNumber(row.cToP[10]);
+    costTotalSum += parseNumber(costTotal);
   });
   if (rows.length) {
     const sumTr = document.createElement("tr");
@@ -392,7 +395,8 @@ function renderDbDetail(rows: Array<Record<string, unknown>>) {
 
 function normalizeWarehouseRow(row: Record<string, unknown>): DbDisplayRow {
   const legacy = normalizeWarehouseRowLegacy(row);
-  const costTotal = pickText(row, ["category_amount", "sheet_total_amount"]) || legacy.price;
+  const rawAmount = parseNumber(pickText(row, ["category_amount"]));
+  const costTotal = rawAmount > 0 ? pickText(row, ["category_amount"]) : pickText(row, ["sheet_total_amount"]) || legacy.price;
   const componentName =
     pickText(row, ["category_name", "component_name", "name"]) || legacy.category || legacy.name;
   const componentQuantity = pickText(row, ["quantity_value"]);
@@ -574,7 +578,7 @@ function buildQuoteCostMap(rows: DeviceRow[]) {
   rows.forEach((row) => {
     const key = normalizeKey(row?.cToP?.[0] || "");
     if (!key) return;
-    const amount = parseNumber(row?.cToP?.[10]);
+    const amount = parseNumber(row?.cToP?.[10]) > 0 ? parseNumber(row?.cToP?.[10]) : parseNumber(row?.cToP?.[11]);
     map.set(key, (map.get(key) || 0) + amount);
   });
   return map;

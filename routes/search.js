@@ -65,37 +65,38 @@ router.get(API_ROUTES.warehouseCleanSearch, requireAuth, async (req, res) => {
     const like = `%${keyword}%`;
     const [matchedSheets] = await pool.query(
       `
-      SELECT DISTINCT sheet_name
-      FROM ht_sales_warehouse_sheet_meta
+      SELECT id AS sheet_id, sheet_name
+      FROM ht_sales_warehouse_sheet
       WHERE device_name LIKE ?
       ORDER BY sheet_name
       LIMIT ?
       `,
       [like, sheetLimit]
     );
-    const sheetNames = (matchedSheets || [])
-      .map((x) => String(x.sheet_name || "").trim())
-      .filter(Boolean);
-    if (!sheetNames.length) {
+    const matchedSheetList = matchedSheets || [];
+    if (!matchedSheetList.length) {
       res.json({ success: true, data: [] });
       return;
     }
 
-    const placeholders = sheetNames.map(() => "?").join(",");
+    const sheetIds = matchedSheetList.map((x) => x.sheet_id);
+    const sheetIdPlaceholders = sheetIds.map(() => "?").join(",");
     const [rows] = await pool.query(
       `
       SELECT
-        id, source_file, sheet_name, row_index, key_param,
-        category_name, content_spec, model_name, brand_name, material_name,
-        skip_spec_columns, weight_kg, category_amount, price_ratio,
-        category_row_count, quantity_value,
-        sheet_total_weight_kg, sheet_total_amount, sheet_total_row_count
-      FROM ht_sales_warehouse_statistics
-      WHERE sheet_name IN (${placeholders})
-      ORDER BY sheet_name ASC, row_index ASC
+        s.id, sh.sheet_name, s.row_index, s.key_param,
+        s.category_name, s.content_spec, s.model_name, s.brand_name, s.material_name,
+        s.skip_spec_columns, s.weight_kg, s.category_amount, s.price_ratio,
+        s.category_row_count, s.quantity_value,
+        s.sheet_total_weight_kg, s.sheet_total_amount, s.sheet_total_row_count,
+        sh.source_file
+      FROM ht_sales_warehouse_statistics s
+      INNER JOIN ht_sales_warehouse_sheet sh ON sh.id = s.sheet_id
+      WHERE s.sheet_id IN (${sheetIdPlaceholders})
+      ORDER BY sh.sheet_name ASC, s.row_index ASC
       LIMIT ?
       `,
-      [...sheetNames, detailLimit]
+      [...sheetIds, detailLimit]
     );
 
     const [metaRows] = await pool.query(
@@ -104,15 +105,10 @@ router.get(API_ROUTES.warehouseCleanSearch, requireAuth, async (req, res) => {
         m.sheet_name, m.project_name, m.project_code, m.device_name,
         m.device_drawing_no, m.tag_no, m.order_qty, m.order_unit,
         m.surface_process, m.vendor_name
-      FROM ht_sales_warehouse_sheet_meta m
-      INNER JOIN (
-        SELECT sheet_name, MAX(id) AS max_id
-        FROM ht_sales_warehouse_sheet_meta
-        WHERE sheet_name IN (${placeholders})
-        GROUP BY sheet_name
-      ) x ON x.max_id = m.id
+      FROM ht_sales_warehouse_sheet m
+      WHERE m.id IN (${sheetIdPlaceholders})
       `,
-      [...sheetNames]
+      [...sheetIds]
     );
 
     const metaBySheet = {};

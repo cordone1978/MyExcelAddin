@@ -13,16 +13,10 @@ CASE
 END
 `;
 
-const INDUSTRY_CODE_ALIASES = {
-  calcium: "CALCIUM_CARBONATE",
-  lfp: "LITHIUM_IRON_PHOSPHATE",
-  lfp_raw: "FERRIC_PHOSPHATE",
-};
-
 function normalizeIndustryCode(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
-  return INDUSTRY_CODE_ALIASES[raw.toLowerCase()] || raw.toUpperCase();
+  return raw.toUpperCase();
 }
 
 function buildEquipmentImageUrl(componentPic) {
@@ -286,7 +280,7 @@ router.get(API_ROUTES.productPictures, requireAuth, async (req, res) => {
 router.get(API_ROUTES.details, requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const context = await resolveProductIndustryConfigContext(projectId, req.query.industryType);
+    const context = await resolveProductIndustryConfigContext(projectId, req.query.industryType || req.query.industryCode);
     if (!context.configProductId) {
       res.json({ success: true, data: [] });
       return;
@@ -306,9 +300,9 @@ router.get(API_ROUTES.details, requireAuth, async (req, res) => {
         ON s.component_id = c.component_id
       WHERE ${scope.whereSql.replace(/product_id/g, "c.product_id")}
         AND CAST(c.is_Assembly AS SIGNED) = 0
-        AND c.whatkind NOT IN (?, ?)
+        AND c.whatkind NOT IN (?, ?, ?)
       ORDER BY c.component_sn ASC, c.config_id ASC
-    `, [...scope.params, DOMAIN_TERMS.craftingKind, DOMAIN_TERMS.standardPartKind]);
+    `, [...scope.params, DOMAIN_TERMS.craftingKind, DOMAIN_TERMS.standardPartKind, DOMAIN_TERMS.outsourcedKind]);
     (rows || []).forEach((row) => { row.image_url = buildEquipmentImageUrl(row.component_pic); });
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -321,7 +315,7 @@ router.get(API_ROUTES.details, requireAuth, async (req, res) => {
 router.get(API_ROUTES.annotations, requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const context = await resolveProductIndustryConfigContext(projectId, req.query.industryType);
+    const context = await resolveProductIndustryConfigContext(projectId, req.query.industryType || req.query.industryCode);
     if (!context.configProductId) {
       res.json({ success: true, data: [] });
       return;
@@ -355,7 +349,7 @@ router.get(API_ROUTES.annotations, requireAuth, async (req, res) => {
 router.get(API_ROUTES.config, requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const context = await resolveProductIndustryConfigContext(projectId, req.query.industryType);
+    const context = await resolveProductIndustryConfigContext(projectId, req.query.industryType || req.query.industryCode);
     if (!context.configProductId) {
       res.json({ success: true, data: [] });
       return;

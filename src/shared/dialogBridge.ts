@@ -90,16 +90,28 @@ export function sendToParent(data: unknown): void {
 /**
  * 在子对话框（dialog 端）中监听来自父窗口的消息。
  * 替代 Office.context.ui.addHandlerAsync(DialogParentMessageReceived, ...)。
+ * 返回 unsubscribe 函数，可在 useEffect cleanup 中调用。
  */
-export function onParentMessage(handler: (data: unknown) => void): void {
+export function onParentMessage(handler: (data: unknown) => void): () => void {
+  const wrappedHandler = (args: { message: string }) => {
+    try {
+      handler(JSON.parse(args.message));
+    } catch {
+      // 忽略格式错误的消息
+    }
+  };
   Office.context.ui.addHandlerAsync(
     Office.EventType.DialogParentMessageReceived,
-    (args) => {
-      try {
-        handler(JSON.parse(args.message));
-      } catch {
-        // 忽略格式错误的消息
-      }
-    }
+    wrappedHandler
   );
+  return () => {
+    try {
+      Office.context.ui.removeHandlerAsync(
+        Office.EventType.DialogParentMessageReceived,
+        { handler: wrappedHandler }
+      );
+    } catch {
+      // 忽略移除失败（对话框可能已关闭）
+    }
+  };
 }
